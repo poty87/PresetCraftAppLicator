@@ -1,0 +1,201 @@
+"""Libreria LightCraft: lettura del catalogo, comandi con lightcraft-cli, backup.
+
+Le foto si leggono da catalog.snap; le modifiche alla libreria passano sempre da lightcraft-cli,
+mai scrivendo i file della libreria a mano.
+"""
+
+import ctypes
+import datetime
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+from ctypes import wintypes
+
+from version import APP_NAME
+
+LOCAL = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+DATA_DIR = os.path.join(LOCAL, APP_NAME)  # impostazioni, registro e cache dell'utente
+DEFAULT_CLI = os.path.join(LOCAL, r"Programs\ArtCraft\LightCraft\lightcraft-cli.exe")
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+# file della libreria salvati prima di ogni modifica (prefs.json contiene l'elenco dei profili importati)
+LIBRARY_FILES = ("catalog.snap", "catalog.log", "view.json", "prefs.json", "presets.json")
+BACKUP_PREFIX = f"{APP_NAME} backup - "
+STAMP = "%Y-%m-%d %H.%M.%S"
+BACKUPS_KEPT = 5
+DEFAULT_PROFILE = "lc.color"  # profilo che LightCraft dà alle foto appena importate
+RECENT_DAYS = 30  # come "Recently Added" di LightCraft: i 30 giorni fino all'ultima importazione
+
+
+def log(text):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(os.path.join(DATA_DIR, "presetcraft.log"), "a", encoding="utf-8") as f:
+        f.write(f"{stamp} {text}\n")
+
+
+def lightcraft_running():
+    """Nomi dei processi LightCraft in esecuzione (app o riga di comando)."""
+    out = subprocess.run(["tasklist", "/fo", "csv", "/nh"], capture_output=True, text=True,
+                         creationflags=NO_WINDOW).stdout
+    names = {line.split('","')[0].strip('"').lower() for line in out.splitlines() if line}
+    return sorted(n for n in names if n in ("lightcraft.exe", "lightcraft-cli.exe"))
+
+
+def library_open_reason(lib):
+    """Chiave del testo che spiega perché la libreria non si può modificare adesso, oppure None."""
+    if lightcraft_running():
+        return "st_open_app"
+    if os.path.exists(os.path.join(lib, "catalog.lock.owner")):
+        return "st_open_lock"
+    return None
+
+
+def is_library(lib):
+    return bool(lib) and os.path.isfile(os.path.join(lib, "catalog.snap"))
+
+
+def is_cli(path):
+    return bool(path) and os.path.isfile(path) and os.path.basename(path).lower() == "lightcraft-cli.exe"
+
+
+def read_catalog(lib):
+    with open(os.path.join(lib, "catalog.snap"), encoding="utf-8") as f:
+        return json.load(f)["catalog"]
+
+
+def read_prefs(lib):
+    try:
+        with open(os.path.join(lib, "prefs.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def imported_profiles(lib):
+    """Profili già importati nella libreria: {id: {"name", "cameraModel"}}. Per le LUT il modello è il loro gruppo:
+    PresetCraftAppLicator importa i profili Look di una fotocamera in un gruppo col nome della fotocamera."""
+    prefs = read_prefs(lib)
+    found = {p["id"]: p for p in prefs.get("dcpProfiles") or [] if p.get("id")}
+    for p in prefs.get("lutProfiles") or []:
+        if p.get("id"):
+            found[p["id"]] = dict(p, cameraModel=p.get("group") or "")
+    return found
+
+
+def recent_from(photos):
+    """Data da cui partono le foto "aggiunte di recente": 30 giorni prima dell'ultima importazione (come LightCraft)."""
+    latest = max((p.get("imported") or "" for p in photos), default="")
+    try:
+        when = datetime.datetime.fromisoformat(latest[:19])
+    except ValueError:
+        return latest[:10]
+    return (when - datetime.timedelta(days=RECENT_DAYS)).strftime("%Y-%m-%d")
+
+
+def run_cli(cli, lib, commands, check=True):
+    """Esegue comandi con lightcraft-cli sulla libreria; restituisce le risposte JSON.
+
+    check=False restituisce le risposte anche se qualche comando è stato rifiutato.
+    """
+    fd, script = tempfile.mkstemp(suffix=".jsonl", prefix="presetcraft-")
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+        for name, params in commands:
+            f.write(json.dumps({"command": name, "params": params}) + "\n")
+    try:
+        r = subprocess.run([cli, "run", "--library", lib, "--script", script],
+                           capture_output=True, text=True, encoding="utf-8", creationflags=NO_WINDOW)
+    finally:
+        os.remove(script)
+    replies = []
+    for line in r.stdout.splitlines():
+        try:
+            replies.append(json.loads(line))
+        except ValueError:
+            pass
+    if not replies or (check and (r.returncode != 0 or not all(x.get("ok") for x in replies))):
+        # il motivo vero sta nella risposta del comando fallito; stderr dice solo "1 command(s) failed"
+        errors = [f"{x.get('command')}: {x.get('error')}" for x in replies if not x.get("ok")]
+        detail = "; ".join(errors) or r.stderr.strip()
+        raise RuntimeError(f"lightcraft-cli ({r.returncode}): {detail}")
+    return replies
+
+
+# ---------------------------------------------------------------- backup
+
+def backup_root(lib, settings):
+    """Cartella dei backup di una libreria: accanto alla libreria o in quella scelta nelle Impostazioni."""
+    base = settings.get("backup_dir") or os.path.dirname(lib)
+    return os.path.join(base, BACKUP_PREFIX + os.path.basename(lib))
+
+
+def backup_library(lib, root, kept=BACKUPS_KEPT):
+    dest = os.path.join(root, datetime.datetime.now().strftime(STAMP))
+    os.makedirs(dest)
+    for name in LIBRARY_FILES:
+        src = os.path.join(lib, name)
+        if os.path.exists(src):
+            shutil.copy2(src, dest)
+    for old in [b["path"] for b in list_backups_in(root)][kept:]:
+        shutil.rmtree(old, ignore_errors=True)
+    return dest
+
+
+def list_backups_in(root):
+    """Backup trovati in una cartella, dal più recente: [{path, when, bytes}]."""
+    found = []
+    try:
+        names = os.listdir(root)
+    except OSError:
+        return found
+    for name in names:
+        path = os.path.join(root, name)
+        try:
+            when = datetime.datetime.strptime(name, STAMP)
+        except ValueError:
+            continue
+        if not os.path.isfile(os.path.join(path, "catalog.snap")):
+            continue
+        size = sum(os.path.getsize(os.path.join(path, f)) for f in os.listdir(path)
+                   if os.path.isfile(os.path.join(path, f)))
+        found.append({"path": path, "when": when, "bytes": size})
+    return sorted(found, key=lambda b: b["when"], reverse=True)
+
+
+def list_backups(lib, settings):
+    """Tutti i backup della libreria: nella cartella scelta e accanto alla libreria."""
+    roots = {backup_root(lib, settings), backup_root(lib, {})}
+    return sorted((b for root in roots for b in list_backups_in(root)), key=lambda b: b["when"], reverse=True)
+
+
+class SHFILEOPSTRUCTW(ctypes.Structure):
+    _fields_ = [("hwnd", wintypes.HWND), ("wFunc", wintypes.UINT), ("pFrom", wintypes.LPCWSTR),
+                ("pTo", wintypes.LPCWSTR), ("fFlags", ctypes.c_uint16), ("fAnyOperationsAborted", wintypes.BOOL),
+                ("hNameMappings", ctypes.c_void_p), ("lpszProgressTitle", wintypes.LPCWSTR)]
+
+
+def recycle(path):
+    """Sposta un file o una cartella nel Cestino di Windows (o di Synology, sul NAS)."""
+    op = SHFILEOPSTRUCTW(wFunc=3, pFrom=path + "\0\0", fFlags=0x4 | 0x10 | 0x40 | 0x400)
+    rc = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
+    if rc != 0 or op.fAnyOperationsAborted or os.path.exists(path):
+        raise OSError(f"code {rc}")
+
+
+def delete_backups(paths):
+    """Sposta i backup nel Cestino; toglie le cartelle che restano vuote. Restituisce gli errori."""
+    failed = []
+    for path in paths:
+        try:
+            recycle(path)
+            log(f"backup deleted {path}")
+        except OSError as e:
+            failed.append(f"{path}: {e}")
+        root = os.path.dirname(path)
+        try:
+            if os.path.isdir(root) and not os.listdir(root):
+                os.rmdir(root)
+        except OSError:
+            pass
+    return failed

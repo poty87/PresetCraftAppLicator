@@ -1,0 +1,11 @@
+.venv/
+build/
+dist/
+_shots/
+__pycache__/
+*.pyc
+*.egg-info/
+*.msi
+*.log
+payload/
+_test/

@@ -1,0 +1,90 @@
+{
+ "camera": "RICOH GR IV",
+ "renderer": "LightCraft default",
+ "styles": {
+  "pentax:256": {
+   "style": "Standard",
+   "file": "Standard.cube",
+   "name": "Measured Standard",
+   "photos": 2,
+   "prefer": true
+  },
+  "pentax:257": {
+   "style": "Vivid",
+   "file": "Vivid.cube",
+   "name": "Measured Vivid",
+   "photos": 1,
+   "prefer": true
+  },
+  "pentax:258": {
+   "style": "Monotone",
+   "file": "Monotone.cube",
+   "name": "Measured Monotone",
+   "photos": 1,
+   "prefer": false
+  },
+  "pentax:259": {
+   "style": "Soft Monotone",
+   "file": "Soft Monotone.cube",
+   "name": "Measured Soft Monotone",
+   "photos": 1,
+   "prefer": false
+  },
+  "pentax:260": {
+   "style": "Hard Monotone",
+   "file": "Hard Monotone.cube",
+   "name": "Measured Hard Monotone",
+   "photos": 3,
+   "prefer": false
+  },
+  "pentax:261": {
+   "style": "Hi-Contrast B&W",
+   "file": "Hi-Contrast B&W.cube",
+   "name": "Measured Hi-Contrast B&W",
+   "photos": 3,
+   "prefer": true
+  },
+  "pentax:262": {
+   "style": "Positive Film",
+   "file": "Positive Film.cube",
+   "name": "Measured Positive Film",
+   "photos": 9,
+   "prefer": true
+  },
+  "pentax:263": {
+   "style": "Bleach Bypass",
+   "file": "Bleach Bypass.cube",
+   "name": "Measured Bleach Bypass",
+   "photos": 2,
+   "prefer": true
+  },
+  "pentax:264": {
+   "style": "Retro",
+   "file": "Retro.cube",
+   "name": "Measured Retro",
+   "photos": 1,
+   "prefer": true
+  },
+  "pentax:266": {
+   "style": "Cross Processing",
+   "file": "Cross Processing.cube",
+   "name": "Measured Cross Processing",
+   "photos": 1,
+   "prefer": true
+  },
+  "pentax:268": {
+   "style": "Cinema (Yellow)",
+   "file": "Cinema (Yellow).cube",
+   "name": "Measured Cinema (Yellow)",
+   "photos": 22,
+   "prefer": true
+  },
+  "pentax:269": {
+   "style": "Cinema (Green)",
+   "file": "Cinema (Green).cube",
+   "name": "Measured Cinema (Green)",
+   "photos": 1,
+   "prefer": true
+  }
+ }
+}
