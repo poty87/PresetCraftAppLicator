@@ -40,8 +40,10 @@ Only the profile changes: exposure, white balance and every other adjustment sta
 1. Import your photos into LightCraft as usual, then **close LightCraft**.
 2. Open PresetCraftAppLicator and choose the library.
 3. Choose which photos to check:
-   - **Recently added**: the same photos as LightCraft's *Recently Added* (the 30 days up to the last import). This is the
-     usual choice after an import.
+   - **Last import**: only the photos of the latest import (the usual choice after an import).
+   - **From the … import onwards**: one of the recent imports and everything imported after it — handy after two
+     imports in a row. The menu lists the last 15 imports with their date, time and number of photos (pieces of the same
+     import a few minutes apart count as one).
    - **Whole library**: every photo.
 4. The list shows, for each photo:
    - the style it was shot with;
@@ -249,7 +251,8 @@ Cambia solo il profilo: esposizione, bilanciamento del bianco e le altre regolaz
 **Come si usa:**
 1. Importa le foto in LightCraft e **chiudi LightCraft**.
 2. Apri PresetCraftAppLicator e scegli la libreria.
-3. Scegli *Aggiunte di recente* (le stesse di LightCraft) oppure *Tutta la libreria*.
+3. In *Foto da esaminare* scegli *Ultima importazione*, *Dall'importazione del … in poi* (le ultime 15 importazioni con
+   data, ora e numero di foto: comodo dopo due importazioni di fila) oppure *Tutta la libreria*.
 4. Controlla l'elenco: blu = riceverà il profilo, verde = già a posto, giallo = resta com'è.
 5. Premi **Applica i profili**. Prima viene salvata una copia del catalogo.
 

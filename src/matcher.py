@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import camera_styles as cs
 import looks
 from lightcraft import (DATA_DIR, DEFAULT_PROFILE, backup_library, imported_profiles, library_open_reason, log,
-                        read_catalog, recent_from, run_cli)
+                        import_batches, read_catalog, recent_from, run_cli)
 
 CACHE = os.path.join(DATA_DIR, "styles-cache.json")
 # stati di una foto: apply = riceverà il profilo, ok = lo ha già, manual = profilo scelto a mano in LightCraft,
@@ -131,17 +131,24 @@ def profile_label(pid, dcps):
 
 
 def build_plan(lib, scope, settings, finder, progress=None, ids=None, locked=None):
-    """Foto delle fotocamere supportate (tutte o solo quelle aggiunte di recente) e cosa succederà a ciascuna.
+    """Foto delle fotocamere supportate e cosa succederà a ciascuna.
 
-    ids: solo queste foto (l'importazione automatica le passa appena importate)."""
+    scope: "all" (tutta la libreria), "last" (l'ultima importazione), "since:<ora>" (dall'importazione che inizia a
+    quell'ora in poi), "recent" (come "Recently Added" di LightCraft: 30 giorni fino all'ultima importazione).
+    ids: solo queste foto (l'importazione automatica le passa appena importate).
+    Nel risultato "batches" sono le importazioni della libreria (per il menu della finestra)."""
     cat = read_catalog(lib)
     photos = [p for p in cat["photos"].values() if not p.get("deleted")]
+    batches = import_batches(photos)
     if ids is not None:
         wanted = {int(i) for i in ids}
         photos = [p for p in photos if int(p["id"]) in wanted]
     elif scope == "recent":
         since = recent_from(photos)
         photos = [p for p in photos if (p.get("imported") or "") >= since]
+    elif scope == "last" or str(scope).startswith("since:"):
+        since = (batches[0]["start"] if batches else "") if scope == "last" else scope[6:]
+        photos = [p for p in photos if (p.get("imported") or "")[:19] >= since]
     dcps = imported_profiles(lib)
     cache = load_cache()
     choices = (settings.get("choices") or {}).get(lib, {})
@@ -177,7 +184,7 @@ def build_plan(lib, scope, settings, finder, progress=None, ids=None, locked=Non
             item["action"] = saved
         items.append(item)
     save_cache(cache)
-    return {"items": items, "unsupported": unsupported, "in_scope": len(photos)}
+    return {"items": items, "unsupported": unsupported, "in_scope": len(photos), "batches": batches}
 
 
 def status_of(item, dcps, finder):

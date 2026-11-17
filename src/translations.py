@@ -1103,6 +1103,14 @@ TEXTS = {
         'fr': 'Toute la bibliothèque',
         'pt': 'Toda a biblioteca',
     },
+    'scope_all_n': {
+        'it': 'Tutta la libreria · {count} foto',
+        'en': 'Whole library · {count} photos',
+        'de': 'Gesamte Bibliothek · {count} Fotos',
+        'es': 'Toda la biblioteca · {count} fotos',
+        'fr': 'Toute la bibliothèque · {count} photos',
+        'pt': 'Toda a biblioteca · {count} fotos',
+    },
     'scope_label': {
         'it': 'FOTO DA ESAMINARE',
         'en': 'PHOTOS TO CHECK',
@@ -1111,6 +1119,14 @@ TEXTS = {
         'fr': 'PHOTOS À EXAMINER',
         'pt': 'FOTOS A EXAMINAR',
     },
+    'scope_last': {
+        'it': 'Ultima importazione · {when} · {count} foto',
+        'en': 'Last import · {when} · {count} photos',
+        'de': 'Letzter Import · {when} · {count} Fotos',
+        'es': 'Última importación · {when} · {count} fotos',
+        'fr': 'Dernière importation · {when} · {count} photos',
+        'pt': 'Última importação · {when} · {count} fotos',
+    },
     'scope_recent': {
         'it': 'Aggiunte di recente (come in LightCraft)',
         'en': 'Recently added (as in LightCraft)',
@@ -1118,6 +1134,14 @@ TEXTS = {
         'es': 'Añadidas recientemente (como en LightCraft)',
         'fr': 'Ajoutées récemment (comme dans LightCraft)',
         'pt': 'Adicionadas recentemente (como no LightCraft)',
+    },
+    'scope_since': {
+        'it': "Dall'importazione del {when} in poi · {count} foto",
+        'en': 'From the {when} import onwards · {count} photos',
+        'de': 'Ab dem Import vom {when} · {count} Fotos',
+        'es': 'Desde la importación del {when} · {count} fotos',
+        'fr': "Depuis l'importation du {when} · {count} photos",
+        'pt': 'A partir da importação de {when} · {count} fotos',
     },
     'settings': {
         'it': 'Impostazioni',

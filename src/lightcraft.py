@@ -94,6 +94,39 @@ def recent_from(photos):
     return (when - datetime.timedelta(days=RECENT_DAYS)).strftime("%Y-%m-%d")
 
 
+BATCH_GAP = datetime.timedelta(minutes=3)  # importazioni a pezzi più vicine di così sono un giro solo
+
+
+def import_batches(photos):
+    """Le importazioni della libreria, dalla più recente: [{"start", "end", "count"}]. LightCraft dà a tutte le foto
+    di un'importazione la stessa ora ("imported", in UTC); i pezzi a meno di 3 minuti l'uno dall'altro (l'importazione
+    automatica importa a gruppi) si uniscono in un giro solo."""
+    times = sorted(p.get("imported") or "" for p in photos if p.get("imported"))
+    batches = []
+    for ts in times:
+        try:
+            when = datetime.datetime.fromisoformat(ts[:19])
+        except ValueError:
+            continue
+        if batches and when - batches[-1]["_end"] < BATCH_GAP:
+            batches[-1]["_end"] = when
+            batches[-1]["end"] = ts[:19]
+            batches[-1]["count"] += 1
+        else:
+            batches.append({"start": ts[:19], "end": ts[:19], "count": 1, "_end": when})
+    for b in batches:
+        del b["_end"]
+    return batches[::-1]
+
+
+def local_time(ts):
+    """Un'ora di LightCraft (UTC, "2026-11-17T19:11:52") nell'ora del PC."""
+    try:
+        return datetime.datetime.fromisoformat(ts[:19]).replace(tzinfo=datetime.timezone.utc).astimezone()
+    except ValueError:
+        return None
+
+
 def run_cli(cli, lib, commands, check=True):
     """Esegue comandi con lightcraft-cli sulla libreria; restituisce le risposte JSON.
 

@@ -25,7 +25,7 @@ import updater
 import watcher
 from i18n import registry_value, t
 from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, LOCAL, backup_root, delete_backups, is_cli, is_library,
-                        library_open_reason, list_backups, log)
+                        library_open_reason, list_backups, local_time, log)
 from translations import DATE_FORMATS, LANGUAGES, TEXTS
 from ui_theme import (LEVELS, MUTED, TEXT, Dialog, attach_scrollbars, center_on, dark_title_bar, dpi_aware, set_icon,
                       setup_theme)
@@ -741,10 +741,15 @@ class App(tk.Tk):
         scope = ttk.Frame(card)
         scope.pack(fill="x", pady=(10, 0))
         ttk.Label(scope, text=t("scope_label"), style="Muted.TLabel").pack(side="left", padx=(0, 14))
-        self.scope = tk.StringVar(value=self.settings.get("scope", "recent"))
-        for value, key in (("recent", "scope_recent"), ("all", "scope_all")):
-            ttk.Radiobutton(scope, text=t(key), value=value, variable=self.scope,
-                            command=self.on_scope_changed).pack(side="left", padx=(0, 18))
+        # tutta la libreria, l'ultima importazione, o da un'importazione in poi (il menu si riempie a ogni lettura)
+        self.scope = self.settings.get("scope", "last")
+        if self.scope == "recent":  # versioni precedenti: "aggiunte di recente" (30 giorni, come LightCraft)
+            self.scope = "last"
+        self.scope_values = []
+        self.scope_combo = ttk.Combobox(scope, state="readonly", width=58)
+        self.scope_combo.pack(side="left")
+        self.scope_combo.bind("<<ComboboxSelected>>", self.on_scope_changed)
+        self.fill_scope(None)
         self.update_library_label()
 
         self.banner = tk.Frame(outer, highlightthickness=0, bd=0)
@@ -936,8 +941,47 @@ class App(tk.Tk):
         save_settings(self.settings)
         self.refresh()
 
-    def on_scope_changed(self):
-        self.settings["scope"] = self.scope.get()
+    MAX_BATCHES = 15  # importazioni elencate nel menu; per le più vecchie c'è "Tutta la libreria"
+
+    def fill_scope(self, batches):
+        """Riempie il menu "Foto da esaminare" con le importazioni della libreria (dalla più recente)."""
+        if batches is None:  # libreria non ancora letta
+            self.scope_values = [self.scope]
+            self.scope_combo["values"] = [t("st_reading")]
+            self.scope_combo.current(0)
+            return
+
+        def when(ts):
+            local = local_time(ts)
+            return local.strftime(DATE_FORMATS.get(i18n.LANG, "%d/%m/%Y") + " %H:%M") if local else ts
+
+        rows = [("all", t("scope_all_n", count=sum(b["count"] for b in batches)))]
+        total = 0
+        for i, b in enumerate(batches[:self.MAX_BATCHES]):
+            total += b["count"]
+            if i == 0:
+                rows.append(("last", t("scope_last", when=when(b["start"]), count=b["count"])))
+            else:
+                rows.append(("since:" + b["start"], t("scope_since", when=when(b["start"]), count=total)))
+        values = [v for v, _label in rows]
+        if self.scope not in values:
+            if self.scope.startswith("since:"):  # un'importazione più vecchia di quelle elencate: resta scelta
+                since = self.scope[6:]
+                count = sum(b["count"] for b in batches if b["start"] >= since)
+                rows.append((self.scope, t("scope_since", when=when(since), count=count)))
+                values.append(self.scope)
+            else:
+                self.scope = "all" if not batches else "last"
+        self.scope_values = values
+        self.scope_combo["values"] = [label for _v, label in rows]
+        self.scope_combo.current(values.index(self.scope))
+
+    def on_scope_changed(self, _event=None):
+        i = self.scope_combo.current()
+        if i < 0 or i >= len(self.scope_values) or self.scope_values[i] == self.scope:
+            return
+        self.scope = self.scope_values[i]
+        self.settings["scope"] = self.scope
         save_settings(self.settings)
         self.refresh()
 
@@ -965,7 +1009,7 @@ class App(tk.Tk):
         self.set_busy(True, t("st_reading"))
         self.finder = cs.ProfileFinder(self.settings.get("profiles_dir"))
         self.loading += 1
-        token, scope, settings, finder = self.loading, self.scope.get(), self.settings, self.finder
+        token, scope, settings, finder = self.loading, self.scope, self.settings, self.finder
 
         def progress(done, total):
             self.after(0, lambda: self.loading == token and self.set_status("info", t("st_reading_n", done=done,
@@ -988,6 +1032,7 @@ class App(tk.Tk):
             self.set_status("error", t("st_read_error", error=error))
             return
         self.items, self.reason, self.info = plan["items"], reason, plan
+        self.fill_scope(plan.get("batches") or [])
         self.rows.clear()
         for item in self.items:
             row = self.tree.insert("", "end", values=self.values(item))
