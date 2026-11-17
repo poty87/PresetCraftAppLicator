@@ -276,3 +276,169 @@ class Dialog(tk.Toplevel):
         d = cls(master, *args, **kwargs)
         master.wait_window(d)
         return d.result
+
+
+# ---- data e ora: selettori con il tema dell'app (nessuna libreria esterna)
+
+class CalendarPopup(tk.Toplevel):
+    """Calendario a comparsa sotto un campo: frecce per il mese, clic su un giorno, Esc o clic fuori per chiudere.
+    marked: date (datetime.date) da evidenziare, per esempio i giorni con importazioni."""
+
+    BG, CELL, HOVER, PICK = "#202020", "#2b2b2b", "#3d4a5c", "#1f4f86"
+
+    def __init__(self, anchor, value, marked, on_pick):
+        import datetime
+        super().__init__(anchor)
+        self.withdraw()
+        self.overrideredirect(True)
+        self.configure(bg=self.BG, highlightthickness=1, highlightbackground="#3a3a3a")
+        self.on_pick, self.marked, self.value = on_pick, marked or set(), value
+        self.today = datetime.date.today()
+        start = value or self.today
+        self.month = start.replace(day=1)
+        root = anchor._root()
+        self.f_body, self.f_bold = root.f_body, root.f_strong
+        months = t("cal_months").split(",")
+        self.months = months if len(months) == 12 else [str(i) for i in range(1, 13)]
+        days = t("cal_days").split(",")
+        self.days = days if len(days) == 7 else ["1", "2", "3", "4", "5", "6", "7"]
+
+        head = tk.Frame(self, bg=self.BG)
+        head.pack(fill="x", padx=8, pady=(8, 4))
+        self.title_var = tk.StringVar()
+        for text, step, side in (("◀", -1, "left"), ("▶", 1, "right")):
+            b = tk.Label(head, text=text, bg=self.BG, fg=TEXT, font=self.f_body, cursor="hand2", padx=8)
+            b.pack(side=side)
+            b.bind("<Button-1>", lambda e, s=step: self.shift(s))
+        tk.Label(head, textvariable=self.title_var, bg=self.BG, fg=TEXT, font=self.f_bold).pack(side="left", expand=True)
+        self.grid_frame = tk.Frame(self, bg=self.BG)
+        self.grid_frame.pack(padx=8)
+        foot = tk.Frame(self, bg=self.BG)
+        foot.pack(fill="x", padx=8, pady=(4, 8))
+        today = tk.Label(foot, text=t("adv_today"), bg=self.BG, fg=ACCENT, font=self.f_body, cursor="hand2")
+        today.pack(side="left")
+        today.bind("<Button-1>", lambda e: self.pick(self.today))
+        self.draw()
+
+        self.update_idletasks()
+        x, y = anchor.winfo_rootx(), anchor.winfo_rooty() + anchor.winfo_height() + 2
+        self.geometry(f"+{x}+{y}")
+        self.deiconify()
+        self.lift()
+        self.grab_set()
+        self.focus_force()
+        self.bind("<Escape>", lambda e: self.close())
+        self.bind("<Button-1>", self.click_outside, add="+")
+
+    def click_outside(self, event):
+        x, y = event.x_root, event.y_root
+        if not (self.winfo_rootx() <= x < self.winfo_rootx() + self.winfo_width()
+                and self.winfo_rooty() <= y < self.winfo_rooty() + self.winfo_height()):
+            self.close()
+
+    def shift(self, step):
+        m = self.month.month - 1 + step
+        self.month = self.month.replace(year=self.month.year + m // 12, month=m % 12 + 1)
+        self.draw()
+
+    def draw(self):
+        import calendar
+        for w in self.grid_frame.winfo_children():
+            w.destroy()
+        self.title_var.set(f"{self.months[self.month.month - 1]} {self.month.year}")
+        for col, name in enumerate(self.days):
+            tk.Label(self.grid_frame, text=name, bg=self.BG, fg=MUTED, font=self.f_body, width=4).grid(row=0, column=col)
+        weeks = calendar.Calendar(firstweekday=0).monthdatescalendar(self.month.year, self.month.month)
+        for r, week in enumerate(weeks, start=1):
+            for col, day in enumerate(week):
+                other = day.month != self.month.month
+                picked = day == self.value
+                bg = self.PICK if picked else self.CELL
+                fg = "#5f6368" if other else (ACCENT if day in self.marked else TEXT)
+                font = self.f_bold if day in self.marked or day == self.today else self.f_body
+                cell = tk.Label(self.grid_frame, text=str(day.day), bg=bg, fg=fg, font=font, width=4, pady=3,
+                                cursor="hand2")
+                if day == self.today and not picked:
+                    cell.configure(highlightthickness=1, highlightbackground=MUTED)
+                cell.grid(row=r, column=col, padx=1, pady=1)
+                cell.bind("<Button-1>", lambda e, d=day: self.pick(d))
+                cell.bind("<Enter>", lambda e, c=cell, b=bg: c.configure(bg=self.HOVER if b == self.CELL else b))
+                cell.bind("<Leave>", lambda e, c=cell, b=bg: c.configure(bg=b))
+
+    def pick(self, day):
+        self.close()
+        self.on_pick(day)
+
+    def close(self):
+        try:
+            self.grab_release()
+        except tk.TclError:
+            pass
+        self.destroy()
+
+
+class DateField(ttk.Frame):
+    """Campo data: si sceglie dal calendario (clic sul campo o sul bottone); ✕ lo svuota. value: datetime.date o None."""
+
+    def __init__(self, master, fmt, marked=None, on_change=None):
+        super().__init__(master)
+        self.fmt, self.marked, self.on_change = fmt, marked, on_change
+        self.value = None
+        self.var = tk.StringVar()
+        self.entry = ttk.Entry(self, textvariable=self.var, width=11, state="readonly", cursor="hand2")
+        self.entry.pack(side="left")
+        self.entry.bind("<Button-1>", lambda e: self.open())
+        self.entry.bind("<Return>", lambda e: self.open())
+        self.entry.bind("<space>", lambda e: self.open())
+        ttk.Button(self, text="▾", width=2, command=self.open).pack(side="left", padx=(2, 0))
+        ttk.Button(self, text="✕", width=2, command=lambda: self.set(None, notify=True)).pack(side="left", padx=(2, 0))
+
+    def open(self):
+        CalendarPopup(self.entry, self.value, self.marked, lambda d: self.set(d, notify=True))
+
+    def set(self, value, notify=False):
+        self.value = value
+        self.var.set(value.strftime(self.fmt) if value else "")
+        if notify and self.on_change:
+            self.on_change()
+
+
+class TimeField(ttk.Frame):
+    """Ora facoltativa: la spunta la attiva, ore e minuti con le frecce (o la rotella). value: (ore, minuti) o None."""
+
+    def __init__(self, master, label, default=(0, 0), on_change=None):
+        super().__init__(master)
+        self.on_change = on_change
+        self.on = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self, text=label, variable=self.on, command=self.toggle).pack(side="left")
+        self.hour = ttk.Spinbox(self, from_=0, to=23, width=3, wrap=True, format="%02.0f", command=self.changed)
+        self.minute = ttk.Spinbox(self, from_=0, to=59, width=3, wrap=True, format="%02.0f", command=self.changed)
+        self.hour.pack(side="left", padx=(4, 0))
+        ttk.Label(self, text=":").pack(side="left", padx=2)
+        self.minute.pack(side="left")
+        self.set(None, default)
+
+    def set(self, value, default=None):
+        h, m = value or default or (int(self.hour.get() or 0), int(self.minute.get() or 0))
+        for box, v in ((self.hour, h), (self.minute, m)):
+            box.configure(state="normal")
+            box.set(f"{v:02d}")
+        self.on.set(value is not None)
+        self.toggle(notify=False)
+
+    def toggle(self, notify=True):
+        state = "readonly" if self.on.get() else "disabled"
+        self.hour.configure(state=state)
+        self.minute.configure(state=state)
+        if notify:
+            self.changed()
+
+    def changed(self):
+        if self.on_change:
+            self.on_change()
+
+    @property
+    def value(self):
+        if not self.on.get():
+            return None
+        return int(self.hour.get()), int(self.minute.get())

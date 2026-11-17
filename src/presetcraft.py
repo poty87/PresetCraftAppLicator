@@ -27,8 +27,8 @@ from i18n import registry_value, t
 from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, LOCAL, backup_root, delete_backups, in_scope, is_cli,
                         is_library, library_open_reason, list_backups, local_time, log, utc_text)
 from translations import DATE_FORMATS, LANGUAGES, TEXTS
-from ui_theme import (LEVELS, MUTED, TEXT, Dialog, attach_scrollbars, center_on, dark_title_bar, dpi_aware, set_icon,
-                      setup_theme)
+from ui_theme import (LEVELS, MUTED, TEXT, DateField, Dialog, TimeField, attach_scrollbars, center_on, dark_title_bar,
+                      dpi_aware, set_icon, setup_theme)
 from version import APP_NAME, VERSION
 
 SETTINGS = os.path.join(DATA_DIR, "settings.json")
@@ -526,20 +526,21 @@ class AdvancedFilterDialog(tk.Toplevel):
         ttk.Label(frame, text=t("adv_title"), style="Title.TLabel").pack(anchor="w")
         ttk.Label(frame, text=t("adv_intro"), style="Body.TLabel", wraplength=640, justify="left").pack(anchor="w",
                                                                                                     pady=(6, 0))
-        row = ttk.Frame(frame)
-        row.pack(fill="x", pady=(16, 0))
-        self.fields = {}
-        for key, label in (("from_date", "adv_from"), ("from_time", "adv_time"), ("to_date", "adv_to"),
-                           ("to_time", "adv_time")):
-            ttk.Label(row, text=t(label), style="Body.TLabel").pack(side="left", padx=(0 if key == "from_date" else 10, 4))
-            entry = ttk.Entry(row, width=11 if key.endswith("date") else 6)
-            entry.pack(side="left")
-            entry.bind("<Return>", lambda e: self.apply())
-            self.fields[key] = entry
-        ttk.Button(row, text=t("adv_filter"), command=self.apply).pack(side="left", padx=(14, 0))
-        ttk.Button(row, text=t("adv_reset"), command=self.reset).pack(side="left", padx=(8, 0))
-        example = datetime.date.today().strftime(self.fmt)
-        ttk.Label(frame, text=t("adv_hint", fmt=example), style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
+        # giorni con importazioni: evidenziati nel calendario
+        marked = {local_time(b["start"]).date() for b in batches if local_time(b["start"])}
+        grid = ttk.Frame(frame)
+        grid.pack(fill="x", pady=(16, 0))
+        self.pickers = {}
+        for r, (prefix, label, default) in enumerate((("from", "adv_from", (0, 0)), ("to", "adv_to", (23, 59)))):
+            ttk.Label(grid, text=t(label).capitalize(), style="Body.TLabel").grid(row=r, column=0, sticky="w",
+                                                                                 padx=(0, 10), pady=3)
+            day = DateField(grid, self.fmt, marked, on_change=self.apply)
+            day.grid(row=r, column=1, sticky="w", pady=3)
+            clock = TimeField(grid, t("adv_time"), default=default, on_change=self.apply)
+            clock.grid(row=r, column=2, sticky="w", padx=(18, 0), pady=3)
+            self.pickers[prefix] = (day, clock)
+        ttk.Button(grid, text=t("adv_reset"), command=self.reset).grid(row=0, column=3, rowspan=2, padx=(24, 0))
+        ttk.Label(frame, text=t("adv_hint"), style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
         self.error = ttk.Label(frame, text="", style="Muted.TLabel", foreground="#f87171")
         self.error.pack(anchor="w")
 
@@ -564,12 +565,13 @@ class AdvancedFilterDialog(tk.Toplevel):
         # si riparte dall'intervallo scelto l'ultima volta
         if scope.startswith("range:"):
             start, _sep, end = scope[6:].partition("|")
-            for prefix, ts, empty_time in (("from", start, "00:00"), ("to", end, "23:59")):
-                if ts:
-                    self.fields[prefix + "_date"].insert(0, local_text(ts, self.fmt))
-                    clock = local_text(ts, "%H:%M")
-                    if clock != empty_time:
-                        self.fields[prefix + "_time"].insert(0, clock)
+            for prefix, ts, empty_time in (("from", start, (0, 0)), ("to", end, (23, 59))):
+                local = local_time(ts) if ts else None
+                if local:
+                    day, clock = self.pickers[prefix]
+                    day.set(local.date())
+                    if (local.hour, local.minute) != empty_time:
+                        clock.set((local.hour, local.minute))
             self.apply()
         else:
             self.fill()
@@ -577,37 +579,32 @@ class AdvancedFilterDialog(tk.Toplevel):
         dark_title_bar(self)
         self.deiconify()
         self.grab_set()
-        self.fields["from_date"].focus_set()
+        self.pickers["from"][0].entry.focus_set()
 
-    def parse(self, prefix, end):
-        day, clock = self.fields[prefix + "_date"].get().strip(), self.fields[prefix + "_time"].get().strip()
-        if not day:
-            if clock:
-                raise ValueError(clock)
-            return ""
-        when = datetime.datetime.strptime(day, self.fmt)
-        if clock:
-            c = datetime.datetime.strptime(clock, "%H:%M")
-            when = when.replace(hour=c.hour, minute=c.minute, second=59 if end else 0)
-        elif end:
-            when = when.replace(hour=23, minute=59, second=59)
-        return utc_text(when)
+    def moment(self, prefix, end):
+        """L'estremo dell'intervallo come ora del PC (senza data: nessun limite). Senza ora: inizio o fine giornata."""
+        day, clock = self.pickers[prefix]
+        if not day.value:
+            return None
+        h, m = clock.value or ((23, 59) if end else (0, 0))
+        return datetime.datetime.combine(day.value, datetime.time(h, m, 59 if end else 0))
 
     def apply(self):
-        try:
-            self.start, self.end = self.parse("from", False), self.parse("to", True)
-        except ValueError:
-            self.error.configure(text=t("adv_bad", fmt=datetime.date.today().strftime(self.fmt)))
+        start, end = self.moment("from", False), self.moment("to", True)
+        if start and end and start > end:
+            self.error.configure(text=t("adv_order"))
             return
         self.error.configure(text="")
+        self.start, self.end = (utc_text(start) if start else ""), (utc_text(end) if end else "")
         scope = f"range:{self.start}|{self.end}"
         self.shown = [b for b in self.batches
                       if not (self.start or self.end) or in_scope(b["start"], scope, self.batches)]
         self.fill()
 
     def reset(self):
-        for entry in self.fields.values():
-            entry.delete(0, "end")
+        for day, clock in self.pickers.values():
+            day.set(None)
+            clock.set(None)
         self.apply()
 
     def fill(self):
