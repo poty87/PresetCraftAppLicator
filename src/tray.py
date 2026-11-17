@@ -28,7 +28,7 @@ from watcher import SETTINGS, Status, Watcher, load_json
 LOG = os.path.join(DATA_DIR, "presetcraft.log")
 WM_LBUTTONDBLCLK = 0x0203
 DOTS = {"idle": "#4ade80", "done": "#4ade80", "incoming": "#60a5fa", "importing": "#60a5fa",
-        "profiles": "#60a5fa", "waiting": "#fbbf24", "error": "#f87171"}
+        "profiles": "#60a5fa", "metadata": "#60a5fa", "waiting": "#fbbf24", "error": "#f87171"}
 
 
 def badge_icon(color):
@@ -80,6 +80,9 @@ def describe(s):
         main = t(key, done=s.get("done", 0), total=s.get("total", 0))
         left = duration(s.get("eta"))
         sub = t("tray_left", time=left) if left else lib
+    elif phase == "metadata":
+        main = t("tray_metadata", count=s.get("count", 0))
+        sub = lib
     elif phase == "error":
         main = t("tray_error")
         sub = (s.get("error") or "")[:90]
@@ -94,7 +97,9 @@ def last_text(last):
         return ""
     if last.get("imported"):
         return t("tray_last", count=last["imported"], when=when_text(last.get("when")))
-    return t("tray_last_profiles", count=last.get("profiles", 0), when=when_text(last.get("when")))
+    if last.get("profiles"):
+        return t("tray_last_profiles", count=last["profiles"], when=when_text(last.get("when")))
+    return t("tray_last_metadata", count=last.get("metadata", 0), when=when_text(last.get("when")))
 
 
 class TrayIcon(pystray.Icon):
@@ -205,7 +210,7 @@ class Tray:
     def tick(self):
         while True:
             time.sleep(2)
-            if self.status.get().get("phase") in ("incoming", "importing", "profiles"):
+            if self.status.get().get("phase") in ("incoming", "importing", "profiles", "metadata"):
                 try:
                     self.icon.update_menu()
                 except Exception:  # noqa: BLE001

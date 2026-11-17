@@ -125,6 +125,8 @@ LEGEND = (("apply", "legend_apply"), ("ok", "legend_ok"), ("skip", "legend_skip"
 def row_kind(item):
     if item["status"] == "ok":
         return "ok"
+    if item["status"] == "phone":
+        return "skip"
     if item["status"] in ("apply", "manual"):
         return "apply" if item["action"] == "apply" else "skip"
     return "none"
@@ -971,7 +973,8 @@ class App(tk.Tk):
 
         def work():
             try:
-                plan = matcher.build_plan(lib, scope, settings, finder, progress)
+                plan = matcher.build_plan(lib, scope, settings, finder, progress,
+                                          locked=watcher.phone_presets(lib, settings))
                 self.after(0, self.show, token, plan, library_open_reason(lib), None)
             except Exception as e:  # noqa: BLE001 — qualsiasi errore va mostrato all'utente
                 self.after(0, self.show, token, None, None, e)

@@ -1247,6 +1247,14 @@ TEXTS = {
         'fr': 'La bibliothèque semble encore ouverte. Si LightCraft est fermé, ouvrez-le et refermez-le une fois.',
         'pt': 'A biblioteca ainda parece estar aberta. Se o LightCraft estiver fechado, abra-o e feche-o uma vez.',
     },
+    'st_phone': {
+        'it': 'Preset scelto sul telefono',
+        'en': 'Preset chosen on the phone',
+        'de': 'Auf dem Handy gewähltes Preset',
+        'es': 'Ajuste elegido en el móvil',
+        'fr': 'Préréglage choisi sur le téléphone',
+        'pt': 'Predefinição escolhida no telemóvel',
+    },
     'st_preparing': {
         'it': 'Salvo una copia del catalogo e importo i profili…',
         'en': 'Saving a copy of the catalog and importing the profiles…',
@@ -1455,6 +1463,14 @@ TEXTS = {
         'fr': 'Dernière importation : {count} photos ({when})',
         'pt': 'Última importação: {count} fotos ({when})',
     },
+    'tray_last_metadata': {
+        'it': 'Ultimo aggiornamento: metadati di {count} foto ({when})',
+        'en': 'Last update: metadata of {count} photos ({when})',
+        'de': 'Letzte Aktualisierung: Metadaten von {count} Fotos ({when})',
+        'es': 'Última actualización: metadatos de {count} fotos ({when})',
+        'fr': 'Dernière mise à jour : métadonnées de {count} photos ({when})',
+        'pt': 'Última atualização: metadados de {count} fotos ({when})',
+    },
     'tray_last_profiles': {
         'it': 'Ultimo aggiornamento: profilo dato a {count} foto ({when})',
         'en': 'Last update: profile given to {count} photos ({when})',
@@ -1470,6 +1486,14 @@ TEXTS = {
         'es': 'Faltan {time}',
         'fr': 'Encore {time}',
         'pt': 'Faltam {time}',
+    },
+    'tray_metadata': {
+        'it': 'Metadati da ViewerCraftStar: {count} foto',
+        'en': 'Metadata from ViewerCraftStar: {count} photos',
+        'de': 'Metadaten aus ViewerCraftStar: {count} Fotos',
+        'es': 'Metadatos de ViewerCraftStar: {count} fotos',
+        'fr': 'Métadonnées de ViewerCraftStar : {count} photos',
+        'pt': 'Metadados do ViewerCraftStar: {count} fotos',
     },
     'tray_next': {
         'it': 'Prossimo controllo alle {time}',

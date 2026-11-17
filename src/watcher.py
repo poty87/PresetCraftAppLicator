@@ -142,8 +142,9 @@ def forget_rule(rule):
         pass
 
 
-def list_photos(folder, subfolders=False):
-    """Foto nella cartella: {percorso: (dimensione, data di modifica)}."""
+def list_photos(folder, subfolders=False, sidecars=None):
+    """Foto nella cartella: {percorso: (dimensione, data di modifica)}. Con `sidecars` (un dizionario) raccoglie lì
+    anche i file .xmp, nello stesso giro."""
     found = {}
     stack = [folder]
     while stack:
@@ -164,9 +165,168 @@ def list_photos(folder, subfolders=False):
                 elif os.path.splitext(e.name)[1].lower() in PHOTO_EXTS:
                     st = e.stat()
                     found[e.path] = (st.st_size, st.st_mtime)
+                elif sidecars is not None and e.name.lower().endswith(".xmp"):
+                    st = e.stat()
+                    sidecars[e.path] = (st.st_size, st.st_mtime)
             except OSError:
                 continue
     return found
+
+
+# ---------------------------------------------------------------- metadati da ViewerCraftStar (app Android)
+
+XMP_TOOL = "ViewerCraftStar"
+_NS = {"x": "adobe:ns:meta/", "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+       "dc": "http://purl.org/dc/elements/1.1/", "xmp": "http://ns.adobe.com/xap/1.0/",
+       "lr": "http://ns.adobe.com/lightroom/1.0/", "lc": "http://ns.lightcraft.app/lc/1.0/",
+       "vcs": "http://ns.poty87.github.io/viewercraftstar/1.0/"}
+CATALOG_DIR = ".viewercraftstar"  # cartella nascosta, nella cartella osservata sul NAS, letta dall'app
+LABELS = ("red", "yellow", "green", "blue", "purple")
+
+
+def read_app_xmp(path):
+    """I metadati di un .xmp scritto da ViewerCraftStar, pronti per i comandi di LightCraft; None se il file non è
+    dell'app (gli .xmp di LightCraft o di altri programmi non si toccano) o non si legge.
+
+    L'app scrive sempre tutti i campi, anche vuoti: qui si impostano tutti, così anche togliere una stella, un'etichetta
+    o un titolo arriva in LightCraft (rileggere l'.xmp con photo.readMetadataFromFile non svuota etichetta, titolo e
+    parole chiave)."""
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.parse(path).getroot()
+    except (OSError, ET.ParseError):
+        return None
+    desc = root.find(".//rdf:Description", _NS)
+    if desc is None:
+        return None
+
+    def text(tag):
+        el = desc.find(tag, _NS)
+        if el is None:
+            return desc.get("{%s}%s" % (_NS[tag.split(":")[0]], tag.split(":")[1]))
+        return (el.text or "").strip()
+
+    def items(tag):
+        return [(li.text or "").strip() for li in desc.findall(f"{tag}/*/rdf:li", _NS) if (li.text or "").strip()]
+
+    if text("xmp:CreatorTool") != XMP_TOOL:
+        return None
+    try:
+        rating = max(0, min(5, int(text("xmp:Rating") or 0)))
+    except ValueError:
+        rating = 0
+    label = (text("xmp:Label") or "").lower()
+    flag = (text("lc:flag") or "none").lower()
+    keywords = items("lr:hierarchicalSubject") or items("dc:subject")
+    alt = {t: (items(t) or [""])[0] for t in ("dc:title", "dc:description", "dc:rights", "dc:creator")}
+    # preset scelto sul telefono: id del preset di LightCraft, "" = profilo della fotocamera, None = campo assente
+    preset = text("vcs:preset")
+    return {"rating": rating, "flag": flag if flag in ("pick", "reject", "none") else "none",
+            "label": label if label in LABELS else "none", "title": alt["dc:title"], "caption": alt["dc:description"],
+            "copyright": alt["dc:rights"], "creator": alt["dc:creator"], "keywords": keywords,
+            "preset": preset.strip() if preset is not None else None, "preset_name": text("vcs:presetName") or ""}
+
+
+def library_presets(lib):
+    """I preset dell'utente nella libreria (presets.json): [{id, name, group, settings}]."""
+    try:
+        with open(os.path.join(lib, "presets.json"), encoding="utf-8-sig") as f:
+            return [p for p in json.load(f).get("user") or [] if p.get("id")]
+    except (OSError, ValueError):
+        return []
+
+
+def export_presets(rule, state):
+    """Scrive nella cartella osservata (sul NAS) l'elenco dei preset della libreria, per ViewerCraftStar: lo rifà solo
+    quando presets.json della libreria cambia."""
+    lib = rule["library"]
+    src = os.path.join(lib, "presets.json")
+    target = os.path.join(rule["folder"], CATALOG_DIR, "presets.json")
+    try:
+        st = os.stat(src)
+    except OSError:
+        return
+    sig = [st.st_size, st.st_mtime]
+    if state.get("presets_sig") == sig and os.path.exists(target):
+        return
+    presets = []
+    for p in library_presets(lib):
+        settings = p.get("settings") or {}
+        presets.append({"id": p["id"], "name": p.get("name") or p["id"], "group": p.get("group") or "",
+                        "profile": (settings.get("profile") or {}).get("id"),
+                        "profileOnly": set(settings) <= {"profile"}, "settings": settings})
+    data = {"version": 1, "library": os.path.basename(lib),
+            "updated": datetime.datetime.now().isoformat(timespec="seconds"), "presets": presets}
+    try:
+        save_json(target, data)
+        state["presets_sig"] = sig
+        log(f"watch: {len(presets)} presets published for {XMP_TOOL} in {os.path.dirname(target)}")
+    except OSError as e:
+        log(f"watch: presets not published ({e})")
+
+
+def phone_presets(lib, settings):
+    """{id della foto: id del preset} scelti con ViewerCraftStar per le foto di una libreria: quelle foto non ricevono
+    il profilo automatico (né dall'importazione automatica né dalla finestra dell'app)."""
+    found = {}
+    for rule in (settings.get("watch") or {}).get("rules") or []:
+        if key(rule.get("library", "")) == key(lib):
+            for pid, preset in (load_rule_state(rule).get("phone_presets") or {}).items():
+                if preset:
+                    found[int(pid)] = preset
+    return found
+
+
+def apply_phone_presets(cli, lib, settings, finder, todo, phone, summary):
+    """Porta in LightCraft i preset scelti sul telefono: {id della foto: id del preset ("" = profilo della fotocamera)}.
+
+    Per ogni foto: sviluppo azzerato, profilo dello stile di scatto, poi il preset. Così cambiare preset sul telefono non
+    lascia in giro le regolazioni del preset di prima. Restituisce le foto riuscite."""
+    known = {p["id"] for p in library_presets(lib)}
+    plan = {i["id"]: i for i in matcher.build_plan(lib, "all", settings, finder, ids=list(todo))["items"]}
+    with_target = [i for i in plan.values() if i["target"]]
+    profile_ids, failed = matcher.import_profiles(lib, cli, with_target) if with_target else ({}, [])
+    summary["failed"] += failed
+    cmds, spans = [("library.source", {"kind": "all"})], []
+    for pid, preset in todo.items():
+        if preset and preset not in known:
+            summary["failed"].append(f"#{pid}: preset {preset} not in the library")
+            continue
+        start = len(cmds)
+        cmds.append(("develop.reset", {"ids": [pid]}))
+        item = plan.get(pid)
+        prof = profile_ids.get((cs.norm(item["model"]), item["target"])) if item and item["target"] else None
+        if prof:
+            cmds += [("library.select", {"ids": [pid], "active": pid}), ("develop.profile", {"id": prof, "amount": 100})]
+        if preset:
+            cmds.append(("preset.apply", {"id": preset, "ids": [pid]}))
+        spans.append((pid, preset, start, len(cmds)))
+    if not spans:
+        return 0
+    replies = run_cli(cli, lib, cmds, check=False)
+    done = 0
+    for pid, preset, a, b in spans:
+        mine = replies[a:b] if len(replies) == len(cmds) else []
+        if mine and all(r.get("ok") for r in mine):
+            phone[str(pid)] = preset
+            done += 1
+        else:
+            errors = [f"{r.get('command')}: {r.get('error')}" for r in mine if not r.get("ok")] or ["no reply"]
+            summary["failed"].append(f"#{pid}: {'; '.join(errors)}")
+    summary["presets"] = summary.get("presets", 0) + done
+    log(f"watch: presets from {XMP_TOOL} applied to {done} of {len(spans)} photos")
+    return done
+
+
+def metadata_commands(pid, meta):
+    """Comandi di lightcraft-cli che portano una foto esattamente ai metadati dell'.xmp."""
+    ids = [pid]
+    return [("photo.rate", {"ids": ids, "rating": meta["rating"]}),
+            ("photo.flag", {"ids": ids, "flag": meta["flag"]}),
+            ("photo.label", {"ids": ids, "label": meta["label"]}),
+            ("photo.setMeta", {"ids": ids, "title": meta["title"], "caption": meta["caption"],
+                               "creator": meta["creator"], "copyright": meta["copyright"],
+                               "keywords": meta["keywords"]})]
 
 
 class LibraryIndex:
@@ -283,7 +443,8 @@ def cycle(rule, settings, finder, status=None, now=None):
     w = settings.get("watch") or {}
     quiet = max(10, int(w.get("quiet") or DEFAULT_QUIET))
     state = load_rule_state(rule)
-    files = list_photos(folder, rule.get("subfolders"))
+    sidecars = {}
+    files = list_photos(folder, rule.get("subfolders"), sidecars)
     index = LibraryIndex.of(lib)
     key = index.key  # noqa: F811 — qui le chiavi usano le unità di rete lette una volta per questo giro
     if "handled" not in state:
@@ -293,6 +454,8 @@ def cycle(rule, settings, finder, status=None, now=None):
         return None
     handled = set(state["handled"])
     profile_ids = set(state.get("profile_ids") or [])
+    export_presets(rule, state)
+    phone = state.setdefault("phone_presets", {})  # id della foto -> preset scelto sul telefono ("" = nessuno)
 
     # file arrivati nella libreria per un'altra strada (trascinati, o importati da LightCraft stesso)
     in_library = {}
@@ -314,6 +477,30 @@ def cycle(rule, settings, finder, status=None, now=None):
     still = now - state.get("changed", now)
     ready = [by_key[k] for k, (size, _m) in pending.items() if size > 0] if still >= quiet else []
 
+    # metadati da ViewerCraftStar: gli .xmp nuovi o cambiati accanto a foto già in libreria
+    seen_xmp = state.setdefault("xmp", {})
+    photo_of = {}  # (cartella, nome senza estensione) -> id della foto in libreria
+    for path in files:
+        pid = in_library.get(key(path))
+        if pid is not None:
+            photo_of[(os.path.normcase(os.path.dirname(path)),
+                      os.path.normcase(os.path.splitext(os.path.basename(path))[0]))] = pid
+    xmp_todo = {}  # .xmp -> (id della foto, metadati, firma del file)
+    for path, (size, mtime) in sidecars.items():
+        k, sig = key(path), [size, mtime]
+        if seen_xmp.get(k) == sig:
+            continue
+        meta = read_app_xmp(path)
+        if meta is None:  # .xmp di LightCraft o di altri programmi: non si tocca
+            seen_xmp[k] = sig
+            continue
+        pid = photo_of.get((os.path.normcase(os.path.dirname(path)),
+                            os.path.normcase(os.path.splitext(os.path.basename(path))[0])))
+        if pid is not None:  # altrimenti il DNG non è ancora in libreria: si riprova al prossimo giro
+            xmp_todo[path] = (pid, meta, sig)
+    preset_todo = {pid: meta["preset"] for _p, (pid, meta, _s) in xmp_todo.items()
+                   if meta["preset"] is not None and phone.get(str(pid), "") != meta["preset"]}
+
     def save():
         state["handled"] = sorted(handled)
         state["profile_ids"] = sorted(profile_ids)
@@ -323,14 +510,14 @@ def cycle(rule, settings, finder, status=None, now=None):
         status.set(phase="incoming", count=len(pending), library=lib_name, quiet_left=int(quiet - still))
         save()
         return FAST_POLL
-    if not ready and not profile_ids:
+    if not ready and not profile_ids and not xmp_todo:
         state.pop("waiting", None)
         save()
         return None
 
     reason = library_open_reason(lib)
     if reason:
-        count = len(ready) or len(profile_ids)
+        count = len(ready) or len(profile_ids) or len(xmp_todo)
         if not state.get("waiting"):
             log(f"watch: {count} new photos for {lib}, waiting until LightCraft is closed")
         status.set(phase="waiting", count=count, library=lib_name, first_wait=not state.get("waiting"))
@@ -355,7 +542,7 @@ def cycle(rule, settings, finder, status=None, now=None):
     except OSError:
         saved_view = None
     summary = {"when": datetime.datetime.now().isoformat(timespec="seconds"), "imported": 0, "profiles": 0,
-               "failed": [], "library": lib_name}
+               "metadata": 0, "presets": 0, "failed": [], "library": lib_name}
     tries = state.setdefault("tries", {})
     try:
         started = time.time()
@@ -395,6 +582,8 @@ def cycle(rule, settings, finder, status=None, now=None):
         if ready:
             log(f"watch: imported {summary['imported']} of {len(ready)}" +
                 (f", not imported: {summary['failed']}" if summary["failed"] else ""))
+        # le foto con un preset scelto sul telefono non ricevono il profilo automatico
+        profile_ids -= {int(p) for p, preset in phone.items() if preset}
         if profile_ids and not library_open_reason(lib):
             plan = matcher.build_plan(lib, "all", settings, finder, ids=profile_ids)
             todo = [i for i in plan["items"] if i["status"] == "apply" and i["action"] == "apply"]
@@ -410,13 +599,23 @@ def cycle(rule, settings, finder, status=None, now=None):
                 summary["profiles"] = result["done"]
                 summary["failed"] += result["failed"]
             profile_ids.clear()  # chi non è "apply" (profilo scelto a mano, stile senza profilo) resta com'è
+        if xmp_todo and not library_open_reason(lib):
+            status.set(phase="metadata", count=len(xmp_todo), library=lib_name)
+            done = apply_app_metadata(cli, lib, xmp_todo, seen_xmp, key, summary)
+            log(f"watch: metadata from {XMP_TOOL} applied to {done} of {len(xmp_todo)} photos")
+            if preset_todo:
+                apply_phone_presets(cli, lib, settings, finder, preset_todo, phone, summary)
+                # un preset non riuscito: il suo .xmp si riprova al prossimo giro
+                for path, (pid, _meta, _sig) in xmp_todo.items():
+                    if pid in preset_todo and phone.get(str(pid), "") != preset_todo[pid]:
+                        seen_xmp.pop(key(path), None)
     finally:
         if saved_view is not None:  # LightCraft si riapre sulla vista di prima
             with open(view, "wb") as f:
                 f.write(saved_view)
         state["last"] = summary
         save()
-    if summary["imported"] or summary["profiles"]:
+    if summary["imported"] or summary["profiles"] or summary["metadata"]:
         status.set(phase="done", last=summary)
     elif summary["failed"]:
         status.set(phase="error", error=summary["failed"][0])
@@ -424,6 +623,27 @@ def cycle(rule, settings, finder, status=None, now=None):
 
 
 # ---------------------------------------------------------------- processo in background
+
+def apply_app_metadata(cli, lib, todo, seen_xmp, key, summary, batch=50):
+    """Porta in LightCraft i metadati degli .xmp di ViewerCraftStar; restituisce quante foto sono state aggiornate."""
+    done = 0
+    items = list(todo.items())
+    for start in range(0, len(items), batch):
+        block = items[start:start + batch]
+        cmds = [c for _path, (pid, meta, _sig) in block for c in metadata_commands(pid, meta)]
+        replies = run_cli(cli, lib, cmds, check=False)
+        per = len(cmds) // len(block)
+        for i, (path, (pid, _meta, sig)) in enumerate(block):
+            mine = replies[i * per:(i + 1) * per] if len(replies) == len(cmds) else []
+            if mine and all(r.get("ok") for r in mine):
+                seen_xmp[key(path)] = sig
+                done += 1
+            else:
+                errors = [f"{r.get('command')}: {r.get('error')}" for r in mine if not r.get("ok")] or ["no reply"]
+                summary["failed"].append(f"{os.path.basename(path)}: {'; '.join(errors)}")
+    summary["metadata"] += done
+    return done
+
 
 def watch_settings(settings):
     w = settings.get("watch") or {}

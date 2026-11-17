@@ -85,6 +85,20 @@ How it works:
 - a photo you remove from the library is not imported again;
 - photos that arrive in the folder and that you import yourself also get their profile.
 
+### Ratings and flags from the phone (ViewerCraftStar)
+
+ViewerCraftStar, a companion Android app, writes `.xmp` files next to the DNG files on the NAS with the flag, stars, colour
+label, title, caption, keywords, creator and copyright you set on the phone. Automatic import picks them up: new or
+changed `.xmp` files written by ViewerCraftStar are applied to the photos already in the library (removing a value
+works too), and photos imported later get them as well. `.xmp` files written by LightCraft or other programs are left
+alone, and the photo's profile is never touched.
+
+ViewerCraftStar can also pick a **preset** for each photo, from the library's own presets (for example the GR IV styles or
+presets imported from Lightroom): PresetCraftAppLicator publishes the list in a hidden `.viewercraftstar` folder inside the
+watched folder, and applies the chosen preset in LightCraft (develop settings reset, the camera-style profile, then the
+preset). Photos with a preset chosen on the phone are never given the automatic profile again: the app's list shows them
+as *Preset chosen on the phone*.
+
 ### Notification area icon
 
 While automatic import is on, an icon sits in the notification area. Its dot shows the state: **green** = on and
@@ -246,6 +260,15 @@ arrivano una alla volta, quindi appena compaiono file nuovi la cartella si contr
 parte solo quando non arriva e non cambia più niente da un po' (60 secondi di predefinito). Allora tutte le foto nuove
 vengono importate insieme, con un solo backup del catalogo. Le foto restano dove sono. Se LightCraft è aperto aspetta che
 venga chiuso. Una foto tolta dalla libreria non viene reimportata.
+
+**Valutazioni dal telefono (ViewerCraftStar).** L'app Android ViewerCraftStar scrive accanto ai DNG sul NAS dei file
+`.xmp` con bandierina, stelle, etichetta colore, titolo, didascalia, parole chiave, autore e copyright decisi sul telefono.
+L'importazione automatica li applica alle foto in LightCraft, anche quando un valore viene tolto. Gli `.xmp` di LightCraft
+o di altri programmi non vengono toccati, e il profilo della foto resta com'è. Dal telefono si può anche scegliere un
+**preset** della libreria (per esempio gli stili GR IV o i preset importati da Lightroom): PresetCraftAppLicator ne pubblica
+l'elenco in una cartella nascosta `.viewercraftstar` nella cartella osservata e lo applica in LightCraft (sviluppo
+azzerato, profilo dello stile di scatto, poi il preset). Le foto con un preset scelto sul telefono non ricevono più il
+profilo automatico.
 
 **Icona nell'area di notifica.** Mentre l'importazione automatica è attiva c'è un'icona vicino all'orologio. Il pallino
 dice lo stato: **verde** = attiva e in attesa, **blu** = foto in arrivo o importazione in corso, **giallo** = aspetta

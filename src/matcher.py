@@ -16,7 +16,7 @@ from lightcraft import (DATA_DIR, DEFAULT_PROFILE, backup_library, imported_prof
 CACHE = os.path.join(DATA_DIR, "styles-cache.json")
 # stati di una foto: apply = riceverà il profilo, ok = lo ha già, manual = profilo scelto a mano in LightCraft,
 # nomatch = stile senza un profilo corrispondente, nostyle = stile non leggibile, missing = file non trovato
-STATUSES = ("apply", "ok", "manual", "nomatch", "nostyle", "missing")
+STATUSES = ("apply", "ok", "manual", "phone", "nomatch", "nostyle", "missing")  # phone = preset scelto con ViewerCraftStar
 CHUNK = 120  # foto per ogni esecuzione di lightcraft-cli (per mostrare l'avanzamento)
 
 
@@ -130,7 +130,7 @@ def profile_label(pid, dcps):
     return pid.split(".", 1)[-1].replace("-", " ").replace(".", " › ").title() if pid.startswith("lc.") else pid
 
 
-def build_plan(lib, scope, settings, finder, progress=None, ids=None):
+def build_plan(lib, scope, settings, finder, progress=None, ids=None, locked=None):
     """Foto delle fotocamere supportate (tutte o solo quelle aggiunte di recente) e cosa succederà a ciascuna.
 
     ids: solo queste foto (l'importazione automatica le passa appena importate)."""
@@ -169,6 +169,8 @@ def build_plan(lib, scope, settings, finder, progress=None, ids=None):
             else:
                 item["target"], item["target_path"] = target_profile(settings, finder, item["model"], style)
                 item["status"] = status_of(item, dcps, finder)
+        if locked and item["id"] in locked:
+            item["status"] = "phone"  # preset scelto sul telefono: il profilo automatico non lo sovrascrive
         item["action"] = "apply" if item["status"] == "apply" else "skip"
         saved = choices.get(str(item["id"]))
         if saved and item["status"] in ("apply", "manual"):
