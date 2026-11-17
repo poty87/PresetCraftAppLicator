@@ -184,17 +184,40 @@ CATALOG_DIR = ".viewercraftstar"  # cartella nascosta, nella cartella osservata 
 LABELS = ("red", "yellow", "green", "blue", "purple")
 
 
+def read_shared(path):
+    """Il contenuto di un file aperto con condivisione completa (lettura, scrittura e cancellazione): open() di Python
+    non concede la cancellazione e fallisce (errore 32) se un altro programma ha il file aperto con quel diritto, per
+    esempio un manico rimasto sul NAS da un invio del telefono interrotto."""
+    if os.name != "nt":
+        with open(path, "rb") as f:
+            return f.read()
+    import msvcrt
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateFileW.restype = ctypes.c_void_p
+    k32.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p,
+                                ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p]
+    # GENERIC_READ, FILE_SHARE_READ | WRITE | DELETE, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL
+    h = k32.CreateFileW(path, 0x80000000, 7, None, 3, 0x80, None)
+    if h is None or h == ctypes.c_void_p(-1).value:
+        err = ctypes.get_last_error()
+        raise OSError(err, ctypes.FormatError(err), path)
+    with open(msvcrt.open_osfhandle(h, os.O_RDONLY), "rb") as f:
+        return f.read()
+
+
 def read_app_xmp(path):
     """I metadati di un .xmp scritto da ViewerCraftStar, pronti per i comandi di LightCraft; None se il file non è
-    dell'app (gli .xmp di LightCraft o di altri programmi non si toccano) o non si legge.
+    dell'app (gli .xmp di LightCraft o di altri programmi non si toccano) o non è XML valido. Se il file non si
+    riesce ad aprire solleva OSError: chi chiama riprova più tardi.
 
     L'app scrive sempre tutti i campi, anche vuoti: qui si impostano tutti, così anche togliere una stella, un'etichetta
     o un titolo arriva in LightCraft (rileggere l'.xmp con photo.readMetadataFromFile non svuota etichetta, titolo e
     parole chiave)."""
     import xml.etree.ElementTree as ET
+    data = read_shared(path)  # OSError: si riprova al prossimo giro
     try:
-        root = ET.parse(path).getroot()
-    except (OSError, ET.ParseError):
+        root = ET.fromstring(data)
+    except ET.ParseError:
         return None
     desc = root.find(".//rdf:Description", _NS)
     if desc is None:
@@ -555,7 +578,11 @@ def cycle(rule, settings, finder, status=None, now=None):
         k, sig = key(path), [size, mtime]
         if seen_xmp.get(k) == sig:
             continue
-        meta = read_app_xmp(path)
+        try:
+            meta = read_app_xmp(path)
+        except OSError as e:  # non si apre adesso (bloccato, rete): non lo si segna come visto, si riprova
+            log(f"watch: {path} not readable yet ({e}), retrying later")
+            continue
         if meta is None:  # .xmp di LightCraft o di altri programmi: non si tocca
             seen_xmp[k] = sig
             continue
