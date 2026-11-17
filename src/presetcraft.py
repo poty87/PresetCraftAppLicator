@@ -24,8 +24,8 @@ import matcher
 import updater
 import watcher
 from i18n import registry_value, t
-from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, LOCAL, backup_root, delete_backups, is_cli, is_library,
-                        library_open_reason, list_backups, local_time, log)
+from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, LOCAL, backup_root, delete_backups, in_scope, is_cli,
+                        is_library, library_open_reason, list_backups, local_time, log, utc_text)
 from translations import DATE_FORMATS, LANGUAGES, TEXTS
 from ui_theme import (LEVELS, MUTED, TEXT, Dialog, attach_scrollbars, center_on, dark_title_bar, dpi_aware, set_icon,
                       setup_theme)
@@ -139,6 +139,12 @@ def status_text(item):
     if s == "manual":
         return t("st_manual_forced") if a == "apply" else t("st_manual")
     return t("st_" + s)
+
+
+def local_text(ts, fmt=None):
+    """Un'ora di LightCraft (UTC) come data e ora del PC, nel formato della lingua."""
+    local = local_time(ts)
+    return local.strftime(fmt or DATE_FORMATS.get(i18n.LANG, "%d/%m/%Y") + " %H:%M") if local else ts
 
 
 def target_text(item):
@@ -498,6 +504,140 @@ class MappingsDialog(tk.Toplevel):
         self.destroy()
 
 
+class AdvancedFilterDialog(tk.Toplevel):
+    """Lo storico di tutte le importazioni, da restringere con un intervallo di date e (facoltativo) di ore; poi si
+    esaminano le foto dell'intervallo o solo le importazioni selezionate. result: la scelta per "Foto da esaminare"."""
+
+    def __init__(self, app, batches, scope):
+        super().__init__(app)
+        self.withdraw()
+        self.app = app
+        self.batches = batches
+        self.shown = list(batches)
+        self.start = self.end = ""
+        self.result = None
+        self.fmt = DATE_FORMATS.get(i18n.LANG, "%d/%m/%Y")
+        self.title(t("adv_title"))
+        self.resizable(False, False)
+        self.transient(app)
+        set_icon(self)
+        frame = ttk.Frame(self, padding=(24, 22, 24, 18))
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text=t("adv_title"), style="Title.TLabel").pack(anchor="w")
+        ttk.Label(frame, text=t("adv_intro"), style="Body.TLabel", wraplength=640, justify="left").pack(anchor="w",
+                                                                                                    pady=(6, 0))
+        row = ttk.Frame(frame)
+        row.pack(fill="x", pady=(16, 0))
+        self.fields = {}
+        for key, label in (("from_date", "adv_from"), ("from_time", "adv_time"), ("to_date", "adv_to"),
+                           ("to_time", "adv_time")):
+            ttk.Label(row, text=t(label), style="Body.TLabel").pack(side="left", padx=(0 if key == "from_date" else 10, 4))
+            entry = ttk.Entry(row, width=11 if key.endswith("date") else 6)
+            entry.pack(side="left")
+            entry.bind("<Return>", lambda e: self.apply())
+            self.fields[key] = entry
+        ttk.Button(row, text=t("adv_filter"), command=self.apply).pack(side="left", padx=(14, 0))
+        ttk.Button(row, text=t("adv_reset"), command=self.reset).pack(side="left", padx=(8, 0))
+        example = datetime.date.today().strftime(self.fmt)
+        ttk.Label(frame, text=t("adv_hint", fmt=example), style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
+        self.error = ttk.Label(frame, text="", style="Muted.TLabel", foreground="#f87171")
+        self.error.pack(anchor="w")
+
+        box = ttk.Frame(frame)
+        box.pack(fill="both", expand=True, pady=(10, 0))
+        self.tree = ttk.Treeview(box, columns=("when", "photos"), show="headings", height=12, selectmode="extended")
+        self.tree.heading("when", text=t("adv_col_when"), anchor="w")
+        self.tree.heading("photos", text=t("adv_col_photos"), anchor="e")
+        self.tree.column("when", width=420, anchor="w")
+        self.tree.column("photos", width=110, anchor="e", stretch=False)
+        attach_scrollbars(self.tree)
+        self.tree.bind("<<TreeviewSelect>>", lambda e: self.update_summary())
+        self.summary = ttk.Label(frame, text="", style="Muted.TLabel")
+        self.summary.pack(anchor="w", pady=(6, 0))
+
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x", pady=(16, 0))
+        ttk.Button(buttons, text=t("adv_show"), style="Accent.TButton", command=self.choose).pack(side="right")
+        ttk.Button(buttons, text=t("btn_cancel"), command=self.destroy).pack(side="right", padx=(0, 8))
+        self.bind("<Escape>", lambda e: self.destroy())
+
+        # si riparte dall'intervallo scelto l'ultima volta
+        if scope.startswith("range:"):
+            start, _sep, end = scope[6:].partition("|")
+            for prefix, ts, empty_time in (("from", start, "00:00"), ("to", end, "23:59")):
+                if ts:
+                    self.fields[prefix + "_date"].insert(0, local_text(ts, self.fmt))
+                    clock = local_text(ts, "%H:%M")
+                    if clock != empty_time:
+                        self.fields[prefix + "_time"].insert(0, clock)
+            self.apply()
+        else:
+            self.fill()
+        center_on(self, app)
+        dark_title_bar(self)
+        self.deiconify()
+        self.grab_set()
+        self.fields["from_date"].focus_set()
+
+    def parse(self, prefix, end):
+        day, clock = self.fields[prefix + "_date"].get().strip(), self.fields[prefix + "_time"].get().strip()
+        if not day:
+            if clock:
+                raise ValueError(clock)
+            return ""
+        when = datetime.datetime.strptime(day, self.fmt)
+        if clock:
+            c = datetime.datetime.strptime(clock, "%H:%M")
+            when = when.replace(hour=c.hour, minute=c.minute, second=59 if end else 0)
+        elif end:
+            when = when.replace(hour=23, minute=59, second=59)
+        return utc_text(when)
+
+    def apply(self):
+        try:
+            self.start, self.end = self.parse("from", False), self.parse("to", True)
+        except ValueError:
+            self.error.configure(text=t("adv_bad", fmt=datetime.date.today().strftime(self.fmt)))
+            return
+        self.error.configure(text="")
+        scope = f"range:{self.start}|{self.end}"
+        self.shown = [b for b in self.batches
+                      if not (self.start or self.end) or in_scope(b["start"], scope, self.batches)]
+        self.fill()
+
+    def reset(self):
+        for entry in self.fields.values():
+            entry.delete(0, "end")
+        self.apply()
+
+    def fill(self):
+        self.tree.delete(*self.tree.get_children())
+        for i, b in enumerate(self.shown):
+            self.tree.insert("", "end", iid=str(i), values=(local_text(b["start"]), b["count"]))
+        self.update_summary()
+
+    def picked(self):
+        return [self.shown[int(i)] for i in self.tree.selection()]
+
+    def update_summary(self):
+        chosen = self.picked()
+        if chosen:
+            text = t("adv_selected", batches=len(chosen), count=sum(b["count"] for b in chosen))
+        else:
+            text = t("adv_summary", batches=len(self.shown), count=sum(b["count"] for b in self.shown))
+        self.summary.configure(text=text)
+
+    def choose(self):
+        chosen = self.picked()
+        if chosen:
+            self.result = "batches:" + ";".join(f"{b['start']}/{b['end']}" for b in chosen)
+        elif self.start or self.end:
+            self.result = f"range:{self.start}|{self.end}"
+        else:
+            self.result = "all"
+        self.destroy()
+
+
 class PhotoProfileDialog(tk.Toplevel):
     """Il profilo per alcune foto soltanto: non cambia la regola dello stile né le importazioni automatiche."""
 
@@ -823,6 +963,7 @@ class App(tk.Tk):
         self.scope_combo = ttk.Combobox(scope, state="readonly", width=58)
         self.scope_combo.pack(side="left")
         self.scope_combo.bind("<<ComboboxSelected>>", self.on_scope_changed)
+        ttk.Button(scope, text=t("adv_button"), command=self.open_advanced).pack(side="left", padx=(10, 0))
         self.fill_scope(None)
         self.update_library_label()
 
@@ -1015,7 +1156,7 @@ class App(tk.Tk):
         save_settings(self.settings)
         self.refresh()
 
-    MAX_BATCHES = 15  # importazioni elencate nel menu; per le più vecchie c'è "Tutta la libreria"
+    MAX_BATCHES = 5  # importazioni elencate nel menu; le altre si trovano con "Filtri avanzati…"
 
     def fill_scope(self, batches):
         """Riempie il menu "Foto da esaminare" con le importazioni della libreria (dalla più recente)."""
@@ -1025,9 +1166,7 @@ class App(tk.Tk):
             self.scope_combo.current(0)
             return
 
-        def when(ts):
-            local = local_time(ts)
-            return local.strftime(DATE_FORMATS.get(i18n.LANG, "%d/%m/%Y") + " %H:%M") if local else ts
+        when = local_text
 
         rows = [("all", t("scope_all_n", count=sum(b["count"] for b in batches)))]
         total = 0
@@ -1039,16 +1178,36 @@ class App(tk.Tk):
                 rows.append(("since:" + b["start"], t("scope_since", when=when(b["start"]), count=total)))
         values = [v for v, _label in rows]
         if self.scope not in values:
-            if self.scope.startswith("since:"):  # un'importazione più vecchia di quelle elencate: resta scelta
-                since = self.scope[6:]
-                count = sum(b["count"] for b in batches if b["start"] >= since)
-                rows.append((self.scope, t("scope_since", when=when(since), count=count)))
-                values.append(self.scope)
+            # una scelta che non è tra le righe fisse (importazione più vecchia, filtro avanzato): resta, in fondo
+            count = sum(b["count"] for b in batches if in_scope(b["start"], self.scope, batches))
+            if self.scope.startswith("since:"):
+                rows.append((self.scope, t("scope_since", when=when(self.scope[6:]), count=count)))
+            elif self.scope.startswith("range:"):
+                start, _sep, end = self.scope[6:].partition("|")
+                rows.append((self.scope, t("scope_range", start=when(start) if start else "…",
+                                           end=when(end) if end else "…", count=count)))
+            elif self.scope.startswith("batches:"):
+                rows.append((self.scope, t("scope_picked", n=len([x for x in self.scope[8:].split(";") if x]),
+                                           count=count)))
             else:
                 self.scope = "all" if not batches else "last"
+            if self.scope not in values and self.scope not in ("all", "last"):
+                values.append(self.scope)
         self.scope_values = values
         self.scope_combo["values"] = [label for _v, label in rows]
         self.scope_combo.current(values.index(self.scope))
+
+    def open_advanced(self):
+        batches = (self.info or {}).get("batches") if getattr(self, "info", None) else None
+        if batches is None:
+            return  # la libreria non è ancora stata letta
+        d = AdvancedFilterDialog(self, batches, self.scope)
+        self.wait_window(d)
+        if d.result and d.result != self.scope:
+            self.scope = d.result
+            self.settings["scope"] = self.scope
+            save_settings(self.settings)
+            self.refresh()
 
     def on_scope_changed(self, _event=None):
         i = self.scope_combo.current()

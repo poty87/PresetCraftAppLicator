@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import camera_styles as cs
 import looks
 from lightcraft import (DATA_DIR, DEFAULT_PROFILE, backup_library, imported_profiles, library_open_reason, log,
-                        import_batches, read_catalog, recent_from, run_cli)
+                        import_batches, in_scope, read_catalog, recent_from, run_cli)
 
 CACHE = os.path.join(DATA_DIR, "styles-cache.json")
 # stati di una foto: apply = riceverà il profilo, ok = lo ha già, manual = profilo scelto a mano in LightCraft,
@@ -134,7 +134,9 @@ def build_plan(lib, scope, settings, finder, progress=None, ids=None, locked=Non
     """Foto delle fotocamere supportate e cosa succederà a ciascuna.
 
     scope: "all" (tutta la libreria), "last" (l'ultima importazione), "since:<ora>" (dall'importazione che inizia a
-    quell'ora in poi), "recent" (come "Recently Added" di LightCraft: 30 giorni fino all'ultima importazione).
+    quell'ora in poi), "range:<da>|<a>" (importate in quell'intervallo; un estremo può mancare),
+    "batches:<inizio>/<fine>;…" (solo le importazioni scelte), "recent" (come "Recently Added" di LightCraft: 30 giorni
+    fino all'ultima importazione). Le ore sono quelle di LightCraft, in UTC.
     ids: solo queste foto (l'importazione automatica le passa appena importate).
     Nel risultato "batches" sono le importazioni della libreria (per il menu della finestra)."""
     cat = read_catalog(lib)
@@ -146,9 +148,8 @@ def build_plan(lib, scope, settings, finder, progress=None, ids=None, locked=Non
     elif scope == "recent":
         since = recent_from(photos)
         photos = [p for p in photos if (p.get("imported") or "") >= since]
-    elif scope == "last" or str(scope).startswith("since:"):
-        since = (batches[0]["start"] if batches else "") if scope == "last" else scope[6:]
-        photos = [p for p in photos if (p.get("imported") or "")[:19] >= since]
+    elif scope and scope != "all":  # last, since:<ora>, range:<da>|<a>, batches:<inizio>/<fine>;… (ore UTC)
+        photos = [p for p in photos if in_scope(p.get("imported"), scope, batches)]
     dcps = imported_profiles(lib)
     cache = load_cache()
     choices = (settings.get("choices") or {}).get(lib, {})

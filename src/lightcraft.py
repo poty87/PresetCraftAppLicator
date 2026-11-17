@@ -127,6 +127,26 @@ def local_time(ts):
         return None
 
 
+def utc_text(local):
+    """Un'ora del PC (datetime senza fuso) nel formato delle ore di LightCraft (UTC)."""
+    return local.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def in_scope(imported, scope, batches):
+    """La foto importata a quell'ora (UTC) rientra nella scelta "Foto da esaminare"? Vedi matcher.build_plan."""
+    ts = (imported or "")[:19]
+    if scope == "last":
+        return bool(batches) and ts >= batches[0]["start"]
+    if scope.startswith("since:"):
+        return ts >= scope[6:]
+    if scope.startswith("range:"):
+        start, _sep, end = scope[6:].partition("|")
+        return bool(ts) and (not start or ts >= start) and (not end or ts <= end)
+    if scope.startswith("batches:"):
+        return any(s <= ts <= e for s, _sep, e in (x.partition("/") for x in scope[8:].split(";") if x))
+    return True
+
+
 def run_cli(cli, lib, commands, check=True):
     """Esegue comandi con lightcraft-cli sulla libreria; restituisce le risposte JSON.
 
