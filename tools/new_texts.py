@@ -111,9 +111,21 @@ NEW = {
                    "es": "Aplicar el perfil", "fr": "Appliquer le profil", "pt": "Aplicar o perfil"},
     "menu_skip": {"it": "Non toccare", "en": "Leave as is", "de": "Nicht verändern", "es": "No tocar",
                   "fr": "Ne pas modifier", "pt": "Não alterar"},
-    "menu_mapping": {"it": "Scegli il profilo per questo stile…", "en": "Choose the profile for this style…",
-                     "de": "Profil für diesen Stil wählen…", "es": "Elegir el perfil para este estilo…",
-                     "fr": "Choisir le profil pour ce style…", "pt": "Escolher o perfil para este estilo…"},
+    "menu_mapping": {"it": "Cambia il profilo di tutte le foto con questo stile…",
+                     "en": "Change the profile of every photo with this style…",
+                     "de": "Profil aller Fotos mit diesem Stil ändern…",
+                     "es": "Cambiar el perfil de todas las fotos con este estilo…",
+                     "fr": "Changer le profil de toutes les photos de ce style…",
+                     "pt": "Alterar o perfil de todas as fotos com este estilo…"},
+    "menu_photo_profile": {"it": "Scegli il profilo per questa foto…", "en": "Choose the profile for this photo…",
+                           "de": "Profil für dieses Foto wählen…", "es": "Elegir el perfil para esta foto…",
+                           "fr": "Choisir le profil pour cette photo…", "pt": "Escolher o perfil para esta foto…"},
+    "menu_photos_profile": {"it": "Scegli il profilo per queste {count} foto…",
+                            "en": "Choose the profile for these {count} photos…",
+                            "de": "Profil für diese {count} Fotos wählen…",
+                            "es": "Elegir el perfil para estas {count} fotos…",
+                            "fr": "Choisir le profil pour ces {count} photos…",
+                            "pt": "Escolher o perfil para estas {count} fotos…"},
     "go": {"it": "Applica i profili", "en": "Apply profiles", "de": "Profile anwenden", "es": "Aplicar perfiles",
            "fr": "Appliquer les profils", "pt": "Aplicar perfis"},
     "st_empty": {
@@ -631,4 +643,55 @@ NEW = {
                     "es": "Desde la importación del {when} · {count} fotos",
                     "fr": "Depuis l'importation du {when} · {count} photos",
                     "pt": "A partir da importação de {when} · {count} fotos"},
+    "photo_title": {"it": "Profilo per le foto scelte", "en": "Profile for the chosen photos",
+                    "de": "Profil für die gewählten Fotos", "es": "Perfil para las fotos elegidas",
+                    "fr": "Profil pour les photos choisies", "pt": "Perfil para as fotos escolhidas"},
+    "photo_intro": {
+        "it": "Vale solo per {count} foto ({camera}): le altre foto con lo stesso stile e le prossime importazioni "
+              "automatiche restano come sono.",
+        "en": "It only applies to {count} photos ({camera}): other photos with the same style and future automatic "
+              "imports stay as they are.",
+        "de": "Gilt nur für {count} Fotos ({camera}): andere Fotos mit demselben Stil und künftige automatische "
+              "Importe bleiben unverändert.",
+        "es": "Solo vale para {count} fotos ({camera}): las demás fotos con el mismo estilo y las próximas "
+              "importaciones automáticas no cambian.",
+        "fr": "Ne vaut que pour {count} photos ({camera}) : les autres photos du même style et les prochaines "
+              "importations automatiques restent inchangées.",
+        "pt": "Vale só para {count} fotos ({camera}): as outras fotos com o mesmo estilo e as próximas importações "
+              "automáticas ficam como estão.",
+    },
+    "photo_auto": {"it": "Come le altre foto con questo stile ({name})", "en": "Like other photos with this style ({name})",
+                   "de": "Wie andere Fotos mit diesem Stil ({name})", "es": "Como las demás fotos con este estilo ({name})",
+                   "fr": "Comme les autres photos de ce style ({name})", "pt": "Como as outras fotos com este estilo ({name})"},
+    "photo_auto_none": {"it": "Come le altre foto con questo stile (nessun profilo)",
+                        "en": "Like other photos with this style (no profile)",
+                        "de": "Wie andere Fotos mit diesem Stil (kein Profil)",
+                        "es": "Como las demás fotos con este estilo (sin perfil)",
+                        "fr": "Comme les autres photos de ce style (aucun profil)",
+                        "pt": "Como as outras fotos com este estilo (nenhum perfil)"},
+    "target_own": {"it": "{name} · solo questa foto", "en": "{name} · this photo only", "de": "{name} · nur dieses Foto",
+                   "es": "{name} · solo esta foto", "fr": "{name} · cette photo seulement", "pt": "{name} · só esta foto"},
+    "maps_confirm_title": {"it": "Cambiare la regola per tutto lo stile?", "en": "Change the rule for the whole style?",
+                           "de": "Regel für den ganzen Stil ändern?", "es": "¿Cambiar la regla de todo el estilo?",
+                           "fr": "Changer la règle pour tout le style ?", "pt": "Alterar a regra de todo o estilo?"},
+    "maps_confirm_body": {
+        "it": "La nuova regola vale per tutte le foto con quello stile ({count} in questo elenco), anche per quelle che "
+              "arriveranno con l'importazione automatica. Per cambiare solo alcune foto, chiudi e usa «Scegli il profilo "
+              "per questa foto…» con il tasto destro.",
+        "en": "The new rule applies to every photo with that style ({count} in this list), including those that will "
+              "arrive with automatic import. To change only some photos, close this and use “Choose the profile for "
+              "this photo…” with the right mouse button.",
+        "de": "Die neue Regel gilt für alle Fotos mit diesem Stil ({count} in dieser Liste), auch für die, die per "
+              "automatischem Import kommen. Um nur einzelne Fotos zu ändern, schließe dies und nutze „Profil für "
+              "dieses Foto wählen…“ mit der rechten Maustaste.",
+        "es": "La nueva regla vale para todas las fotos con ese estilo ({count} en esta lista), también para las que "
+              "lleguen con la importación automática. Para cambiar solo algunas fotos, cierra y usa «Elegir el perfil "
+              "para esta foto…» con el botón derecho.",
+        "fr": "La nouvelle règle vaut pour toutes les photos de ce style ({count} dans cette liste), y compris celles "
+              "qui arriveront par l'importation automatique. Pour ne changer que certaines photos, fermez et utilisez "
+              "« Choisir le profil pour cette photo… » avec le clic droit.",
+        "pt": "A nova regra vale para todas as fotos com esse estilo ({count} nesta lista), também para as que chegarem "
+              "com a importação automática. Para alterar só algumas fotos, feche e use «Escolher o perfil para esta "
+              "foto…» com o botão direito.",
+    },
 }

@@ -63,6 +63,12 @@ Only the profile changes: exposure, white balance and every other adjustment sta
 Photos where you already chose a different profile in LightCraft are **not touched** unless you right-click them and choose
 *Apply the profile*.
 
+To give a different profile to **some photos only**, select them, right-click and choose *Choose the profile for this
+photo…*: the list shows "· this photo only" next to the profile, and nothing else changes — other photos with the same style
+and the photos that automatic import brings in keep following the style's rule. *Change the profile of every photo with
+this style…* instead changes the rule for that camera style: it applies to every photo with that style, including future
+automatic imports, and asks for confirmation first.
+
 ## Automatic import
 
 If your photos land in a folder on their own (for example the raw files uploaded from your phone to a NAS), PresetCraftAppLicator
@@ -258,6 +264,12 @@ Cambia solo il profilo: esposizione, bilanciamento del bianco e le altre regolaz
 
 Le foto a cui hai già scelto un altro profilo in LightCraft non vengono toccate, a meno che tu non lo chieda con il tasto
 destro.
+
+Per dare un profilo diverso **solo ad alcune foto** selezionale e scegli, con il tasto destro, *Scegli il profilo per questa
+foto…*: nell'elenco accanto al profilo compare «· solo questa foto» e nient'altro cambia, né le altre foto con lo stesso
+stile né quelle portate dall'importazione automatica. *Cambia il profilo di tutte le foto con questo stile…* invece cambia
+la regola dello stile per quella fotocamera: vale per tutte le foto con quello stile, anche per le prossime importazioni
+automatiche, e prima chiede conferma.
 
 **Importazione automatica.** Se le foto arrivano da sole in una cartella (per esempio i raw caricati dal telefono sul NAS),
 PresetCraftAppLicator può osservarla in background, importare le foto nuove nella libreria LightCraft e dare a ciascuna il

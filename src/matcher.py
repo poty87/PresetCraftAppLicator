@@ -164,7 +164,10 @@ def build_plan(lib, scope, settings, finder, progress=None, ids=None, locked=Non
                 "camera": camera_name(meta), "imported": p.get("imported") or "", "captured": p.get("captured") or "",
                 "size_px": (p.get("width"), p.get("height")), "current": current,
                 "current_name": profile_label(current, dcps), "model": "", "style_key": None, "style_code": None,
-                "style_name": None, "target": None, "target_path": None}
+                "style_name": None, "target": None, "target_path": None, "own": False}
+        # scelta fatta per questa foto ("profile:<nome>"): vale solo per lei, non per lo stile né per le importazioni
+        saved = choices.get(str(item["id"]))
+        own = saved[8:] if isinstance(saved, str) and saved.startswith("profile:") else None
         style = styles[path]
         if style is None:
             item["status"] = "missing"
@@ -174,14 +177,20 @@ def build_plan(lib, scope, settings, finder, progress=None, ids=None, locked=Non
             if not style["key"]:
                 item["status"] = "nostyle"
             else:
-                item["target"], item["target_path"] = target_profile(settings, finder, item["model"], style)
+                profiles = finder.profiles_for(item["model"])
+                if own and own in profiles:
+                    item["target"], item["target_path"], item["own"] = own, profiles[own], True
+                else:
+                    item["target"], item["target_path"] = target_profile(settings, finder, item["model"], style)
                 item["status"] = status_of(item, dcps, finder)
         if locked and item["id"] in locked:
             item["status"] = "phone"  # preset scelto sul telefono: il profilo automatico non lo sovrascrive
         item["action"] = "apply" if item["status"] == "apply" else "skip"
-        saved = choices.get(str(item["id"]))
         if saved and item["status"] in ("apply", "manual"):
-            item["action"] = saved
+            if item["own"]:
+                item["action"] = "apply"  # il profilo scelto per la foto si applica
+            elif saved in ("apply", "skip"):
+                item["action"] = saved  # (un profilo scelto che non c'è più si ignora: vale la regola dello stile)
         items.append(item)
     save_cache(cache)
     return {"items": items, "unsupported": unsupported, "in_scope": len(photos), "batches": batches}

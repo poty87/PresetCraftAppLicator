@@ -141,6 +141,12 @@ def status_text(item):
     return t("st_" + s)
 
 
+def target_text(item):
+    if not item["target"]:
+        return "—"
+    return t("target_own", name=item["target"]) if item.get("own") else item["target"]
+
+
 def style_text(item):
     if item["style_name"]:
         return item["style_name"]
@@ -464,6 +470,17 @@ class MappingsDialog(tk.Toplevel):
             first.focus_set()
 
     def save(self):
+        changed = []
+        for model, key, combo in self.rows:
+            i = combo.current()
+            new = None if i <= 0 else "" if i == 1 else combo.get()
+            if new != matcher.mapping_for(self.app.settings, model, key):
+                changed.append((model, key))
+        if changed:
+            count = sum(1 for i in self.app.items if (i["model"], i["style_key"]) in changed)
+            if Dialog.ask(self, t("maps_title"), t("maps_confirm_title"), t("maps_confirm_body", count=count),
+                          level="warn", buttons=[("cancel", t("btn_cancel"), False), ("ok", t("btn_save"), True)]) != "ok":
+                return
         mappings = self.app.settings.setdefault("mappings", {})
         for model, key, combo in self.rows:
             camera = mappings.setdefault(cs.norm(model), {})
@@ -476,6 +493,63 @@ class MappingsDialog(tk.Toplevel):
                 camera[key] = combo.get()
             if not camera:
                 mappings.pop(cs.norm(model), None)
+        save_settings(self.app.settings)
+        self.saved = True
+        self.destroy()
+
+
+class PhotoProfileDialog(tk.Toplevel):
+    """Il profilo per alcune foto soltanto: non cambia la regola dello stile né le importazioni automatiche."""
+
+    def __init__(self, app, items):
+        super().__init__(app)
+        self.withdraw()
+        self.app = app
+        self.items = items
+        self.saved = False
+        self.title(t("photo_title"))
+        self.resizable(False, False)
+        self.transient(app)
+        set_icon(self)
+        frame = ttk.Frame(self, padding=(24, 22, 24, 18))
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text=t("photo_title"), style="Title.TLabel").pack(anchor="w")
+        model = items[0]["model"]
+        ttk.Label(frame, text=t("photo_intro", count=len(items), camera=model), style="Body.TLabel", wraplength=560,
+                  justify="left").pack(anchor="w", pady=(6, 0))
+        self.profiles = list(app.finder.profiles_for(model))
+        first = items[0]
+        rule, _path = matcher.target_profile(app.settings, app.finder, model,
+                                             {"key": first["style_key"], "name": first["style_name"]})
+        values = [t("photo_auto", name=rule) if rule else t("photo_auto_none"), *self.profiles]
+        self.combo = ttk.Combobox(frame, values=values, state="readonly", width=46)
+        own = {i["target"] for i in items if i.get("own")}
+        current = own.pop() if len(own) == 1 and len(items) == sum(1 for i in items if i.get("own")) else None
+        self.combo.current(1 + self.profiles.index(current) if current in self.profiles else 0)
+        self.combo.pack(anchor="w", pady=(16, 0))
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x", pady=(20, 0))
+        ttk.Button(buttons, text=t("btn_save"), style="Accent.TButton", command=self.save).pack(side="right")
+        ttk.Button(buttons, text=t("btn_cancel"), command=self.destroy).pack(side="right", padx=(0, 8))
+        self.bind("<Escape>", lambda e: self.destroy())
+        center_on(self, app)
+        dark_title_bar(self)
+        self.deiconify()
+        self.grab_set()
+        self.combo.focus_set()
+
+    def save(self):
+        lib = self.app.settings.get("library", "")
+        choices = self.app.settings.setdefault("choices", {}).setdefault(lib, {})
+        i = self.combo.current()
+        for item in self.items:
+            if i <= 0:
+                if str(choices.get(str(item["id"]), "")).startswith("profile:"):
+                    choices.pop(str(item["id"]), None)  # torna a seguire la regola dello stile
+            else:
+                choices[str(item["id"])] = "profile:" + self.profiles[i - 1]
+        if not choices:
+            self.app.settings["choices"].pop(lib, None)
         save_settings(self.app.settings)
         self.saved = True
         self.destroy()
@@ -1044,7 +1118,7 @@ class App(tk.Tk):
 
     def values(self, item):
         return (item["name"], os.path.dirname(item["path"]), item["camera"], when_text(item["captured"]),
-                when_text(item["imported"]), style_text(item), item["current_name"], item["target"] or "—",
+                when_text(item["imported"]), style_text(item), item["current_name"], target_text(item),
                 status_text(item))
 
     def paint(self, item):
@@ -1232,8 +1306,13 @@ class App(tk.Tk):
             menu.add_command(label=t("menu_skip"), command=lambda: self.set_action("skip"))
             menu.add_separator()
         styled = next((i for i in items if i["style_key"]), None)
+        mine = self.profile_targets(items)
+        if mine:
+            label = t("menu_photo_profile") if len(mine) == 1 else t("menu_photos_profile", count=len(mine))
+            menu.add_command(label=label, command=lambda: self.open_photo_profile(mine))
         if styled:
             menu.add_command(label=t("menu_mapping"), command=lambda: self.open_mappings(styled["style_key"]))
+        if mine or styled:
             menu.add_separator()
         path = self.rows[row]["path"]
         menu.add_command(label=t("menu_explorer"), command=lambda: self.show_in_explorer(path))
@@ -1252,7 +1331,9 @@ class App(tk.Tk):
                 continue
             item["action"] = action
             default = "apply" if item["status"] == "apply" else "skip"
-            if action == default:
+            if item.get("own") and action == "apply":
+                pass  # resta il profilo scelto per questa foto, che si applica
+            elif action == default:
                 choices.pop(str(item["id"]), None)
             else:
                 choices[str(item["id"])] = action
@@ -1346,6 +1427,19 @@ class App(tk.Tk):
             if i18n.LANG != before:
                 self.outer.destroy()
                 self._build()
+            self.refresh()
+
+    def profile_targets(self, items):
+        """Le foto selezionate a cui si può scegliere un profilo: con uno stile letto, non bloccate da un preset del
+        telefono, della stessa fotocamera della prima (i profili sono per fotocamera)."""
+        ok = [i for i in items if i["style_key"] and i["model"] and i["status"] != "phone"
+              and self.finder.profiles_for(i["model"])]
+        return [i for i in ok if i["model"] == ok[0]["model"]] if ok else []
+
+    def open_photo_profile(self, items):
+        d = PhotoProfileDialog(self, items)
+        self.wait_window(d)
+        if d.saved:
             self.refresh()
 
     def open_mappings(self, focus_key=None):
