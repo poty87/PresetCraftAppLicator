@@ -104,8 +104,11 @@ Presets can also be **imported from the phone**: ViewerCraftStar uploads the cho
 imports them into the library (group *ViewerCraftStar*) and publishes the updated list.
 
 Finally, PresetCraftAppLicator writes a small report (`.viewercraftstar/status.json`) saying which photos of the watched
-folder are in the library and which version of the phone's metadata has been applied. ViewerCraftStar uses it for its
-*Safe at home* section: only photos confirmed there can be moved to the phone's bin.
+folder are in the library and which version of the phone's metadata has been applied (right after an import, without
+waiting for the next check), plus a heartbeat (`.viewercraftstar/heartbeat.json`, at most once a minute) so the phone
+knows whether the home PC is on. ViewerCraftStar shows a green house for photos already in LightCraft and a blue house
+for photos whose DNG and latest metadata are safe on the NAS: both can be moved to the phone's bin, and blue ones enter
+LightCraft as soon as the home PC is on — useful when travelling with the PC off.
 
 ### Notification area icon
 
@@ -280,8 +283,11 @@ profilo automatico. Dal telefono si possono anche **importare preset da file** (
 `.lcpreset`, look di Luminar o `.zip` che li contengono): ViewerCraftStar li carica in `.viewercraftstar/import` e
 PresetCraftAppLicator li importa nella libreria (gruppo *ViewerCraftStar*) e ne ripubblica l'elenco. Infine scrive un piccolo
 resoconto (`.viewercraftstar/status.json`) con le foto della cartella che sono in libreria e la versione dei metadati del
-telefono applicata: ViewerCraftStar lo usa per la sezione *Al sicuro a casa*, e solo le foto confermate lì si possono
-togliere dal telefono.
+telefono applicata (subito dopo un'importazione, senza aspettare il controllo successivo), e un battito
+(`.viewercraftstar/heartbeat.json`, al massimo una volta al minuto) con cui il telefono sa se il PC di casa è acceso.
+ViewerCraftStar mostra una casetta verde per le foto già in LightCraft e una blu per quelle con DNG e ultimi metadati al
+sicuro sul NAS: entrambe si possono togliere dal telefono, e le blu entrano in LightCraft appena il PC di casa è acceso —
+utile in viaggio con il PC spento.
 
 **Icona nell'area di notifica.** Mentre l'importazione automatica è attiva c'è un'icona vicino all'orologio. Il pallino
 dice lo stato: **verde** = attiva e in attesa, **blu** = foto in arrivo o importazione in corso, **giallo** = aspetta

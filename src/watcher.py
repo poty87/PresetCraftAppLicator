@@ -349,6 +349,29 @@ def publish_status(rule, state, names):
         log(f"watch: status for {XMP_TOOL} not written ({e})")
 
 
+_beats = {}  # cartella -> (ultimo battito scritto, fase)
+
+
+def write_heartbeat(rule, interval, phase):
+    """Battito per ViewerCraftStar (.viewercraftstar/heartbeat.json): dice al telefono che il PC di casa è acceso e
+    controlla la cartella. Se il battito è vecchio, il telefono sa che il PC è spento e che le foto entreranno in
+    LightCraft alla sua accensione. Scritto al massimo una volta al minuto, o subito se cambia la fase."""
+    folder = rule["folder"]
+    last = _beats.get(folder)
+    now = time.time()
+    if last and now - last[0] < 60 and last[1] == phase:
+        return
+    target = os.path.join(folder, CATALOG_DIR, "heartbeat.json")
+    try:
+        if not os.path.isdir(os.path.dirname(target)):
+            return  # la cartella del telefono non c'è ancora: nessuno lo leggerebbe
+        save_json(target, {"version": 1, "ts": int(now), "interval": interval, "phase": phase or "idle",
+                           "checked": datetime.datetime.now().isoformat(timespec="seconds")})
+        _beats[folder] = (now, phase)
+    except OSError:
+        pass
+
+
 def phone_presets(lib, settings):
     """{id della foto: id del preset} scelti con ViewerCraftStar per le foto di una libreria: quelle foto non ricevono
     il profilo automatico (né dall'importazione automatica né dalla finestra dell'app)."""
@@ -721,7 +744,9 @@ def cycle(rule, settings, finder, status=None, now=None):
         status.set(phase="done", last=summary)
     elif summary["failed"]:
         status.set(phase="error", error=summary["failed"][0])
-    return FAST_POLL if pending else None
+    # dopo un'importazione si rifà subito un giro: le foto appena entrate in libreria ricevono metadati e preset del
+    # telefono e compaiono nel resoconto senza aspettare l'intervallo normale
+    return FAST_POLL if pending or summary["imported"] else None
 
 
 # ---------------------------------------------------------------- processo in background
@@ -813,6 +838,7 @@ class Watcher:
                         wanted = None
                     if wanted:
                         pause = min(pause, wanted)
+                    write_heartbeat(rule, interval, self.status.get().get("phase"))
                 next_check = time.time() + pause
                 self.status.set(next_check=next_check)
                 save_json(STATUS, {"pid": os.getpid(), "checked": datetime.datetime.now().isoformat(timespec="seconds"),
