@@ -598,7 +598,8 @@ class AutoImportDialog(tk.Toplevel):
         folder = filedialog.askdirectory(parent=self, title=t("auto_pick"), initialdir=start)
         if not folder:
             return
-        folder = os.path.normpath(folder)
+        # scelta passando da Rete › NAS: si torna alla lettera dell'unità, come nella libreria
+        folder = watcher.prefer_drive(os.path.normpath(folder))
         if any(watcher.key(r["folder"]) == watcher.key(folder) and watcher.key(r["library"]) == watcher.key(lib)
                for r in self.rules):
             Dialog.ask(self, t("auto_title"), t("auto_dup"), folder, level="warn")

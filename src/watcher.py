@@ -69,12 +69,61 @@ def save_json(path, data):
 
 # ---------------------------------------------------------------- regole e stato
 
-def key(path):
-    return os.path.normcase(os.path.normpath(path))
+def drive_share(letter):
+    """Percorso di rete di un'unità collegata ("Y:" → "\\\\MY-NAS\\Photos"), oppure None.
+
+    Non si tiene in memoria: all'accesso a Windows l'unità può collegarsi dopo l'avvio del processo in background."""
+    if not letter or not os.path.splitdrive(letter)[0]:
+        return None
+    buf = ctypes.create_unicode_buffer(1024)
+    size = ctypes.c_ulong(len(buf))
+    try:
+        rc = ctypes.windll.mpr.WNetGetConnectionW(letter[:2].upper(), buf, ctypes.byref(size))
+    except OSError:
+        return None
+    return buf.value.rstrip("\\") if rc == 0 and buf.value else None
+
+
+def mapped_drives():
+    """{lettera: percorso di rete} delle unità di rete collegate adesso."""
+    found = {}
+    for i in range(26):
+        letter = f"{chr(65 + i)}:"
+        if ctypes.windll.kernel32.GetDriveTypeW(letter + "\\") == 4:  # DRIVE_REMOTE
+            share = drive_share(letter)
+            if share:
+                found[letter] = share
+    return found
+
+
+def key(path, drives=None):
+    """Forma confrontabile di un percorso: un'unità di rete diventa il suo percorso di rete, così "Y:\\Catalogo"
+    e "\\\\MY-NAS\\Photos\\Catalogo" risultano la stessa cartella."""
+    p = os.path.normpath(path)
+    drive = os.path.splitdrive(p)[0]
+    if len(drive) == 2:
+        share = drives.get(drive.upper()) if drives is not None else drive_share(drive)
+        if share:
+            p = share + p[2:]
+    return os.path.normcase(p)
+
+
+def prefer_drive(path):
+    """Un percorso di rete di una cartella condivisa collegata a un'unità torna con la lettera dell'unità, come lo
+    registra di solito la libreria ("\\\\MY-NAS\\Photos\\Catalogo" → "Y:\\Catalogo")."""
+    p = os.path.normpath(path)
+    if p.startswith("\\\\"):
+        for letter, share in mapped_drives().items():
+            if os.path.normcase(p) == os.path.normcase(share) or \
+                    os.path.normcase(p).startswith(os.path.normcase(share) + "\\"):
+                return letter + "\\" + p[len(share):].lstrip("\\")
+    return p
 
 
 def rule_state_path(rule):
-    digest = hashlib.sha1(f"{key(rule['folder'])}|{key(rule['library'])}".encode("utf-8")).hexdigest()[:16]
+    # il nome non deve dipendere dalle unità di rete collegate in quel momento: si usa il percorso così com'è
+    plain = [os.path.normcase(os.path.normpath(rule[k])) for k in ("folder", "library")]
+    digest = hashlib.sha1("|".join(plain).encode("utf-8")).hexdigest()[:16]
     return os.path.join(STATE_DIR, f"rule-{digest}.json")
 
 
@@ -120,27 +169,48 @@ def list_photos(folder, subfolders=False):
     return found
 
 
-def library_paths(lib):
-    """{percorso normalizzato: id} di tutte le foto della libreria, anche quelle in "Recently Deleted"."""
-    paths = {}
-    for p in read_catalog(lib)["photos"].values():
-        path = (p.get("source") or {}).get("path")
-        if path:
-            paths[key(path)] = int(p["id"])
-    return paths
+class LibraryIndex:
+    """Le foto della libreria (anche quelle in "Recently Deleted"), per sapere se un file c'è già.
+
+    Si confronta il percorso (con le unità di rete ricondotte al loro percorso di rete) e, se il percorso è scritto in
+    un altro modo (per esempio con l'indirizzo IP del NAS), il nome del file insieme alla dimensione."""
+
+    def __init__(self, lib):
+        self.drives = mapped_drives()
+        self.paths, self.names = {}, {}
+        for p in read_catalog(lib)["photos"].values():
+            path = (p.get("source") or {}).get("path")
+            if not path:
+                continue
+            pid = int(p["id"])
+            self.paths[key(path, self.drives)] = pid
+            name = (p.get("file_name") or os.path.basename(path)).lower()
+            if p.get("file_size"):
+                self.names[(name, int(p["file_size"]))] = pid
+
+    def key(self, path):
+        return key(path, self.drives)
+
+    def find(self, path, size):
+        """Id della foto della libreria che corrisponde al file, oppure None."""
+        pid = self.paths.get(self.key(path))
+        if pid is None and size:
+            pid = self.names.get((os.path.basename(path).lower(), int(size)))
+        return pid
 
 
 def new_files(folder, lib, subfolders=False):
     """Foto della cartella che la libreria non ha (per chiedere cosa farne quando si crea una regola)."""
-    known = library_paths(lib)
-    return [p for p in list_photos(folder, subfolders) if key(p) not in known]
+    index = LibraryIndex(lib)
+    return [p for p, (size, _m) in list_photos(folder, subfolders).items() if index.find(p, size) is None]
 
 
 def create_rule_state(rule, import_existing):
     """Stato iniziale di una regola nuova: i file già presenti si ignorano, a meno che si vogliano importare."""
     files = list_photos(rule["folder"], rule.get("subfolders"))
-    known = library_paths(rule["library"])
-    handled = sorted(key(p) for p in files if key(p) in known or not import_existing)
+    index = LibraryIndex(rule["library"])
+    handled = sorted(index.key(p) for p, (size, _m) in files.items()
+                     if index.find(p, size) is not None or not import_existing)
     save_rule_state(rule, {"handled": handled, "pending": {}, "tries": {}, "profile_ids": [],
                            "created": datetime.datetime.now().isoformat(timespec="seconds")})
 
@@ -193,24 +263,29 @@ def cycle(rule, settings, finder, status=None, now=None):
     quiet = max(10, int(w.get("quiet") or DEFAULT_QUIET))
     state = load_rule_state(rule)
     files = list_photos(folder, rule.get("subfolders"))
+    index = LibraryIndex(lib)
+    key = index.key  # noqa: F811 — qui le chiavi usano le unità di rete lette una volta per questo giro
     if "handled" not in state:
         # stato perso o regola scritta a mano: per prudenza si ignora quello che c'è già
         state.update(handled=sorted(key(p) for p in files), pending={}, tries={}, profile_ids=[])
         save_rule_state(rule, state)
         return None
     handled = set(state["handled"])
-    known = library_paths(lib)
     profile_ids = set(state.get("profile_ids") or [])
 
     # file arrivati nella libreria per un'altra strada (trascinati, o importati da LightCraft stesso)
-    for path in files:
-        k = key(path)
-        if k in known and k not in handled:
+    in_library = {}
+    for path, (size, _m) in files.items():
+        pid = index.find(path, size)
+        if pid is not None:
+            in_library[key(path)] = pid
+    for k, pid in in_library.items():
+        if k not in handled:
             handled.add(k)
-            profile_ids.add(known[k])
+            profile_ids.add(pid)
     # file nuovi: finché qualcosa arriva o cambia, il trasferimento non è finito
     pending = {key(p): [size, mtime] for p, (size, mtime) in files.items()
-               if key(p) not in known and key(p) not in handled}
+               if key(p) not in in_library and key(p) not in handled}
     by_key = {key(p): p for p in files}
     if pending != state.get("pending"):
         state["changed"] = now
