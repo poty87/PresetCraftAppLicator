@@ -9,6 +9,7 @@ import io
 import json
 import os
 import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
@@ -16,10 +17,12 @@ from tkinter import filedialog, ttk
 
 from PIL import Image, ImageOps, ImageTk
 
+import autostart
 import camera_styles as cs
 import i18n
 import matcher
 import updater
+import watcher
 from i18n import registry_value, t
 from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, LOCAL, backup_root, delete_backups, is_cli, is_library,
                         library_open_reason, list_backups, log)
@@ -476,6 +479,179 @@ class MappingsDialog(tk.Toplevel):
         self.destroy()
 
 
+class AutoImportDialog(tk.Toplevel):
+    """Cartelle osservate in background: le foto nuove vanno nella libreria scelta con il profilo del loro stile."""
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.withdraw()
+        self.app = app
+        self.saved = False
+        self.title(t("auto_title"))
+        self.resizable(False, False)
+        self.transient(app)
+        set_icon(self)
+        w = app.settings.get("watch") or {}
+        self.rules = [dict(r) for r in w.get("rules") or []]
+        self.added = []  # (regola, importa anche le foto già presenti): lo stato si crea al salvataggio
+        frame = ttk.Frame(self, padding=(24, 22, 24, 18))
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text=t("auto_title"), style="Title.TLabel").pack(anchor="w")
+        ttk.Label(frame, text=t("auto_intro"), style="Body.TLabel", wraplength=720, justify="left").pack(
+            anchor="w", pady=(6, 0))
+
+        ttk.Label(frame, text=t("auto_folders").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
+        box = ttk.Frame(frame)
+        box.pack(fill="x")
+        self.tree = ttk.Treeview(box, columns=("folder", "library"), show="headings", height=4, selectmode="browse")
+        self.tree.heading("folder", text=t("auto_col_folder"), anchor="w")
+        self.tree.heading("library", text=t("auto_col_library"), anchor="w")
+        self.tree.column("folder", width=420, anchor="w")
+        self.tree.column("library", width=300, anchor="w")
+        self.tree.pack(fill="x")
+        self.tree.bind("<<TreeviewSelect>>", lambda e: self.update_buttons())
+        row = ttk.Frame(frame)
+        row.pack(fill="x", pady=(8, 0))
+        ttk.Label(row, text=t("auto_into"), style="Body.TLabel").pack(side="left")
+        self.libs = list(app.settings.get("libraries", []))
+        self.lib_combo = ttk.Combobox(row, state="readonly", width=40, values=app.library_names())
+        if app.settings.get("library") in self.libs:
+            self.lib_combo.current(self.libs.index(app.settings["library"]))
+        elif self.libs:
+            self.lib_combo.current(0)
+        self.lib_combo.pack(side="left", padx=(10, 0))
+        self.btn_remove = ttk.Button(row, text=t("auto_remove"), command=self.remove)
+        self.btn_remove.pack(side="right")
+        ttk.Button(row, text="＋  " + t("auto_add"), command=self.add).pack(side="right", padx=(0, 8))
+
+        ttk.Label(frame, text=t("auto_options").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
+        self.enabled = tk.BooleanVar(value=bool(w.get("enabled")))
+        ttk.Checkbutton(frame, text=t("auto_enable"), variable=self.enabled).pack(anchor="w")
+        row = ttk.Frame(frame)
+        row.pack(fill="x", pady=(8, 0))
+        ttk.Label(row, text=t("auto_interval"), style="Body.TLabel").pack(side="left")
+        self.interval = tk.IntVar(value=int(w.get("interval") or watcher.DEFAULT_INTERVAL))
+        ttk.Spinbox(row, from_=1, to=60, textvariable=self.interval, width=5, state="readonly").pack(
+            side="left", padx=(10, 0))
+        ttk.Label(frame, text=t("auto_hint"), style="Muted.TLabel", wraplength=720, justify="left").pack(
+            anchor="w", pady=(8, 0))
+        self.status = ttk.Label(frame, style="Strong.TLabel", wraplength=720, justify="left")
+        self.status.pack(anchor="w", pady=(14, 0))
+
+        buttons = ttk.Frame(frame)
+        buttons.pack(fill="x", pady=(18, 0))
+        ttk.Button(buttons, text=t("btn_save"), style="Accent.TButton", command=self.save).pack(side="right")
+        ttk.Button(buttons, text=t("btn_cancel"), command=self.destroy).pack(side="right", padx=(0, 8))
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.fill()
+        self.show_status()
+        center_on(self, app)
+        dark_title_bar(self)
+        self.deiconify()
+        self.grab_set()
+
+    def lib_name(self, lib):
+        return os.path.basename(lib) or lib
+
+    def fill(self):
+        self.tree.delete(*self.tree.get_children())
+        for i, r in enumerate(self.rules):
+            self.tree.insert("", "end", iid=str(i), values=(r["folder"], self.lib_name(r["library"])))
+        self.update_buttons()
+
+    def update_buttons(self):
+        self.btn_remove.state(["!disabled"] if self.tree.selection() else ["disabled"])
+
+    def show_status(self):
+        lines = []
+        st = watcher.status()
+        checked = st.get("checked") if autostart.is_enabled() else None
+        if not (self.app.settings.get("watch") or {}).get("enabled"):
+            lines.append(t("auto_status_off"))
+        elif checked:
+            lines.append(t("auto_status_on", time=when_text(checked)))
+        else:
+            lines.append(t("auto_status_starting"))
+        last = [watcher.load_rule_state(r).get("last") for r in self.rules]
+        last = max((x for x in last if x and (x.get("imported") or x.get("profiles"))), default=None,
+                   key=lambda x: x["when"])
+        if last:
+            lines.append(t("auto_status_last", count=last["imported"], profiles=last["profiles"],
+                           when=when_text(last["when"])))
+        self.status.configure(text="\n".join(lines))
+
+    def add(self):
+        if not self.libs:
+            Dialog.ask(self, t("auto_title"), t("auto_no_library"), None, level="warn")
+            return
+        i = self.lib_combo.current()
+        lib = self.libs[i if i >= 0 else 0]
+        start = os.path.dirname(lib)
+        folder = filedialog.askdirectory(parent=self, title=t("auto_pick"), initialdir=start)
+        if not folder:
+            return
+        folder = os.path.normpath(folder)
+        if any(watcher.key(r["folder"]) == watcher.key(folder) and watcher.key(r["library"]) == watcher.key(lib)
+               for r in self.rules):
+            Dialog.ask(self, t("auto_title"), t("auto_dup"), folder, level="warn")
+            return
+        try:
+            existing = watcher.new_files(folder, lib)
+        except OSError as e:
+            Dialog.ask(self, t("auto_title"), t("auto_folder_bad"), str(e), level="error")
+            return
+        import_existing = False
+        if existing:
+            answer = Dialog.ask(self, t("auto_title"), t("auto_existing_head", count=len(existing)),
+                                t("auto_existing_body"), level="info",
+                                buttons=[("import", t("btn_import_too"), False), ("ignore", t("btn_ignore"), True)],
+                                default="ignore")
+            if answer is None:
+                return
+            import_existing = answer == "import"
+        rule = {"folder": folder, "library": lib}
+        self.rules.append(rule)
+        self.added.append((rule, import_existing))
+        self.fill()
+
+    def remove(self):
+        sel = self.tree.selection()
+        if not sel:
+            return
+        rule = self.rules.pop(int(sel[0]))
+        self.added = [(r, x) for r, x in self.added if r is not rule]
+        self.fill()
+
+    def save(self):
+        s = self.app.settings
+        before = s.get("watch") or {}
+        enabled = bool(self.enabled.get()) and bool(self.rules)
+        try:
+            # prima lo stato delle regole nuove, poi le impostazioni: il processo in background non vede mai una
+            # regola senza il suo elenco di file da ignorare
+            for rule, import_existing in self.added:
+                watcher.create_rule_state(rule, import_existing)
+            kept = {(watcher.key(r["folder"]), watcher.key(r["library"])) for r in self.rules}
+            for r in before.get("rules") or []:
+                if (watcher.key(r["folder"]), watcher.key(r["library"])) not in kept:
+                    watcher.forget_rule(r)
+            s["watch"] = {"enabled": enabled, "interval": max(1, min(60, int(self.interval.get()))),
+                          "rules": self.rules}
+            save_settings(s)
+            if enabled:
+                autostart.enable()
+            elif autostart.is_enabled():
+                autostart.disable()
+        except Exception as e:  # noqa: BLE001
+            log(f"ERROR automatic import: {e}")
+            Dialog.ask(self, t("auto_title"), t("auto_task_error"), str(e), level="error")
+            return
+        log("automatic import " + ("on: " + "; ".join(f"{r['folder']} -> {r['library']}" for r in self.rules)
+                                   if enabled else "off"))
+        self.saved = True
+        self.destroy()
+
+
 # ---------------------------------------------------------------- finestra principale
 
 class App(tk.Tk):
@@ -511,6 +687,7 @@ class App(tk.Tk):
         ttk.Button(head, text="⚙  " + t("settings"), command=self.open_settings).pack(side="right", anchor="n")
         ttk.Label(head, text=APP_NAME, style="Title.TLabel").pack(anchor="w")
         ttk.Label(head, text=t("subtitle"), style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
+        ttk.Label(head, text="ⓘ  " + t("supported_note"), style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
 
         # libreria e foto da esaminare
         card = ttk.Frame(outer, style="Card.TFrame", padding=(16, 12))
@@ -566,6 +743,9 @@ class App(tk.Tk):
         foot.pack(side="bottom", fill="x", pady=(14, 0))
         ttk.Button(foot, text=t("open_log"), command=self.open_log).pack(side="left")
         ttk.Button(foot, text=t("backups_btn"), command=self.open_backups).pack(side="left", padx=(8, 0))
+        auto_on = (self.settings.get("watch") or {}).get("enabled")
+        self.btn_auto = ttk.Button(foot, text=("● " if auto_on else "") + t("auto_btn"), command=self.open_auto_import)
+        self.btn_auto.pack(side="left", padx=(8, 0))
         ttk.Label(foot, text=f"v{VERSION}", style="Muted.TLabel").pack(side="left", padx=(12, 0))
         self.update_link = ttk.Label(foot, style="Link.TLabel", cursor="hand2")
         self.update_link.bind("<Button-1>", lambda e: self.offer_update())
@@ -1102,6 +1282,13 @@ class App(tk.Tk):
     def open_backups(self):
         self.wait_window(BackupsDialog(self))
 
+    def open_auto_import(self):
+        d = AutoImportDialog(self)
+        self.wait_window(d)
+        if d.saved:
+            on = (self.settings.get("watch") or {}).get("enabled")
+            self.btn_auto.configure(text=("● " if on else "") + t("auto_btn"))
+
     def open_log(self):
         if os.path.exists(LOG):
             os.startfile(LOG)
@@ -1266,6 +1453,8 @@ class App(tk.Tk):
 
 
 def main():
+    if "--watch" in sys.argv:  # importazione automatica in background: nessuna finestra
+        sys.exit(watcher.run(once="--once" in sys.argv))
     dpi_aware()
     App().mainloop()
 

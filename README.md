@@ -10,6 +10,10 @@ Give your <b>LightCraft</b> photos the camera profile that matches the style you
 > PresetCraftAppLicator is an independent tool. It is not made by, affiliated with or endorsed by the authors of
 > [LightCraft](https://github.com/storytold/lightcraft), Ricoh, Pentax or Adobe.
 
+> [!IMPORTANT]
+> **At the moment it works only with Ricoh GR cameras** (GR III, GR IIIx, GR IV), DNG files. The measured profiles are
+> included for the GR IV only.
+
 ## Why it exists
 
 Many cameras let you pick a picture style when you shoot. Ricoh GR cameras call it *Image Control*, with styles such as
@@ -57,6 +61,28 @@ Only the profile changes: exposure, white balance and every other adjustment sta
 Photos where you already chose a different profile in LightCraft are **not touched** unless you right-click them and choose
 *Apply the profile*.
 
+## Automatic import
+
+If your photos land in a folder on their own (for example the raw files uploaded from your phone to a NAS), PresetCraftAppLicator
+can watch that folder in the background, import the new photos into the LightCraft library and give each one its camera
+profile. When you open LightCraft, the photos you just shot are already there, with the right colours.
+
+1. Click **Automatic import…**.
+2. Choose the library, click **Add folder…** and pick the folder where new photos arrive. If the folder already holds
+   photos that are not in the library, you choose whether to import them too or ignore them.
+3. Tick **On** and click **Save**.
+
+How it works:
+- a scheduled task starts it in the background when you sign in to Windows (no window, no administrator rights);
+- every few minutes (2 by default) it checks the folders; a photo is imported once its file has stopped growing;
+- photos are added where they are: nothing is copied or moved;
+- if LightCraft is open, it waits until you close it;
+- the catalog is backed up before every import, and every import is written to the log;
+- a photo you remove from the library is not imported again;
+- photos that arrive in the folder and that you import yourself also get their profile.
+
+Updates and uninstalls stop the background process and start it again when they are done.
+
 ### Measured profiles (Ricoh GR IV)
 
 For the GR IV, PresetCraftAppLicator also includes **measured** profiles: 3D LUTs made by comparing, photo by photo,
@@ -80,8 +106,9 @@ to use for each style, or to leave those photos alone. Your choices are remember
 
 ## Supported cameras
 
-- **Ricoh** (GR III, GR IIIx, GR IV and others that use the same maker notes), DNG files
-- **Pentax**, DNG and PEF files
+**At the moment only Ricoh GR cameras are supported:** GR III, GR IIIx and GR IV, DNG files. It has been tested with the
+GR IV, and the measured profiles exist for the GR IV only. The code can also read the style of Pentax files (DNG and PEF),
+but that has not been tested.
 
 JPEG photos are not changed, because the style is already part of the image.
 
@@ -112,7 +139,7 @@ PresetCraftAppLicator is a sibling of [CleanCraftNas](https://github.com/poty87/
 - six languages: Italiano, English, Deutsch, Español, Français, Português;
 - sortable, reorderable columns that you can show or hide;
 - a backup of the catalog before every change, with a **Backups…** window to open or delete them;
-- a log of every change;
+- a log of every change (automatic imports included);
 - a silent check for updates at start, with a one-click update;
 - a setup wizard with the same dark look.
 
@@ -151,6 +178,10 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 **PresetCraftAppLicator** dà alle foto di LightCraft il profilo della fotocamera che riproduce lo stile con cui le hai
 scattate.
 
+> [!IMPORTANT]
+> **Al momento funziona solo con le Ricoh GR** (GR III, GR IIIx, GR IV), file DNG. I profili misurati sono inclusi solo per
+> la GR IV.
+
 Le fotocamere applicano lo stile scelto (sulle Ricoh GR: *Image Control*, per esempio Positive Film) alla JPEG e
 all'anteprima salvata nel raw, ma non ai dati raw. Per questo in LightCraft, appena apri una foto, i colori sono giusti (è
 l'anteprima della fotocamera) e poco dopo cambiano: LightCraft sviluppa il raw con il suo profilo predefinito.
@@ -173,6 +204,20 @@ Cambia solo il profilo: esposizione, bilanciamento del bianco e le altre regolaz
 Le foto a cui hai già scelto un altro profilo in LightCraft non vengono toccate, a meno che tu non lo chieda con il tasto
 destro.
 
+**Importazione automatica.** Se le foto arrivano da sole in una cartella (per esempio i raw caricati dal telefono sul NAS),
+PresetCraftAppLicator può osservarla in background, importare le foto nuove nella libreria LightCraft e dare a ciascuna il
+profilo del suo stile. Quando apri LightCraft trovi già le foto appena scattate, con i colori giusti.
+1. Premi **Importazione automatica…**.
+2. Scegli la libreria, premi **Aggiungi cartella…** e indica la cartella in cui arrivano le foto. Se dentro ci sono già foto
+   che non sono nella libreria, scegli se importarle o ignorarle.
+3. Spunta **Attiva** e premi **Salva**.
+
+Un'attività pianificata la avvia all'accesso a Windows, senza finestre e senza diritti di amministratore. Ogni pochi minuti
+(2 di predefinito) controlla le cartelle e importa una foto quando il file ha finito di arrivare. Le foto restano dove
+sono. Se LightCraft è aperto aspetta che venga chiuso. Prima di ogni importazione salva un backup del catalogo e scrive
+tutto nel registro. Una foto tolta dalla libreria non viene reimportata. Aggiornamenti e disinstallazione fermano il
+processo in background e lo fanno ripartire alla fine.
+
 Per la GR IV ci sono anche profili **misurati**: LUT ricavate confrontando la resa di LightCraft con l'anteprima salvata
 dalla fotocamera nello stesso raw. Sono usati per Standard, Vivid, Positive Film, Cinema (Yellow) e (Green), dove sono più
 fedeli dei profili Adobe in LightCraft, e per Hi-Contrast B&W, Bleach Bypass, Retro e Cross Processing, che Adobe non fa.
@@ -185,5 +230,6 @@ risultato è vicino a quello della fotocamera ma non identico, perché LightCraf
 Per gli stili senza un profilo (per esempio quelli di cui non si conosce ancora il codice, mostrati come *Stile
 sconosciuto*) usa **Stili e profili…** e scegli tu il profilo da usare.
 
-**Fotocamere supportate:** Ricoh (GR III, GR IIIx, GR IV…) in DNG e Pentax in DNG e PEF. I profili Adobe non sono inclusi:
+**Fotocamere supportate:** al momento solo le Ricoh GR (GR III, GR IIIx, GR IV) in DNG, provata con la GR IV. Il codice
+legge anche lo stile dei file Pentax (DNG e PEF), ma non è stato provato. I profili Adobe non sono inclusi:
 vengono usati quelli già presenti sul PC, o una cartella scelta nelle Impostazioni.

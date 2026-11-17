@@ -84,11 +84,16 @@ def profile_label(pid, dcps):
     return pid.split(".", 1)[-1].replace("-", " ").replace(".", " › ").title() if pid.startswith("lc.") else pid
 
 
-def build_plan(lib, scope, settings, finder, progress=None):
-    """Foto delle fotocamere supportate (tutte o solo quelle aggiunte di recente) e cosa succederà a ciascuna."""
+def build_plan(lib, scope, settings, finder, progress=None, ids=None):
+    """Foto delle fotocamere supportate (tutte o solo quelle aggiunte di recente) e cosa succederà a ciascuna.
+
+    ids: solo queste foto (l'importazione automatica le passa appena importate)."""
     cat = read_catalog(lib)
     photos = [p for p in cat["photos"].values() if not p.get("deleted")]
-    if scope == "recent":
+    if ids is not None:
+        wanted = {int(i) for i in ids}
+        photos = [p for p in photos if int(p["id"]) in wanted]
+    elif scope == "recent":
         since = recent_from(photos)
         photos = [p for p in photos if (p.get("imported") or "") >= since]
     dcps = imported_profiles(lib)
@@ -195,12 +200,14 @@ def import_profiles(lib, cli, items):
     return ids, failed
 
 
-def apply_profiles(lib, cli, items, root, kept, progress=None):
-    """Importa nella libreria i profili che servono e li assegna alle foto; restituisce il riepilogo."""
+def apply_profiles(lib, cli, items, root, kept, progress=None, backup=None):
+    """Importa nella libreria i profili che servono e li assegna alle foto; restituisce il riepilogo.
+
+    backup: il backup già fatto da chi chiama (l'importazione automatica), per non farne un secondo."""
     reason = library_open_reason(lib)
     if reason:
         raise RuntimeError(reason)
-    backup = backup_library(lib, root, kept)
+    backup = backup or backup_library(lib, root, kept)
     log(f"--- profiles for {len(items)} photos in {lib} (backup: {backup})")
     ids, failed = import_profiles(lib, cli, items)
     todo = []

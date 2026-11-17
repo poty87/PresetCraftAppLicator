@@ -23,6 +23,7 @@ import tkinter as tk
 from ctypes import wintypes
 from tkinter import filedialog, ttk
 
+import autostart
 import i18n
 from i18n import registry_value, t
 from translations import LANGUAGES
@@ -381,6 +382,8 @@ class Wizard(tk.Tk):
             self.folder.set(path)
 
     def ensure_app_closed(self):
+        # l'importazione automatica in background usa lo stesso .exe: si ferma da sola e riparte alla fine
+        self.watcher_was_running = autostart.stop_running() or getattr(self, "watcher_was_running", False)
         while app_running():
             answer = Dialog.ask(self, t("w_title"), t("w_app_running_head"), t("w_app_running_body"), level="warn",
                                 buttons=[("cancel", t("btn_cancel"), False), ("retry", t("w_retry"), True)])
@@ -450,6 +453,13 @@ class Wizard(tk.Tk):
 
     def finish(self):
         kind, code = self.result or ("", -1)
+        if kind == "uninstall" and code in (0, 3010):
+            try:
+                autostart.disable()  # l'attività punterebbe a un programma che non c'è più
+            except Exception:  # noqa: BLE001
+                pass
+        elif getattr(self, "watcher_was_running", False):
+            autostart.start_now()  # dopo l'installazione (o se è stata annullata) l'importazione automatica riparte
         if kind == "install" and code in (0, 3010) and self.launch.get():
             exe = os.path.join(self.folder.get(), EXE)
             if os.path.isfile(exe):
@@ -463,15 +473,26 @@ def silent(args):
     package = payload_msi()
     runner = MsiRunner(lambda _v: None)
     installed = installed_product()
+    was_running = autostart.stop_running()
     if args.uninstall:
-        return runner.uninstall(installed[0]) if installed else 0
-    if installed and parse_version(installed[1]) > parse_version(msi_property(package, "ProductVersion")):
-        return 1638  # una versione più recente è già installata
-    folder = args.dir or (installed[2] if installed and installed[2] else DEFAULT_DIR)
-    lang = args.lang or registry_value("Language") or "auto"
-    desktop = not args.no_desktop
-    reinstall = bool(installed and installed[0] == msi_property(package, "ProductCode"))
-    return runner.install(package, install_properties(folder, lang, desktop, reinstall))
+        code = runner.uninstall(installed[0]) if installed else 0
+        if code in (0, 3010):
+            try:
+                autostart.disable()
+            except Exception:  # noqa: BLE001
+                pass
+        return code
+    try:
+        if installed and parse_version(installed[1]) > parse_version(msi_property(package, "ProductVersion")):
+            return 1638  # una versione più recente è già installata
+        folder = args.dir or (installed[2] if installed and installed[2] else DEFAULT_DIR)
+        lang = args.lang or registry_value("Language") or "auto"
+        desktop = not args.no_desktop
+        reinstall = bool(installed and installed[0] == msi_property(package, "ProductCode"))
+        return runner.install(package, install_properties(folder, lang, desktop, reinstall))
+    finally:
+        if was_running:
+            autostart.start_now()
 
 
 def main():
@@ -486,13 +507,18 @@ def main():
     if args.silent:
         sys.exit(silent(args))
     dpi_aware()
+    watcher_was_running = autostart.stop_running()
     if args.update:
         # l'app si è appena chiusa da sola per farsi aggiornare: le si lascia un attimo per uscire
         for _ in range(20):
             if not app_running():
                 break
             threading.Event().wait(0.5)
-    Wizard(update_mode=args.update).mainloop()
+    wizard = Wizard(update_mode=args.update)
+    wizard.watcher_was_running = watcher_was_running
+    wizard.mainloop()
+    if watcher_was_running and not getattr(wizard, "result", None):
+        autostart.start_now()  # finestra chiusa senza installare: l'importazione automatica riparte
 
 
 if __name__ == "__main__":

@@ -20,7 +20,8 @@ $msi = "dist\PresetCraftAppLicator-$version.msi"
 # 2. Installazione guidata: un solo .exe con dentro l'MSI, la licenza e l'icona
 #    (PyInstaller legge i percorsi rispetto a --specpath: qui sono tutti assoluti)
 $root = $PSScriptRoot
-.venv\Scripts\pyinstaller.exe --noconfirm --clean --onefile --windowed `
+#    (python -m PyInstaller: pyinstaller.exe ricorda il percorso del .venv e si rompe se il progetto viene spostato)
+.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean --onefile --windowed `
     --name "PresetCraftAppLicator-Setup-$version" --icon "$root\assets\icon.ico" `
     --paths "$root\src" --collect-data sv_ttk --exclude-module PIL `
     --add-data "$root\$msi;payload" --add-data "$root\LICENSE;." `
