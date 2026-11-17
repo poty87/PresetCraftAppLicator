@@ -36,7 +36,7 @@ DEFAULT_INTERVAL = 2  # minuti tra un controllo e l'altro quando non arriva nien
 DEFAULT_QUIET = 60  # secondi senza novità nella cartella: il trasferimento è finito
 FAST_POLL = 10  # secondi tra un controllo e l'altro mentre le foto arrivano
 WAIT_POLL = 30  # secondi tra un controllo e l'altro mentre si aspetta la chiusura di LightCraft
-IMPORT_CHUNK = 10  # foto per ogni esecuzione di lightcraft-cli (per mostrare l'avanzamento)
+IMPORT_CHUNK = 10  # minimo di foto per ogni esecuzione di lightcraft-cli (vedi matcher.chunk_size)
 MAX_TRIES = 5  # giri falliti dopo i quali un file non si riprova più (resta nel registro)
 # formati che LightCraft sa importare (crates/engine/src/import/files.rs)
 PHOTO_EXTS = {
@@ -188,6 +188,24 @@ class LibraryIndex:
             if p.get("file_size"):
                 self.names[(name, int(p["file_size"]))] = pid
 
+    @classmethod
+    def of(cls, lib):
+        """L'indice della libreria, rifatto solo se catalog.snap è cambiato (su una libreria grande leggerlo costa più
+        di un secondo, e mentre arrivano foto la cartella si controlla ogni 10 secondi) o se sono cambiate le unità
+        di rete collegate."""
+        try:
+            st = os.stat(os.path.join(lib, "catalog.snap"))
+            signature = (st.st_size, st.st_mtime_ns)
+        except OSError:
+            signature = None
+        cached = _indexes.get(key(lib))
+        if cached and signature and cached[0] == signature and cached[1].drives == mapped_drives():
+            return cached[1]
+        index = cls(lib)
+        if signature:
+            _indexes[key(lib)] = (signature, index)
+        return index
+
     def key(self, path):
         return key(path, self.drives)
 
@@ -197,6 +215,9 @@ class LibraryIndex:
         if pid is None and size:
             pid = self.names.get((os.path.basename(path).lower(), int(size)))
         return pid
+
+
+_indexes = {}  # libreria -> (firma di catalog.snap, LibraryIndex)
 
 
 def new_files(folder, lib, subfolders=False):
@@ -263,7 +284,7 @@ def cycle(rule, settings, finder, status=None, now=None):
     quiet = max(10, int(w.get("quiet") or DEFAULT_QUIET))
     state = load_rule_state(rule)
     files = list_photos(folder, rule.get("subfolders"))
-    index = LibraryIndex(lib)
+    index = LibraryIndex.of(lib)
     key = index.key  # noqa: F811 — qui le chiavi usano le unità di rete lette una volta per questo giro
     if "handled" not in state:
         # stato perso o regola scritta a mano: per prudenza si ignora quello che c'è già
@@ -338,11 +359,12 @@ def cycle(rule, settings, finder, status=None, now=None):
     tries = state.setdefault("tries", {})
     try:
         started = time.time()
-        for start in range(0, len(ready), IMPORT_CHUNK):
+        size = matcher.chunk_size(len(ready), IMPORT_CHUNK)
+        for start in range(0, len(ready), size):
             if start and library_open_reason(lib):
                 log("watch: LightCraft was opened, the rest is imported later")
                 break  # le foto rimaste restano in attesa: il prossimo giro le riprende
-            chunk = ready[start:start + IMPORT_CHUNK]
+            chunk = ready[start:start + size]
             status.set(phase="importing", done=start, total=len(ready), library=lib_name,
                        eta=eta(started, start, len(ready)))
             reply = run_cli(cli, lib, [("library.import", {"paths": chunk, "mode": "add", "onDeleted": "skip"})],
@@ -384,7 +406,7 @@ def cycle(rule, settings, finder, status=None, now=None):
                                eta=eta(p_started, done, total))
                 status.set(phase="profiles", done=0, total=len(todo), library=lib_name, eta=None)
                 result = matcher.apply_profiles(lib, cli, todo, root, kept, progress=progress, backup=backup,
-                                                chunk=20)
+                                                chunk=matcher.chunk_size(len(todo), 20))
                 summary["profiles"] = result["done"]
                 summary["failed"] += result["failed"]
             profile_ids.clear()  # chi non è "apply" (profilo scelto a mano, stile senza profilo) resta com'è

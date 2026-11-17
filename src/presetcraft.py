@@ -503,11 +503,14 @@ class AutoImportDialog(tk.Toplevel):
         ttk.Label(frame, text=t("auto_folders").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
         box = ttk.Frame(frame)
         box.pack(fill="x")
-        self.tree = ttk.Treeview(box, columns=("folder", "library"), show="headings", height=4, selectmode="browse")
+        self.tree = ttk.Treeview(box, columns=("folder", "subfolders", "library"), show="headings", height=4,
+                                 selectmode="browse")
         self.tree.heading("folder", text=t("auto_col_folder"), anchor="w")
+        self.tree.heading("subfolders", text=t("auto_col_subfolders"), anchor="w")
         self.tree.heading("library", text=t("auto_col_library"), anchor="w")
-        self.tree.column("folder", width=420, anchor="w")
-        self.tree.column("library", width=300, anchor="w")
+        self.tree.column("folder", width=380, anchor="w")
+        self.tree.column("subfolders", width=110, minwidth=90, anchor="w", stretch=False)
+        self.tree.column("library", width=250, anchor="w")
         self.tree.pack(fill="x")
         self.tree.bind("<<TreeviewSelect>>", lambda e: self.update_buttons())
         row = ttk.Frame(frame)
@@ -523,6 +526,10 @@ class AutoImportDialog(tk.Toplevel):
         self.btn_remove = ttk.Button(row, text=t("auto_remove"), command=self.remove)
         self.btn_remove.pack(side="right")
         ttk.Button(row, text="＋  " + t("auto_add"), command=self.add).pack(side="right", padx=(0, 8))
+        # per le cartelle organizzate per anno/mese/giorno; vale per la cartella che si aggiunge (per cambiarla:
+        # togli la cartella e aggiungila di nuovo, così le foto già presenti nelle sottocartelle non sembrano nuove)
+        self.subfolders = tk.BooleanVar(value=True)
+        ttk.Checkbutton(frame, text=t("auto_subfolders"), variable=self.subfolders).pack(anchor="w", pady=(8, 0))
 
         ttk.Label(frame, text=t("auto_options").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
         self.enabled = tk.BooleanVar(value=bool(w.get("enabled")))
@@ -564,7 +571,8 @@ class AutoImportDialog(tk.Toplevel):
     def fill(self):
         self.tree.delete(*self.tree.get_children())
         for i, r in enumerate(self.rules):
-            self.tree.insert("", "end", iid=str(i), values=(r["folder"], self.lib_name(r["library"])))
+            self.tree.insert("", "end", iid=str(i), values=(r["folder"], t("w_yes") if r.get("subfolders") else t("w_no"),
+                                                            self.lib_name(r["library"])))
         self.update_buttons()
 
     def update_buttons(self):
@@ -604,11 +612,16 @@ class AutoImportDialog(tk.Toplevel):
                for r in self.rules):
             Dialog.ask(self, t("auto_title"), t("auto_dup"), folder, level="warn")
             return
+        subfolders = bool(self.subfolders.get())
+        self.configure(cursor="watch")
+        self.update_idletasks()
         try:
-            existing = watcher.new_files(folder, lib)
+            existing = watcher.new_files(folder, lib, subfolders)
         except OSError as e:
             Dialog.ask(self, t("auto_title"), t("auto_folder_bad"), str(e), level="error")
             return
+        finally:
+            self.configure(cursor="")
         import_existing = False
         if existing:
             answer = Dialog.ask(self, t("auto_title"), t("auto_existing_head", count=len(existing)),
@@ -618,7 +631,7 @@ class AutoImportDialog(tk.Toplevel):
             if answer is None:
                 return
             import_existing = answer == "import"
-        rule = {"folder": folder, "library": lib}
+        rule = {"folder": folder, "library": lib, "subfolders": subfolders}
         self.rules.append(rule)
         self.added.append((rule, import_existing))
         self.fill()

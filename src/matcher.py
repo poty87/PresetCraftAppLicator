@@ -1,10 +1,12 @@
 """Quali foto della libreria ricevono quale profilo, e l'applicazione con lightcraft-cli."""
 
 import json
+import math
 import os
 import re
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import camera_styles as cs
 import looks
@@ -16,6 +18,18 @@ CACHE = os.path.join(DATA_DIR, "styles-cache.json")
 # nomatch = stile senza un profilo corrispondente, nostyle = stile non leggibile, missing = file non trovato
 STATUSES = ("apply", "ok", "manual", "nomatch", "nostyle", "missing")
 CHUNK = 120  # foto per ogni esecuzione di lightcraft-cli (per mostrare l'avanzamento)
+
+
+def io_workers():
+    """Thread per leggere i file: il doppio dei core logici, tra 4 e 16. Il lavoro aspetta soprattutto il disco o il
+    NAS (non la CPU), quindi più thread sovrappongono le attese; oltre 16 un NAS domestico non risponde più in fretta."""
+    return max(4, min(16, 2 * (os.cpu_count() or 2)))
+
+
+def chunk_size(total, minimum, steps=20):
+    """Foto per ogni esecuzione di lightcraft-cli: circa `steps` passi di avanzamento, mai meno di `minimum` foto
+    (ogni esecuzione rilegge il catalogo: su una libreria grande costa più di mezzo secondo)."""
+    return max(minimum, math.ceil(total / steps))
 
 
 def camera_name(meta):
@@ -56,24 +70,56 @@ def save_cache(cache):
         json.dump(cache, f)
 
 
-def style_of(path, cache):
-    """Stile dello scatto, letto dal file o dalla cache se il file non è cambiato; None se il file non c'è."""
+def read_entry(path, hit):
+    """Voce della cache per un file: [dimensione, data, modello, chiave, codice], riletta solo se il file è cambiato;
+    None se il file non c'è. Non tocca la cache: si può chiamare da più thread."""
     try:
         st = os.stat(path)
     except OSError:
         return None
-    hit = cache.get(path)
     if hit and hit[0] == st.st_size and hit[1] == st.st_mtime:
-        model, key, code = hit[2:5]
-    else:
-        try:
-            s = cs.read_style(path)
-        except (OSError, ValueError, Exception):  # noqa: BLE001 — file danneggiato: stile non leggibile
-            s = {"model": "", "key": None, "code": None}
-        model, key, code = s["model"], s["key"], s["code"]
-        cache[path] = [st.st_size, st.st_mtime, model, key, code]
+        return hit
+    try:
+        s = cs.read_style(path)
+    except (OSError, ValueError, Exception):  # noqa: BLE001 — file danneggiato: stile non leggibile
+        s = {"model": "", "key": None, "code": None}
+    return [st.st_size, st.st_mtime, s["model"], s["key"], s["code"]]
+
+
+def style_from(entry):
+    if entry is None:
+        return None
+    model, key, code = entry[2:5]
     return {"model": model, "key": key, "code": code,
             "name": cs.PENTAX_TONES.get(code) if key and key.startswith("pentax:") else None}
+
+
+def style_of(path, cache):
+    """Stile dello scatto, letto dal file o dalla cache se il file non è cambiato; None se il file non c'è."""
+    entry = read_entry(path, cache.get(path))
+    if entry is not None:
+        cache[path] = entry
+    return style_from(entry)
+
+
+def read_styles(paths, cache, progress=None):
+    """Stili di molti file insieme, letti in parallelo (sul NAS ogni file costa un'attesa di rete): {percorso: stile}.
+
+    I thread leggono soltanto; la cache si aggiorna qui, in un solo thread."""
+    paths = list(dict.fromkeys(paths))
+    styles, done = {}, 0
+    with ThreadPoolExecutor(max_workers=io_workers()) as pool:
+        futures = {pool.submit(read_entry, p, cache.get(p)): p for p in paths}
+        for future in as_completed(futures):
+            path = futures[future]
+            entry = future.result()
+            if entry is not None:
+                cache[path] = entry
+            styles[path] = style_from(entry)
+            done += 1
+            if progress and done % 20 == 0:
+                progress(done, len(paths))
+    return styles
 
 
 def profile_label(pid, dcps):
@@ -102,9 +148,8 @@ def build_plan(lib, scope, settings, finder, progress=None, ids=None):
     items, unsupported = [], 0
     supported = [p for p in photos if cs.is_supported((p.get("source") or {}).get("path"), (p.get("meta") or {}).get("make"))]
     unsupported = len(photos) - len(supported)
-    for n, p in enumerate(sorted(supported, key=lambda p: p.get("captured") or "")):
-        if progress and n % 20 == 0:
-            progress(n, len(supported))
+    styles = read_styles([p["source"]["path"] for p in supported], cache, progress)
+    for p in sorted(supported, key=lambda p: p.get("captured") or ""):
         meta = p.get("meta") or {}
         path = p["source"]["path"]
         current = ((p.get("develop") or {}).get("profile") or {}).get("id") or DEFAULT_PROFILE
@@ -113,7 +158,7 @@ def build_plan(lib, scope, settings, finder, progress=None, ids=None):
                 "size_px": (p.get("width"), p.get("height")), "current": current,
                 "current_name": profile_label(current, dcps), "model": "", "style_key": None, "style_code": None,
                 "style_name": None, "target": None, "target_path": None}
-        style = style_of(path, cache)
+        style = styles[path]
         if style is None:
             item["status"] = "missing"
         else:

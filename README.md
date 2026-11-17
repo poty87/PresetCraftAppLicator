@@ -68,8 +68,9 @@ can watch that folder in the background, import the new photos into the LightCra
 profile. When you open LightCraft, the photos you just shot are already there, with the right colours.
 
 1. Click **Automatic import…**.
-2. Choose the library, click **Add folder…** and pick the folder where new photos arrive. If the folder already holds
-   photos that are not in the library, you choose whether to import them too or ignore them.
+2. Choose the library, click **Add folder…** and pick the folder where new photos arrive. Leave **Include subfolders**
+   ticked if your photos go into subfolders (for example by year, month or day): new subfolders are picked up too.
+   If the folder already holds photos that are not in the library, you choose whether to import them too or ignore them.
 3. Tick **On** and click **Save**.
 
 How it works:
@@ -233,8 +234,9 @@ destro.
 PresetCraftAppLicator può osservarla in background, importare le foto nuove nella libreria LightCraft e dare a ciascuna il
 profilo del suo stile. Quando apri LightCraft trovi già le foto appena scattate, con i colori giusti.
 1. Premi **Importazione automatica…**.
-2. Scegli la libreria, premi **Aggiungi cartella…** e indica la cartella in cui arrivano le foto. Se dentro ci sono già foto
-   che non sono nella libreria, scegli se importarle o ignorarle.
+2. Scegli la libreria, premi **Aggiungi cartella…** e indica la cartella in cui arrivano le foto. Lascia spuntato
+   **Includi le sottocartelle** se le foto finiscono in sottocartelle (per esempio per anno, mese o giorno): vengono viste
+   anche le sottocartelle nuove. Se dentro ci sono già foto che non sono nella libreria, scegli se importarle o ignorarle.
 3. Spunta **Attiva** e premi **Salva**.
 
 Un'attività pianificata la avvia all'accesso a Windows, senza diritti di amministratore. Quando non arriva niente controlla

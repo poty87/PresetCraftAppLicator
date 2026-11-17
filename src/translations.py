@@ -63,6 +63,14 @@ TEXTS = {
         'fr': 'Bibliothèque',
         'pt': 'Biblioteca',
     },
+    'auto_col_subfolders': {
+        'it': 'Sottocartelle',
+        'en': 'Subfolders',
+        'de': 'Unterordner',
+        'es': 'Subcarpetas',
+        'fr': 'Sous-dossiers',
+        'pt': 'Subpastas',
+    },
     'auto_dup': {
         'it': 'Questa cartella è già osservata per questa libreria.',
         'en': 'This folder is already watched for this library.',
@@ -230,6 +238,14 @@ TEXTS = {
         'es': 'Activada, pero el proceso en segundo plano no se está ejecutando: arranca en el próximo inicio de sesión de Windows, o pulsa «Guardar» para iniciarlo ahora.',
         'fr': 'Activée, mais le processus en arrière-plan ne tourne pas : il démarre à la prochaine ouverture de session Windows, ou cliquez sur « Enregistrer » pour le lancer maintenant.',
         'pt': 'Ativa, mas o processo em segundo plano não está em execução: arranca no próximo início de sessão do Windows, ou clique em «Guardar» para o iniciar agora.',
+    },
+    'auto_subfolders': {
+        'it': 'Includi le sottocartelle (per esempio foto organizzate per anno, mese o giorno)',
+        'en': 'Include subfolders (for example photos organised by year, month or day)',
+        'de': 'Unterordner einbeziehen (zum Beispiel nach Jahr, Monat oder Tag sortierte Fotos)',
+        'es': 'Incluir subcarpetas (por ejemplo fotos organizadas por año, mes o día)',
+        'fr': 'Inclure les sous-dossiers (par exemple photos rangées par année, mois ou jour)',
+        'pt': 'Incluir subpastas (por exemplo fotos organizadas por ano, mês ou dia)',
     },
     'auto_task_error': {
         'it': "Non sono riuscito ad attivare l'importazione automatica.",
