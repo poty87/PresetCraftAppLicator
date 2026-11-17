@@ -52,9 +52,9 @@ def when_text(iso):
         when = datetime.datetime.fromisoformat(iso[:19])
     except (TypeError, ValueError):
         return ""
-    if when.date() == datetime.date.today():
-        return when.strftime("%H:%M")
-    return when.strftime(DATE_FORMATS.get(i18n.LANG, "%d/%m/%Y") + " %H:%M")
+    day = t("tray_today") if when.date() == datetime.date.today() else \
+        when.strftime(DATE_FORMATS.get(i18n.LANG, "%d/%m/%Y"))
+    return f"{day} {when.strftime('%H:%M')}"
 
 
 def duration(seconds):

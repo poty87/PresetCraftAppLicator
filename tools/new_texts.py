@@ -516,6 +516,7 @@ NEW = {
                            "es": "Última actualización: perfil dado a {count} fotos ({when})",
                            "fr": "Dernière mise à jour : profil donné à {count} photos ({when})",
                            "pt": "Última atualização: perfil dado a {count} fotos ({when})"},
+    "tray_today": {"it": "oggi", "en": "today", "de": "heute", "es": "hoy", "fr": "aujourd'hui", "pt": "hoje"},
     "tray_done_title": {"it": "Foto importate", "en": "Photos imported", "de": "Fotos importiert",
                         "es": "Fotos importadas", "fr": "Photos importées", "pt": "Fotos importadas"},
     "tray_done_body": {"it": "{count} foto in {library}, {profiles} con il profilo del loro stile.",

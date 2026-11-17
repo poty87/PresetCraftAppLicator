@@ -72,6 +72,13 @@
    "photos": 1,
    "prefer": true
   },
+  "pentax:267": {
+   "style": "Negative Film",
+   "file": "Negative Film.cube",
+   "name": "Measured Negative Film",
+   "photos": 4,
+   "prefer": true
+  },
   "pentax:268": {
    "style": "Cinema (Yellow)",
    "file": "Cinema (Yellow).cube",

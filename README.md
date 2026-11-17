@@ -117,9 +117,10 @@ same raw, so they match pixel for pixel.
 
 | Style | Used by default |
 |---|---|
-| Standard, Vivid, Positive Film, Cinema (Yellow), Cinema (Green) | *Measured …*: closer to the camera than Adobe's profiles in LightCraft |
+| Standard, Vivid, Positive Film, Negative Film, Cinema (Yellow), Cinema (Green) | *Measured …*: closer to the camera than Adobe's profiles in LightCraft |
 | Hi-Contrast B&W, Bleach Bypass, Retro, Cross Processing | *Measured …*: Adobe makes no profile for them |
 | Monotone, Soft Monotone, Hard Monotone | Adobe's *Camera …* profile; the measured one is offered as an alternative |
+| HDR Tone | not covered yet (no reference photos; its local tone mapping is not something a LUT can reproduce) |
 
 They reproduce colour and tones only. Grain, vignetting and other local effects of some styles (Hi-Contrast B&W,
 Retro…) are not part of a LUT. They were measured with the style settings at their defaults and with LightCraft's
@@ -260,9 +261,10 @@ toccati. La pulizia la fa il pacchetto di installazione stesso, quindi avviene a
 disinstallazione silenziosa. Gli aggiornamenti fermano il processo in background e lo fanno ripartire alla fine.
 
 Per la GR IV ci sono anche profili **misurati**: LUT ricavate confrontando la resa di LightCraft con l'anteprima salvata
-dalla fotocamera nello stesso raw. Sono usati per Standard, Vivid, Positive Film, Cinema (Yellow) e (Green), dove sono più
-fedeli dei profili Adobe in LightCraft, e per Hi-Contrast B&W, Bleach Bypass, Retro e Cross Processing, che Adobe non fa.
-Per i tre Monotone resta il profilo Adobe. Riproducono colore e toni, non grana e vignettatura.
+dalla fotocamera nello stesso raw. Sono usati per Standard, Vivid, Positive Film, Negative Film, Cinema (Yellow) e (Green),
+dove sono più fedeli dei profili Adobe in LightCraft, e per Hi-Contrast B&W, Bleach Bypass, Retro e Cross Processing, che
+Adobe non fa. Per i tre Monotone resta il profilo Adobe. HDR Tone non è ancora coperto. Riproducono colore e toni, non grana
+e vignettatura.
 
 Alcuni stili Adobe li fornisce come profili **Look** (`.xmp`), per esempio *Cinema Yellow* e *Cinema Green* della GR IV:
 PresetCraftAppLicator li trasforma in LUT `.cube` e li importa in LightCraft in un gruppo col nome della fotocamera. Il

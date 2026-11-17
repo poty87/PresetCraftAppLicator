@@ -1503,6 +1503,14 @@ TEXTS = {
         'fr': 'Quitter (redémarre à la prochaine session)',
         'pt': 'Fechar (volta no próximo início de sessão)',
     },
+    'tray_today': {
+        'it': 'oggi',
+        'en': 'today',
+        'de': 'heute',
+        'es': 'hoy',
+        'fr': "aujourd'hui",
+        'pt': 'hoje',
+    },
     'tray_waiting': {
         'it': '{count} foto pronte da importare',
         'en': '{count} photos ready to import',
