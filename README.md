@@ -103,6 +103,10 @@ Presets can also be **imported from the phone**: ViewerCraftStar uploads the cho
 `.lrtemplate`, `.lcpreset`, Luminar looks or `.zip` bundles of these) to `.viewercraftstar/import`, and PresetCraftAppLicator
 imports them into the library (group *ViewerCraftStar*) and publishes the updated list.
 
+Finally, PresetCraftAppLicator writes a small report (`.viewercraftstar/status.json`) saying which photos of the watched
+folder are in the library and which version of the phone's metadata has been applied. ViewerCraftStar uses it for its
+*Safe at home* section: only photos confirmed there can be moved to the phone's bin.
+
 ### Notification area icon
 
 While automatic import is on, an icon sits in the notification area. Its dot shows the state: **green** = on and
@@ -274,7 +278,10 @@ l'elenco in una cartella nascosta `.viewercraftstar` nella cartella osservata e 
 azzerato, profilo dello stile di scatto, poi il preset). Le foto con un preset scelto sul telefono non ricevono più il
 profilo automatico. Dal telefono si possono anche **importare preset da file** (`.xmp` di Lightroom, `.lrtemplate`,
 `.lcpreset`, look di Luminar o `.zip` che li contengono): ViewerCraftStar li carica in `.viewercraftstar/import` e
-PresetCraftAppLicator li importa nella libreria (gruppo *ViewerCraftStar*) e ne ripubblica l'elenco.
+PresetCraftAppLicator li importa nella libreria (gruppo *ViewerCraftStar*) e ne ripubblica l'elenco. Infine scrive un piccolo
+resoconto (`.viewercraftstar/status.json`) con le foto della cartella che sono in libreria e la versione dei metadati del
+telefono applicata: ViewerCraftStar lo usa per la sezione *Al sicuro a casa*, e solo le foto confermate lì si possono
+togliere dal telefono.
 
 **Icona nell'area di notifica.** Mentre l'importazione automatica è attiva c'è un'icona vicino all'orologio. Il pallino
 dice lo stato: **verde** = attiva e in attesa, **blu** = foto in arrivo o importazione in corso, **giallo** = aspetta

@@ -224,7 +224,8 @@ def read_app_xmp(path):
     return {"rating": rating, "flag": flag if flag in ("pick", "reject", "none") else "none",
             "label": label if label in LABELS else "none", "title": alt["dc:title"], "caption": alt["dc:description"],
             "copyright": alt["dc:rights"], "creator": alt["dc:creator"], "keywords": keywords,
-            "preset": preset.strip() if preset is not None else None, "preset_name": text("vcs:presetName") or ""}
+            "preset": preset.strip() if preset is not None else None, "preset_name": text("vcs:presetName") or "",
+            "revision": (text("vcs:revision") or "").strip()}
 
 
 def library_presets(lib):
@@ -304,6 +305,25 @@ def import_uploads(cli, rule, state, uploads, summary):
     state.pop("presets_sig", None)  # l'elenco per il telefono si ripubblica subito
     export_presets(rule, state)
     return len(imported)
+
+
+def publish_status(rule, state, names):
+    """Scrive per ViewerCraftStar quali foto della cartella sono in libreria e quale versione dei metadati del
+    telefono è stata applicata ({nome senza estensione: {id, rev}}): l'app considera "al sicuro a casa" (e quindi
+    cancellabili dal telefono) solo le foto confermate qui. Si riscrive solo quando qualcosa cambia."""
+    applied = state.get("applied_rev") or {}
+    data = {"version": 1, "library": os.path.basename(rule["library"]),
+            "photos": {stem: {"id": pid, "rev": applied.get(stem, "")} for stem, pid in sorted(names.items())}}
+    digest = hashlib.sha1(json.dumps(data, sort_keys=True).encode("utf-8")).hexdigest()
+    target = os.path.join(rule["folder"], CATALOG_DIR, "status.json")
+    if state.get("status_digest") == digest and os.path.exists(target):
+        return
+    data["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
+    try:
+        save_json(target, data)
+        state["status_digest"] = digest
+    except OSError as e:
+        log(f"watch: status for {XMP_TOOL} not written ({e})")
 
 
 def phone_presets(lib, settings):
@@ -508,6 +528,10 @@ def cycle(rule, settings, finder, status=None, now=None):
         if k not in handled:
             handled.add(k)
             profile_ids.add(pid)
+    # resoconto per il telefono: foto in libreria (nome senza estensione -> id)
+    names = {os.path.splitext(os.path.basename(path))[0].lower(): in_library[key(path)]
+             for path in files if key(path) in in_library}
+    publish_status(rule, state, names)
     # file nuovi: finché qualcosa arriva o cambia, il trasferimento non è finito
     pending = {key(p): [size, mtime] for p, (size, mtime) in files.items()
                if key(p) not in in_library and key(p) not in handled}
@@ -654,6 +678,12 @@ def cycle(rule, settings, finder, status=None, now=None):
                 for path, (pid, _meta, _sig) in xmp_todo.items():
                     if pid in preset_todo and phone.get(str(pid), "") != preset_todo[pid]:
                         seen_xmp.pop(key(path), None)
+            # versione dei metadati del telefono applicata davvero (metadati e preset riusciti)
+            applied = state.setdefault("applied_rev", {})
+            for path, (_pid, meta, sig) in xmp_todo.items():
+                if seen_xmp.get(key(path)) == sig and meta.get("revision"):
+                    applied[os.path.splitext(os.path.basename(path))[0].lower()] = meta["revision"]
+            publish_status(rule, state, names)
     finally:
         if saved_view is not None:  # LightCraft si riapre sulla vista di prima
             with open(view, "wb") as f:
