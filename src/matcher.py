@@ -200,7 +200,7 @@ def import_profiles(lib, cli, items):
     return ids, failed
 
 
-def apply_profiles(lib, cli, items, root, kept, progress=None, backup=None):
+def apply_profiles(lib, cli, items, root, kept, progress=None, backup=None, chunk=None):
     """Importa nella libreria i profili che servono e li assegna alle foto; restituisce il riepilogo.
 
     backup: il backup già fatto da chi chiama (l'importazione automatica), per non farne un secondo."""
@@ -224,17 +224,18 @@ def apply_profiles(lib, cli, items, root, kept, progress=None, backup=None):
     except OSError:
         saved_view = None
     try:
-        for start in range(0, len(todo), CHUNK):
-            chunk = todo[start:start + CHUNK]
+        size = chunk or CHUNK
+        for start in range(0, len(todo), size):
+            block = todo[start:start + size]
             # develop.profile agisce sulla foto attiva: ogni foto viene selezionata e poi riceve il suo profilo
             cmds = [("library.source", {"kind": "all"})]
-            for item, pid in chunk:
+            for item, pid in block:
                 cmds += [("library.select", {"ids": [item["id"]], "active": item["id"]}),
                          ("develop.profile", {"id": pid, "amount": 100})]
             replies = run_cli(cli, lib, cmds, check=False)
             failed += [f"{x.get('command')}: {x.get('error')}" for x in replies if not x.get("ok")]
             if progress:
-                progress(min(start + CHUNK, len(todo)), len(todo))
+                progress(min(start + size, len(todo)), len(todo))
     finally:
         if saved_view is not None:  # all'apertura LightCraft ritrova la vista com'era
             with open(view, "wb") as f:

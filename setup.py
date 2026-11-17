@@ -25,6 +25,9 @@ from version import APP_NAME, EXE, REG_KEY, UPGRADE_CODE, VERSION  # noqa: E402
 ICON = str(ROOT / "assets" / "icon.ico")
 DESCRIPTION = "Gives LightCraft photos the camera profile of the style they were shot with"
 DESKTOP_COMPONENT_GUID = "{14CF8F66-FF6E-4CF3-AAA0-2CDC2BA7D7B3}"  # fisso: identifica il collegamento tra le versioni
+ARP_COMPONENT_GUID = "{6B0E2D51-3C7A-4F0B-9E62-8A1D5C47F3B9}"  # fisso: la voce di "App installate" della guida
+ARP_KEY = rf"Software\Microsoft\Windows\CurrentVersion\Uninstall\{APP_NAME}"
+APP_FILE = EXE  # chiave dell'eseguibile nella tabella File (cx_Freeze usa il nome del file)
 
 shortcuts = [
     # (Shortcut, Directory_, Name, Component_, Target, Arguments, Description, Hotkey, Icon_, IconIndex, ShowCmd, WkDir)
@@ -49,10 +52,45 @@ class AppMsi(bdist_msi):
         from msilib import add_data
 
         db = self.db
-        add_data(db, "Property", [("PCA_LANGUAGE", "auto"), ("PCA_DESKTOP", "1"),
+        add_data(db, "Property", [("PCA_LANGUAGE", "auto"), ("PCA_DESKTOP", "1"), ("PCA_WIZARD", "0"),
                                   ("ARPNOMODIFY", "1"), ("ARPNOREPAIR", "1")])
-        run_sql(db, "UPDATE `Property` SET `Value`='TARGETDIR;REINSTALLMODE;PCA_LANGUAGE;PCA_DESKTOP;"
+        run_sql(db, "UPDATE `Property` SET `Value`='TARGETDIR;REINSTALLMODE;PCA_LANGUAGE;PCA_DESKTOP;PCA_WIZARD;"
                     "REMOVEOLDVERSION;NEWERVERSIONDETECTED' WHERE `Property`='SecureCustomProperties'")
+
+        # Installata dall'installazione guidata (PCA_WIZARD=1): la voce di Windows Installer in Impostazioni › App
+        # resta nascosta e al suo posto c'è questa, che apre la disinstallazione guidata. La voce è un componente
+        # dell'MSI, quindi sparisce con la disinstallazione in ogni caso.
+        add_data(db, "Component", [("WizardArpComp", ARP_COMPONENT_GUID, "TARGETDIR", 4, 'PCA_WIZARD="1"', "ArpName")])
+        add_data(db, "FeatureComponents", [("default", "WizardArpComp")])
+        add_data(db, "Registry", [
+            ("ArpName", 1, ARP_KEY, "DisplayName", APP_NAME, "WizardArpComp"),
+            ("ArpVersion", 1, ARP_KEY, "DisplayVersion", "[ProductVersion]", "WizardArpComp"),
+            ("ArpPublisher", 1, ARP_KEY, "Publisher", "poty87", "WizardArpComp"),
+            ("ArpIcon", 1, ARP_KEY, "DisplayIcon", f"[#{APP_FILE}]", "WizardArpComp"),
+            ("ArpLocation", 1, ARP_KEY, "InstallLocation", "[TARGETDIR]", "WizardArpComp"),
+            ("ArpUninstall", 1, ARP_KEY, "UninstallString", f'"[#{APP_FILE}]" --uninstall', "WizardArpComp"),
+            ("ArpUrl", 1, ARP_KEY, "URLInfoAbout", f"https://github.com/poty87/{APP_NAME}", "WizardArpComp"),
+            ("ArpNoModify", 1, ARP_KEY, "NoModify", "#1", "WizardArpComp"),
+            ("ArpNoRepair", 1, ARP_KEY, "NoRepair", "#1", "WizardArpComp"),
+        ])
+        # Importazione automatica (processo in background + attività pianificata), comunque si disinstalli:
+        # - disinstallazione vera: il processo si ferma e l'attività pianificata viene tolta;
+        # - aggiornamento (la versione vecchia viene rimossa prima): il processo si ferma soltanto…
+        # - …e la versione nuova, finita l'installazione, lo fa ripartire se l'attività c'è.
+        # 18 = eseguibile installato dal pacchetto; +1024 = differita (prima di RemoveFiles); +64 = esito ignorato,
+        # +128 = senza aspettarlo
+        add_data(db, "CustomAction", [
+            ("A_HIDE_ARP", 51, "ARPSYSTEMCOMPONENT", "1"),
+            ("A_WATCH_STOP", 18 + 1024 + 64, APP_FILE, "--msi-stop"),
+            ("A_WATCH_REMOVE", 18 + 1024 + 64, APP_FILE, "--msi-remove"),
+            ("A_WATCH_START", 18 + 64 + 128, APP_FILE, "--msi-start"),
+        ])
+        add_data(db, "InstallExecuteSequence", [
+            ("A_HIDE_ARP", 'PCA_WIZARD="1"', 1002),
+            ("A_WATCH_STOP", 'REMOVE~="ALL" AND UPGRADINGPRODUCTCODE', 1510),
+            ("A_WATCH_REMOVE", 'REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE', 1511),
+            ("A_WATCH_START", 'NOT REMOVE~="ALL"', 6650),
+        ])
         # lingua scelta: la legge l'app finché l'utente non ne sceglie un'altra nelle Impostazioni
         choices = [("auto", "Automatic (Windows language)")] + list(LANGUAGES.items())
         add_data(db, "ComboBox", [("PCA_LANGUAGE", i + 1, code, label) for i, (code, label) in enumerate(choices)])
@@ -114,11 +152,18 @@ setup(
     cmdclass={"bdist_msi": AppMsi},
     options={
         "build_exe": {
-            "packages": ["sv_ttk", "tkinter", "PIL"],
+            # pystray (icona nell'area di notifica) sceglie il suo modulo per Windows a runtime: va incluso tutto
+            "packages": ["sv_ttk", "tkinter", "PIL", "pystray", "six"],
+            # pystray importa queue attraverso six.moves, che cx_Freeze non vede
+            "includes": ["queue"],
             # profiles: le LUT misurate (tools/measure_styles.py), una cartella per fotocamera
-            "include_files": [(ICON, "assets/icon.ico"), (str(ROOT / "assets" / "profiles"), "assets/profiles")],
+            "include_files": [(ICON, "assets/icon.ico"), (str(ROOT / "assets" / "icon.png"), "assets/icon.png"),
+                              (str(ROOT / "assets" / "profiles"), "assets/profiles")],
             # http ed email servono a urllib per il controllo degli aggiornamenti
             "excludes": ["unittest", "pydoc", "xmlrpc"],
+            # nei .pyc resta il percorso dei sorgenti: si toglie, così nel pacchetto non finiscono le cartelle del PC
+            # su cui si compila
+            "replace_paths": [("*", ""), (str(ROOT / "src"), ""), (str(ROOT), "")],
             "include_msvcr": True,
         },
         "bdist_msi": {
@@ -132,5 +177,7 @@ setup(
             "summary_data": {"author": "poty87", "comments": f"{APP_NAME} installer"},
         },
     },
-    executables=[Executable(str(ROOT / "src" / "presetcraft.py"), base="gui", target_name=EXE, icon=ICON)],
+    # percorso relativo (build.ps1 parte dalla cartella del progetto): cx_Freeze lo usa nel nome di un componente
+    # dell'MSI, e un percorso assoluto ci metterebbe dentro le cartelle del PC su cui si compila
+    executables=[Executable("src/presetcraft.py", base="gui", target_name=EXE, icon=ICON)],
 )

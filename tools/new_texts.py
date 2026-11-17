@@ -410,6 +410,187 @@ NEW = {
                    "fr": "Les ignorer", "pt": "Ignorá-las"},
     "btn_import_too": {"it": "Importa anche queste", "en": "Import them too", "de": "Auch diese importieren",
                        "es": "Importarlas también", "fr": "Les importer aussi", "pt": "Importá-las também"},
+    "auto_quiet": {"it": "Trasferimento finito dopo (secondi senza novità)",
+                   "en": "Transfer finished after (seconds without changes)",
+                   "de": "Übertragung beendet nach (Sekunden ohne Änderungen)",
+                   "es": "Transferencia terminada tras (segundos sin cambios)",
+                   "fr": "Transfert terminé après (secondes sans changement)",
+                   "pt": "Transferência terminada após (segundos sem alterações)"},
+    "auto_quiet_hint": {
+        "it": "Le foto dal telefono arrivano una alla volta: l'importazione parte quando nella cartella non arriva e "
+              "non cambia più niente da questo tempo, e allora importa tutte le foto arrivate insieme. Mentre arrivano, "
+              "la cartella si controlla ogni 10 secondi.",
+        "en": "Photos from a phone arrive one at a time: the import starts once nothing has arrived or changed in "
+              "the folder for this long, and then imports all the new photos together. While they arrive, the folder "
+              "is checked every 10 seconds.",
+        "de": "Fotos vom Handy kommen einzeln an: Der Import beginnt, wenn so lange nichts Neues angekommen oder "
+              "geändert ist, und importiert dann alle neuen Fotos zusammen. Während sie ankommen, wird der Ordner alle "
+              "10 Sekunden geprüft.",
+        "es": "Las fotos del móvil llegan de una en una: la importación empieza cuando en la carpeta no llega ni "
+              "cambia nada durante este tiempo, y entonces importa juntas todas las fotos nuevas. Mientras llegan, la "
+              "carpeta se comprueba cada 10 segundos.",
+        "fr": "Les photos du téléphone arrivent une à une : l'importation démarre quand plus rien n'arrive ni ne "
+              "change dans le dossier pendant ce temps, puis importe toutes les nouvelles photos ensemble. Pendant "
+              "l'arrivée, le dossier est vérifié toutes les 10 secondes.",
+        "pt": "As fotos do telemóvel chegam uma a uma: a importação começa quando nada chega nem muda na pasta "
+              "durante este tempo, e então importa todas as fotos novas juntas. Enquanto chegam, a pasta é verificada "
+              "a cada 10 segundos.",
+    },
+    "auto_status_stopped": {
+        "it": "Attiva, ma il processo in background non è in esecuzione: parte al prossimo accesso a Windows, oppure "
+              "premi «Salva» per avviarlo adesso.",
+        "en": "On, but the background process is not running: it starts at the next Windows sign-in, or click "
+              "“Save” to start it now.",
+        "de": "Ein, aber der Hintergrundprozess läuft nicht: Er startet bei der nächsten Windows-Anmeldung, oder "
+              "klicke auf „Speichern“, um ihn jetzt zu starten.",
+        "es": "Activada, pero el proceso en segundo plano no se está ejecutando: arranca en el próximo inicio de "
+              "sesión de Windows, o pulsa «Guardar» para iniciarlo ahora.",
+        "fr": "Activée, mais le processus en arrière-plan ne tourne pas : il démarre à la prochaine ouverture de "
+              "session Windows, ou cliquez sur « Enregistrer » pour le lancer maintenant.",
+        "pt": "Ativa, mas o processo em segundo plano não está em execução: arranca no próximo início de sessão do "
+              "Windows, ou clique em «Guardar» para o iniciar agora.",
+    },
+    # ---- icona nell'area di notifica
+    "tray_idle": {"it": "Importazione automatica attiva · nessuna foto in arrivo",
+                  "en": "Automatic import on · no photos arriving",
+                  "de": "Automatischer Import ein · keine Fotos im Anflug",
+                  "es": "Importación automática activa · no llegan fotos",
+                  "fr": "Importation automatique active · aucune photo en arrivée",
+                  "pt": "Importação automática ativa · não estão a chegar fotos"},
+    "tray_next": {"it": "Prossimo controllo alle {time}", "en": "Next check at {time}",
+                  "de": "Nächste Prüfung um {time}", "es": "Próxima comprobación a las {time}",
+                  "fr": "Prochaine vérification à {time}", "pt": "Próxima verificação às {time}"},
+    "tray_incoming": {"it": "Foto in arrivo: {count}", "en": "Photos arriving: {count}",
+                      "de": "Ankommende Fotos: {count}", "es": "Fotos llegando: {count}",
+                      "fr": "Photos en arrivée : {count}", "pt": "Fotos a chegar: {count}"},
+    "tray_incoming_sub": {"it": "Aspetto la fine del trasferimento (ancora {n} s senza novità)",
+                          "en": "Waiting for the transfer to finish ({n} s more without changes)",
+                          "de": "Warte auf das Ende der Übertragung (noch {n} s ohne Änderungen)",
+                          "es": "Esperando a que termine la transferencia ({n} s más sin cambios)",
+                          "fr": "En attente de la fin du transfert (encore {n} s sans changement)",
+                          "pt": "À espera do fim da transferência (mais {n} s sem alterações)"},
+    "tray_waiting": {"it": "{count} foto pronte da importare", "en": "{count} photos ready to import",
+                     "de": "{count} Fotos bereit zum Import", "es": "{count} fotos listas para importar",
+                     "fr": "{count} photos prêtes à importer", "pt": "{count} fotos prontas a importar"},
+    "tray_waiting_sub": {"it": "Aspetto che LightCraft venga chiuso", "en": "Waiting for LightCraft to be closed",
+                         "de": "Warte, bis LightCraft geschlossen wird", "es": "Esperando a que se cierre LightCraft",
+                         "fr": "En attente de la fermeture de LightCraft", "pt": "À espera que o LightCraft seja fechado"},
+    "tray_waiting_body": {"it": "{count} foto nuove: chiudi LightCraft e verranno importate.",
+                          "en": "{count} new photos: close LightCraft and they will be imported.",
+                          "de": "{count} neue Fotos: Schließe LightCraft, dann werden sie importiert.",
+                          "es": "{count} fotos nuevas: cierra LightCraft y se importarán.",
+                          "fr": "{count} nouvelles photos : fermez LightCraft et elles seront importées.",
+                          "pt": "{count} fotos novas: feche o LightCraft e serão importadas."},
+    "tray_importing": {"it": "Importazione: {done} di {total} foto", "en": "Importing: {done} of {total} photos",
+                       "de": "Import: {done} von {total} Fotos", "es": "Importando: {done} de {total} fotos",
+                       "fr": "Importation : {done} sur {total} photos", "pt": "A importar: {done} de {total} fotos"},
+    "tray_profiles": {"it": "Profili: {done} di {total} foto", "en": "Profiles: {done} of {total} photos",
+                      "de": "Profile: {done} von {total} Fotos", "es": "Perfiles: {done} de {total} fotos",
+                      "fr": "Profils : {done} sur {total} photos", "pt": "Perfis: {done} de {total} fotos"},
+    "tray_left": {"it": "Mancano {time}", "en": "{time} left", "de": "Noch {time}", "es": "Faltan {time}",
+                  "fr": "Encore {time}", "pt": "Faltam {time}"},
+    "tray_eta_s": {"it": "circa {n} secondi", "en": "about {n} seconds", "de": "etwa {n} Sekunden",
+                   "es": "unos {n} segundos", "fr": "environ {n} secondes", "pt": "cerca de {n} segundos"},
+    "tray_eta_m": {"it": "circa {n} min", "en": "about {n} min", "de": "etwa {n} Min.", "es": "unos {n} min",
+                   "fr": "environ {n} min", "pt": "cerca de {n} min"},
+    "tray_error": {"it": "Errore durante l'importazione automatica", "en": "Automatic import error",
+                   "de": "Fehler beim automatischen Import", "es": "Error en la importación automática",
+                   "fr": "Erreur d'importation automatique", "pt": "Erro na importação automática"},
+    "tray_last": {"it": "Ultima importazione: {count} foto ({when})", "en": "Last import: {count} photos ({when})",
+                  "de": "Letzter Import: {count} Fotos ({when})", "es": "Última importación: {count} fotos ({when})",
+                  "fr": "Dernière importation : {count} photos ({when})",
+                  "pt": "Última importação: {count} fotos ({when})"},
+    "tray_last_profiles": {"it": "Ultimo aggiornamento: profilo dato a {count} foto ({when})",
+                           "en": "Last update: profile given to {count} photos ({when})",
+                           "de": "Letzte Aktualisierung: Profil für {count} Fotos ({when})",
+                           "es": "Última actualización: perfil dado a {count} fotos ({when})",
+                           "fr": "Dernière mise à jour : profil donné à {count} photos ({when})",
+                           "pt": "Última atualização: perfil dado a {count} fotos ({when})"},
+    "tray_done_title": {"it": "Foto importate", "en": "Photos imported", "de": "Fotos importiert",
+                        "es": "Fotos importadas", "fr": "Photos importées", "pt": "Fotos importadas"},
+    "tray_done_body": {"it": "{count} foto in {library}, {profiles} con il profilo del loro stile.",
+                       "en": "{count} photos in {library}, {profiles} with the profile of their style.",
+                       "de": "{count} Fotos in {library}, {profiles} mit dem Profil ihres Bildstils.",
+                       "es": "{count} fotos en {library}, {profiles} con el perfil de su estilo.",
+                       "fr": "{count} photos dans {library}, {profiles} avec le profil de leur style.",
+                       "pt": "{count} fotos em {library}, {profiles} com o perfil do seu estilo."},
+    "tray_open": {"it": "Apri PresetCraftAppLicator", "en": "Open PresetCraftAppLicator",
+                  "de": "PresetCraftAppLicator öffnen", "es": "Abrir PresetCraftAppLicator",
+                  "fr": "Ouvrir PresetCraftAppLicator", "pt": "Abrir o PresetCraftAppLicator"},
+    "tray_check_now": {"it": "Controlla adesso", "en": "Check now", "de": "Jetzt prüfen", "es": "Comprobar ahora",
+                       "fr": "Vérifier maintenant", "pt": "Verificar agora"},
+    "tray_quit": {"it": "Chiudi (riparte al prossimo accesso)", "en": "Quit (starts again at next sign-in)",
+                  "de": "Beenden (startet bei der nächsten Anmeldung)", "es": "Cerrar (vuelve al próximo inicio de sesión)",
+                  "fr": "Quitter (redémarre à la prochaine session)", "pt": "Fechar (volta no próximo início de sessão)"},
+    # ---- disinstallazione guidata (da Impostazioni › App)
+    "w_remove_head": {"it": "Disinstallare PresetCraftAppLicator {version}?",
+                      "en": "Uninstall PresetCraftAppLicator {version}?",
+                      "de": "PresetCraftAppLicator {version} deinstallieren?",
+                      "es": "¿Desinstalar PresetCraftAppLicator {version}?",
+                      "fr": "Désinstaller PresetCraftAppLicator {version} ?",
+                      "pt": "Desinstalar o PresetCraftAppLicator {version}?"},
+    "w_remove_body": {
+        "it": "Vengono tolti il programma, i collegamenti e l'importazione automatica (processo in background, icona e "
+              "attività pianificata). Le foto e le librerie LightCraft non vengono toccate.",
+        "en": "The program, its shortcuts and the automatic import (background process, icon and scheduled task) are "
+              "removed. Your photos and LightCraft libraries are not touched.",
+        "de": "Entfernt werden das Programm, die Verknüpfungen und der automatische Import (Hintergrundprozess, Symbol "
+              "und geplante Aufgabe). Fotos und LightCraft-Bibliotheken bleiben unberührt.",
+        "es": "Se quitan el programa, los accesos directos y la importación automática (proceso en segundo plano, icono "
+              "y tarea programada). Las fotos y las bibliotecas de LightCraft no se tocan.",
+        "fr": "Le programme, ses raccourcis et l'importation automatique (processus en arrière-plan, icône et tâche "
+              "planifiée) sont supprimés. Vos photos et bibliothèques LightCraft ne sont pas touchées.",
+        "pt": "São removidos o programa, os atalhos e a importação automática (processo em segundo plano, ícone e "
+              "tarefa agendada). As fotos e as bibliotecas do LightCraft não são tocadas.",
+    },
+    "w_remove_data": {"it": "Elimina anche impostazioni, registro e cronologia dell'importazione automatica",
+                      "en": "Also delete settings, log and automatic import history",
+                      "de": "Auch Einstellungen, Protokoll und Verlauf des automatischen Imports löschen",
+                      "es": "Eliminar también ajustes, registro e historial de la importación automática",
+                      "fr": "Supprimer aussi les paramètres, le journal et l'historique de l'importation automatique",
+                      "pt": "Eliminar também definições, registo e histórico da importação automática"},
+    "w_remove_note": {
+        "it": "I backup dei cataloghi, accanto alle librerie, restano sempre: si eliminano dalla finestra «Backup…» "
+              "dell'app o a mano.",
+        "en": "The catalog backups next to the libraries are always kept: delete them from the app's “Backups…” "
+              "window or by hand.",
+        "de": "Die Katalog-Sicherungen neben den Bibliotheken bleiben immer erhalten: Lösche sie im Fenster "
+              "„Sicherungen…“ der App oder von Hand.",
+        "es": "Las copias de los catálogos, junto a las bibliotecas, se conservan siempre: se eliminan desde la "
+              "ventana «Copias…» de la app o a mano.",
+        "fr": "Les sauvegardes des catalogues, à côté des bibliothèques, sont toujours conservées : supprimez-les "
+              "depuis la fenêtre « Sauvegardes… » de l'app ou à la main.",
+        "pt": "As cópias dos catálogos, junto das bibliotecas, ficam sempre: eliminam-se na janela «Cópias…» da "
+              "app ou à mão.",
+    },
+    "w_absent_head": {"it": "PresetCraftAppLicator non è installata", "en": "PresetCraftAppLicator is not installed",
+                      "de": "PresetCraftAppLicator ist nicht installiert", "es": "PresetCraftAppLicator no está instalado",
+                      "fr": "PresetCraftAppLicator n'est pas installé", "pt": "O PresetCraftAppLicator não está instalado"},
+    "w_absent_body": {"it": "Non c'è niente da disinstallare.", "en": "There is nothing to uninstall.",
+                      "de": "Es gibt nichts zu deinstallieren.", "es": "No hay nada que desinstalar.",
+                      "fr": "Il n'y a rien à désinstaller.", "pt": "Não há nada para desinstalar."},
+    "w_removed_body": {
+        "it": "Impostazioni e registro sono rimasti sul PC: se la reinstalli li ritrovi.",
+        "en": "Settings and log were left on the PC: you will find them again if you reinstall it.",
+        "de": "Einstellungen und Protokoll bleiben auf dem PC: Nach einer Neuinstallation sind sie wieder da.",
+        "es": "Los ajustes y el registro se han quedado en el PC: si lo reinstalas, los recuperas.",
+        "fr": "Les paramètres et le journal sont restés sur le PC : vous les retrouverez en le réinstallant.",
+        "pt": "As definições e o registo ficaram no PC: se o reinstalar, encontra-os de novo.",
+    },
+    "w_removed_all": {
+        "it": "Sono stati eliminati anche impostazioni, registro e cronologia dell'importazione automatica. I backup "
+              "dei cataloghi accanto alle librerie sono rimasti.",
+        "en": "Settings, log and automatic import history were deleted too. The catalog backups next to the "
+              "libraries were kept.",
+        "de": "Auch Einstellungen, Protokoll und Importverlauf wurden gelöscht. Die Katalog-Sicherungen neben den "
+              "Bibliotheken sind erhalten geblieben.",
+        "es": "También se han eliminado ajustes, registro e historial de la importación automática. Las copias de "
+              "los catálogos junto a las bibliotecas se han conservado.",
+        "fr": "Les paramètres, le journal et l'historique d'importation ont aussi été supprimés. Les sauvegardes "
+              "des catalogues à côté des bibliothèques ont été conservées.",
+        "pt": "Também foram eliminados definições, registo e histórico da importação automática. As cópias dos "
+              "catálogos junto das bibliotecas foram mantidas.",
+    },
     "auto_task_error": {"it": "Non sono riuscito ad attivare l'importazione automatica.",
                         "en": "Automatic import could not be turned on.",
                         "de": "Der automatische Import konnte nicht eingeschaltet werden.",

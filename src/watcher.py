@@ -2,9 +2,16 @@
 profilo dello stile con cui è stata scattata.
 
 Gira in background (PresetCraftAppLicator.exe --watch), avviato all'accesso a Windows da un'attività pianificata
-(vedi autostart.py). Ogni regola è "cartella → libreria". Per ogni regola un file di stato in DATA_DIR\\watch\\ ricorda
-i file già trattati: così una foto tolta dalla libreria non torna dentro da sola, e le foto che c'erano già quando
-la regola è stata creata si possono ignorare.
+(vedi autostart.py), con un'icona nell'area di notifica (tray.py). Ogni regola è "cartella → libreria".
+
+Un trasferimento dal telefono fa arrivare le foto una alla volta: l'importazione parte solo quando nella cartella non
+arriva e non cambia più niente da `quiet` secondi (60 di predefinito), e allora importa tutte le foto arrivate in una
+volta, con un solo backup. Mentre i file arrivano la cartella si controlla ogni pochi secondi, altrimenti ogni
+`interval` minuti.
+
+Per ogni regola un file di stato in DATA_DIR\\watch\\ ricorda i file già trattati (una foto tolta dalla libreria non
+torna dentro da sola; le foto già presenti quando la regola è stata creata si possono ignorare) e le foto importate a
+cui manca ancora il profilo (se LightCraft viene aperto a metà, il profilo arriva al giro dopo).
 """
 
 import ctypes
@@ -12,6 +19,7 @@ import datetime
 import hashlib
 import json
 import os
+import threading
 import time
 
 import camera_styles as cs
@@ -21,11 +29,14 @@ from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, backup_library, bac
 
 SETTINGS = os.path.join(DATA_DIR, "settings.json")
 STATE_DIR = os.path.join(DATA_DIR, "watch")
-STATUS = os.path.join(STATE_DIR, "status.json")  # ultimo giro del processo in background, per la finestra
-MUTEX = "Local\\PresetCraftAppLicator-watch"  # stessi nomi in autostart.py (usato dall'installazione guidata)
+STATUS = os.path.join(STATE_DIR, "status.json")  # stato del processo in background, per la finestra dell'app
+MUTEX = "Local\\PresetCraftAppLicator-watch"  # stessi nomi in autostart.py (usati dall'installazione)
 STOP_EVENT = "Local\\PresetCraftAppLicator-watch-stop"
-DEFAULT_INTERVAL = 2  # minuti tra un controllo e l'altro
-SETTLE = 30  # secondi: un file modificato da meno tempo potrebbe essere ancora in copia
+DEFAULT_INTERVAL = 2  # minuti tra un controllo e l'altro quando non arriva niente
+DEFAULT_QUIET = 60  # secondi senza novità nella cartella: il trasferimento è finito
+FAST_POLL = 10  # secondi tra un controllo e l'altro mentre le foto arrivano
+WAIT_POLL = 30  # secondi tra un controllo e l'altro mentre si aspetta la chiusura di LightCraft
+IMPORT_CHUNK = 10  # foto per ogni esecuzione di lightcraft-cli (per mostrare l'avanzamento)
 MAX_TRIES = 5  # giri falliti dopo i quali un file non si riprova più (resta nel registro)
 # formati che LightCraft sa importare (crates/engine/src/import/files.rs)
 PHOTO_EXTS = {
@@ -95,7 +106,7 @@ def list_photos(folder, subfolders=False):
                 raise
             continue
         for e in entries:
-            if e.name.startswith("."):
+            if e.name.startswith("."):  # file temporanei dei trasferimenti (.SYNOTEMP…) e nascosti
                 continue
             try:
                 if e.is_dir():
@@ -130,60 +141,112 @@ def create_rule_state(rule, import_existing):
     files = list_photos(rule["folder"], rule.get("subfolders"))
     known = library_paths(rule["library"])
     handled = sorted(key(p) for p in files if key(p) in known or not import_existing)
-    save_rule_state(rule, {"handled": handled, "seen": {}, "tries": {},
+    save_rule_state(rule, {"handled": handled, "pending": {}, "tries": {}, "profile_ids": [],
                            "created": datetime.datetime.now().isoformat(timespec="seconds")})
+
+
+# ---------------------------------------------------------------- stato visibile (icona e finestra)
+
+class Status:
+    """Cosa sta facendo il processo in background, letto dall'icona nell'area di notifica (da un altro thread)."""
+
+    def __init__(self, on_change=None):
+        self.lock = threading.Lock()
+        self.on_change = on_change
+        self.data = {"phase": "idle"}
+
+    def set(self, **values):
+        with self.lock:
+            if values.get("phase") and values["phase"] != self.data.get("phase"):
+                keep = {k: self.data[k] for k in ("last", "next_check") if k in self.data}
+                self.data = keep
+            self.data.update(values)
+            data = dict(self.data)
+        if self.on_change:
+            self.on_change(data)
+
+    def get(self):
+        with self.lock:
+            return dict(self.data)
+
+
+def eta(started, done, total):
+    """Secondi che mancano, stimati dal tempo per foto finora; None all'inizio."""
+    if not done or done >= total:
+        return None
+    return (time.time() - started) / done * (total - done)
 
 
 # ---------------------------------------------------------------- un giro su una regola
 
-def cycle(rule, settings, finder, now=None):
-    """Controlla una cartella; importa le foto pronte e dà loro il profilo. Restituisce un riepilogo o None."""
+def cycle(rule, settings, finder, status=None, now=None):
+    """Controlla una cartella; a trasferimento finito importa le foto e dà loro il profilo.
+
+    Restituisce quanti secondi aspettare prima del prossimo controllo (None = l'intervallo normale)."""
+    status = status or Status()
     folder, lib = rule["folder"], rule["library"]
+    lib_name = os.path.basename(lib) or lib
     if not os.path.isdir(folder) or not is_library(lib):
         return None  # NAS spento, unità non ancora collegata, libreria spostata: si riprova al prossimo giro
     now = now or time.time()
+    w = settings.get("watch") or {}
+    quiet = max(10, int(w.get("quiet") or DEFAULT_QUIET))
     state = load_rule_state(rule)
-    first = "handled" not in state
-    handled = set(state.get("handled", []))
     files = list_photos(folder, rule.get("subfolders"))
-    known = library_paths(lib)
-    if first:
+    if "handled" not in state:
         # stato perso o regola scritta a mano: per prudenza si ignora quello che c'è già
-        handled = {key(p) for p in files}
-        state.update(handled=sorted(handled), seen={}, tries={})
+        state.update(handled=sorted(key(p) for p in files), pending={}, tries={}, profile_ids=[])
         save_rule_state(rule, state)
         return None
+    handled = set(state["handled"])
+    known = library_paths(lib)
+    profile_ids = set(state.get("profile_ids") or [])
 
     # file arrivati nella libreria per un'altra strada (trascinati, o importati da LightCraft stesso)
-    arrived = [p for p in files if key(p) in known and key(p) not in handled]
-    seen, ready = {}, []
-    for path, (size, mtime) in files.items():
+    for path in files:
         k = key(path)
-        if k in known or k in handled:
-            continue
-        before = state.get("seen", {}).get(k)
-        seen[k] = [size, mtime]
-        # pronto quando non cresce più tra due controlli e non è stato toccato negli ultimi secondi
-        if before == [size, mtime] and size > 0 and now - mtime >= SETTLE:
-            ready.append(path)
-    state["seen"] = seen
-    if not ready and not arrived:
-        state.pop("waiting", None)
+        if k in known and k not in handled:
+            handled.add(k)
+            profile_ids.add(known[k])
+    # file nuovi: finché qualcosa arriva o cambia, il trasferimento non è finito
+    pending = {key(p): [size, mtime] for p, (size, mtime) in files.items()
+               if key(p) not in known and key(p) not in handled}
+    by_key = {key(p): p for p in files}
+    if pending != state.get("pending"):
+        state["changed"] = now
+    state["pending"] = pending
+    still = now - state.get("changed", now)
+    ready = [by_key[k] for k, (size, _m) in pending.items() if size > 0] if still >= quiet else []
+
+    def save():
+        state["handled"] = sorted(handled)
+        state["profile_ids"] = sorted(profile_ids)
         save_rule_state(rule, state)
+
+    if pending and still < quiet:
+        status.set(phase="incoming", count=len(pending), library=lib_name, quiet_left=int(quiet - still))
+        save()
+        return FAST_POLL
+    if not ready and not profile_ids:
+        state.pop("waiting", None)
+        save()
         return None
 
     reason = library_open_reason(lib)
     if reason:
+        count = len(ready) or len(profile_ids)
         if not state.get("waiting"):
-            log(f"watch: {len(ready) + len(arrived)} new photos for {lib}, waiting until LightCraft is closed")
+            log(f"watch: {count} new photos for {lib}, waiting until LightCraft is closed")
+        status.set(phase="waiting", count=count, library=lib_name, first_wait=not state.get("waiting"))
         state["waiting"] = True
-        save_rule_state(rule, state)
-        return None
+        save()
+        return WAIT_POLL
     state.pop("waiting", None)
     cli = settings.get("cli") or DEFAULT_CLI
     if not is_cli(cli):
         log(f"watch: lightcraft-cli not found ({cli})")
-        save_rule_state(rule, state)
+        status.set(phase="error", error=f"lightcraft-cli: {cli}")
+        save()
         return None
 
     root, kept = backup_root(lib, settings), settings.get("backups_kept", BACKUPS_KEPT)
@@ -196,54 +259,71 @@ def cycle(rule, settings, finder, now=None):
     except OSError:
         saved_view = None
     summary = {"when": datetime.datetime.now().isoformat(timespec="seconds"), "imported": 0, "profiles": 0,
-               "failed": []}
-    ids = [known[key(p)] for p in arrived]
+               "failed": [], "library": lib_name}
+    tries = state.setdefault("tries", {})
     try:
-        if ready:
-            reply = run_cli(cli, lib, [("library.import", {"paths": ready, "mode": "add", "onDeleted": "skip"})],
+        started = time.time()
+        for start in range(0, len(ready), IMPORT_CHUNK):
+            if start and library_open_reason(lib):
+                log("watch: LightCraft was opened, the rest is imported later")
+                break  # le foto rimaste restano in attesa: il prossimo giro le riprende
+            chunk = ready[start:start + IMPORT_CHUNK]
+            status.set(phase="importing", done=start, total=len(ready), library=lib_name,
+                       eta=eta(started, start, len(ready)))
+            reply = run_cli(cli, lib, [("library.import", {"paths": chunk, "mode": "add", "onDeleted": "skip"})],
                             check=False)[0]
-            tries = state.setdefault("tries", {})
             if reply.get("ok"):
                 result = reply.get("result") or {}
                 new = [int(i) for k in ("imported", "restored") for i in result.get(k) or []]
-                ids += new
-                summary["imported"] = len(new)
-                for item in result.get("failed") or []:
-                    summary["failed"].append(str(item))
-                for path in ready:
+                profile_ids.update(new)
+                summary["imported"] += len(new)
+                summary["failed"] += [": ".join(map(str, x)) if isinstance(x, list) else str(x)
+                                      for x in result.get("failed") or []]
+                for path in chunk:
                     handled.add(key(path))
                     tries.pop(key(path), None)
-                    seen.pop(key(path), None)
-                log(f"watch: imported {len(new)} of {len(ready)}" +
-                    (f", not imported: {summary['failed']}" if summary["failed"] else ""))
+                    pending.pop(key(path), None)
             else:
                 error = f"library.import: {reply.get('error')}"
                 summary["failed"].append(error)
                 log(f"watch ERROR {error}")
-                for path in ready:
+                for path in chunk:
                     k = key(path)
                     tries[k] = tries.get(k, 0) + 1
                     if tries[k] >= MAX_TRIES:  # non si riprova all'infinito: resta da importare a mano
                         handled.add(k)
                         tries.pop(k)
+                        pending.pop(k, None)
                         log(f"watch: giving up on {path}")
-        for path in arrived:
-            handled.add(key(path))
-        if ids:
-            plan = matcher.build_plan(lib, "all", settings, finder, ids=ids)
+        if ready:
+            log(f"watch: imported {summary['imported']} of {len(ready)}" +
+                (f", not imported: {summary['failed']}" if summary["failed"] else ""))
+        if profile_ids and not library_open_reason(lib):
+            plan = matcher.build_plan(lib, "all", settings, finder, ids=profile_ids)
             todo = [i for i in plan["items"] if i["status"] == "apply" and i["action"] == "apply"]
             if todo:
-                result = matcher.apply_profiles(lib, cli, todo, root, kept, backup=backup)
+                p_started = time.time()
+
+                def progress(done, total):
+                    status.set(phase="profiles", done=done, total=total, library=lib_name,
+                               eta=eta(p_started, done, total))
+                status.set(phase="profiles", done=0, total=len(todo), library=lib_name, eta=None)
+                result = matcher.apply_profiles(lib, cli, todo, root, kept, progress=progress, backup=backup,
+                                                chunk=20)
                 summary["profiles"] = result["done"]
                 summary["failed"] += result["failed"]
+            profile_ids.clear()  # chi non è "apply" (profilo scelto a mano, stile senza profilo) resta com'è
     finally:
         if saved_view is not None:  # LightCraft si riapre sulla vista di prima
             with open(view, "wb") as f:
                 f.write(saved_view)
-        state["handled"] = sorted(handled)
         state["last"] = summary
-        save_rule_state(rule, state)
-    return summary
+        save()
+    if summary["imported"] or summary["profiles"]:
+        status.set(phase="done", last=summary)
+    elif summary["failed"]:
+        status.set(phase="error", error=summary["failed"][0])
+    return FAST_POLL if pending else None
 
 
 # ---------------------------------------------------------------- processo in background
@@ -254,49 +334,96 @@ def watch_settings(settings):
     return bool(w.get("enabled")) and bool(rules), rules, max(1, min(60, int(w.get("interval") or DEFAULT_INTERVAL)))
 
 
+_mutex = None
+
+
 def single_instance():
     """True se questo è l'unico processo in background. Il mutex è posseduto finché il processo vive: l'installazione
-    guidata lo aspetta per sapere quando il processo si è chiuso."""
+    lo aspetta per sapere quando il processo si è chiuso."""
     global _mutex
     _mutex = ctypes.windll.kernel32.CreateMutexW(None, True, MUTEX)
     return ctypes.windll.kernel32.GetLastError() != 183  # ERROR_ALREADY_EXISTS
 
 
-_mutex = None
+class Watcher:
+    """Il ciclo dei controlli. Si ferma con stop() (icona) o con l'evento dell'installazione."""
+
+    def __init__(self, status):
+        k32 = ctypes.windll.kernel32
+        k32.CreateEventW.restype = ctypes.c_void_p
+        self.status = status
+        # [0] = richiesta dell'installazione (con nome), [1] = sveglia interna ("Controlla adesso", "Chiudi")
+        self.events = (ctypes.c_void_p * 2)(k32.CreateEventW(None, True, False, STOP_EVENT),
+                                             k32.CreateEventW(None, False, False, None))
+        self.quit = False
+
+    def wake(self):
+        ctypes.windll.kernel32.SetEvent(ctypes.c_void_p(self.events[1]))
+
+    def stop(self):
+        self.quit = True
+        self.wake()
+
+    def wait(self, seconds):
+        """Aspetta; True se è arrivata la richiesta di chiudersi."""
+        r = ctypes.windll.kernel32.WaitForMultipleObjects(2, self.events, False, int(seconds * 1000))
+        return r == 0 or self.quit
+
+    def run(self, once=False):
+        log("watch: started")
+        try:
+            while True:
+                if self.wait(0):
+                    log("watch: stopped" + ("" if self.quit else " (update or uninstall)"))
+                    return 0
+                settings = load_json(SETTINGS)
+                enabled, rules, interval = watch_settings(settings)
+                if not enabled:
+                    log("watch: stopped (automatic import is off)")
+                    return 0
+                finder = cs.ProfileFinder(settings.get("profiles_dir"))
+                pause = interval * 60
+                if self.status.get().get("phase") in ("incoming", "waiting", "importing", "profiles", "error"):
+                    self.status.set(phase="idle")
+                for rule in rules:
+                    try:
+                        wanted = cycle(rule, settings, finder, self.status)
+                    except Exception as e:  # noqa: BLE001 — un errore non deve fermare il processo in background
+                        log(f"watch ERROR {rule.get('folder')}: {e!r}")
+                        self.status.set(phase="error", error=str(e))
+                        wanted = None
+                    if wanted:
+                        pause = min(pause, wanted)
+                next_check = time.time() + pause
+                self.status.set(next_check=next_check)
+                save_json(STATUS, {"pid": os.getpid(), "checked": datetime.datetime.now().isoformat(timespec="seconds"),
+                                   "interval": interval, **{k: v for k, v in self.status.get().items()
+                                                            if k in ("phase", "count", "done", "total", "last")}})
+                if once:
+                    return 0
+                if self.wait(pause):
+                    log("watch: stopped" + ("" if self.quit else " (update or uninstall)"))
+                    return 0
+        finally:
+            try:
+                os.remove(STATUS)
+            except OSError:
+                pass
 
 
-def stop_event():
-    """Evento con cui l'installazione guidata chiede al processo di chiudersi (tra un giro e l'altro, mai a metà)."""
-    return ctypes.windll.kernel32.CreateEventW(None, True, False, STOP_EVENT)
-
-
-def run(once=False):
+def run(once=False, tray=True):
     if not single_instance():
         return 0
-    stop = stop_event()
-    log("watch: started")
-    while True:
-        if ctypes.windll.kernel32.WaitForSingleObject(stop, 0) == 0:
-            log("watch: stopped (update or uninstall)")
-            return 0
-        settings = load_json(SETTINGS)
-        enabled, rules, interval = watch_settings(settings)
-        if not enabled:
-            log("watch: stopped (automatic import is off)")
-            return 0
-        finder = cs.ProfileFinder(settings.get("profiles_dir"))
-        for rule in rules:
-            try:
-                cycle(rule, settings, finder)
-            except Exception as e:  # noqa: BLE001 — un errore non deve fermare il processo in background
-                log(f"watch ERROR {rule.get('folder')}: {e!r}")
-        save_json(STATUS, {"pid": os.getpid(), "checked": datetime.datetime.now().isoformat(timespec="seconds"),
-                           "interval": interval})
-        if once:
-            return 0
-        ctypes.windll.kernel32.WaitForSingleObject(stop, interval * 60 * 1000)  # pausa, interrotta dallo stop
+    if tray and not once:
+        try:
+            import tray as tray_ui
+        except Exception as e:  # noqa: BLE001 — senza icona l'importazione funziona lo stesso
+            log(f"watch: no tray icon ({e!r})")
+        else:
+            return tray_ui.run()
+    return Watcher(Status()).run(once)
 
 
 def status():
-    """Stato per la finestra: ultimo controllo del processo in background e ultime importazioni per regola."""
+    """Stato per la finestra: ultimo controllo del processo in background (vuoto se non è in esecuzione)."""
     return load_json(STATUS)

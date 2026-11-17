@@ -60,12 +60,13 @@ Register-ScheduledTask -TaskName {_ps_quote(task)} -Action $a -Trigger $t -Setti
 
 
 def disable(task=TASK):
-    """Toglie l'attività (se non c'è, non fa niente). Il processo già avviato non si interrompe, perché potrebbe
+    """Toglie l'attività (se non c'è, non fa niente). Il processo già avviato non si interrompe qui, perché potrebbe
     essere a metà di un'importazione: legge le impostazioni a ogni giro e si chiude da solo."""
-    _powershell(f"""
-$x = Get-ScheduledTask -TaskName {_ps_quote(task)} -ErrorAction SilentlyContinue
-if ($x) {{ Unregister-ScheduledTask -TaskName {_ps_quote(task)} -Confirm:$false }}
-""")
+    if is_enabled(task):
+        r = subprocess.run(["schtasks", "/Delete", "/TN", task, "/F"], capture_output=True, text=True,
+                           creationflags=NO_WINDOW)
+        if r.returncode != 0:
+            raise RuntimeError((r.stderr or r.stdout).strip() or f"schtasks {r.returncode}")
 
 
 def is_enabled(task=TASK):

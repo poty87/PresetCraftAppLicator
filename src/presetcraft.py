@@ -533,6 +533,14 @@ class AutoImportDialog(tk.Toplevel):
         self.interval = tk.IntVar(value=int(w.get("interval") or watcher.DEFAULT_INTERVAL))
         ttk.Spinbox(row, from_=1, to=60, textvariable=self.interval, width=5, state="readonly").pack(
             side="left", padx=(10, 0))
+        row = ttk.Frame(frame)
+        row.pack(fill="x", pady=(8, 0))
+        ttk.Label(row, text=t("auto_quiet"), style="Body.TLabel").pack(side="left")
+        self.quiet = tk.IntVar(value=int(w.get("quiet") or watcher.DEFAULT_QUIET))
+        ttk.Spinbox(row, from_=10, to=900, increment=10, textvariable=self.quiet, width=5, state="readonly").pack(
+            side="left", padx=(10, 0))
+        ttk.Label(frame, text=t("auto_quiet_hint"), style="Muted.TLabel", wraplength=720, justify="left").pack(
+            anchor="w", pady=(4, 0))
         ttk.Label(frame, text=t("auto_hint"), style="Muted.TLabel", wraplength=720, justify="left").pack(
             anchor="w", pady=(8, 0))
         self.status = ttk.Label(frame, style="Strong.TLabel", wraplength=720, justify="left")
@@ -570,8 +578,8 @@ class AutoImportDialog(tk.Toplevel):
             lines.append(t("auto_status_off"))
         elif checked:
             lines.append(t("auto_status_on", time=when_text(checked)))
-        else:
-            lines.append(t("auto_status_starting"))
+        else:  # il processo scrive status.json a ogni giro e lo toglie quando si chiude
+            lines.append(t("auto_status_stopped"))
         last = [watcher.load_rule_state(r).get("last") for r in self.rules]
         last = max((x for x in last if x and (x.get("imported") or x.get("profiles"))), default=None,
                    key=lambda x: x["when"])
@@ -636,8 +644,13 @@ class AutoImportDialog(tk.Toplevel):
                 if (watcher.key(r["folder"]), watcher.key(r["library"])) not in kept:
                     watcher.forget_rule(r)
             s["watch"] = {"enabled": enabled, "interval": max(1, min(60, int(self.interval.get()))),
-                          "rules": self.rules}
+                          "quiet": max(10, min(900, int(self.quiet.get()))), "rules": self.rules}
             save_settings(s)
+            # il processo in corso (se c'è) si chiude tra un giro e l'altro: riparte con le impostazioni nuove,
+            # oppure resta spento insieme alla sua icona
+            self.configure(cursor="watch")
+            self.update_idletasks()
+            autostart.stop_running(timeout=30)
             if enabled:
                 autostart.enable()
             elif autostart.is_enabled():
@@ -1452,9 +1465,62 @@ class App(tk.Tk):
         win.focus_force()
 
 
+SETUP_CACHE = os.path.join(DATA_DIR, "Setup", f"{APP_NAME}-Setup.exe")  # copia lasciata dall'installazione guidata
+GUI_MUTEX = "Local\\PresetCraftAppLicator-gui"
+
+
+def launch_uninstaller():
+    """Voce di Impostazioni › App: apre la disinstallazione guidata (o quella di Windows Installer, se manca)."""
+    if os.path.isfile(SETUP_CACHE):
+        subprocess.Popen([SETUP_CACHE, "--uninstall"], close_fds=True)
+        return 0
+    import ctypes
+    buf = ctypes.create_unicode_buffer(39)
+    from version import UPGRADE_CODE
+    if ctypes.windll.msi.MsiEnumRelatedProductsW(UPGRADE_CODE, 0, 0, buf) == 0:
+        subprocess.Popen(["msiexec.exe", "/x", buf.value], close_fds=True)
+    return 0
+
+
+def already_open():
+    """Se la finestra dell'app è già aperta la porta in primo piano e restituisce True (il mutex resta al processo)."""
+    import ctypes
+    k32, user32 = ctypes.windll.kernel32, ctypes.windll.user32
+    k32.CreateMutexW.restype = ctypes.c_void_p
+    already_open.mutex = k32.CreateMutexW(None, False, GUI_MUTEX)
+    if k32.GetLastError() != 183:  # ERROR_ALREADY_EXISTS
+        return False
+    hwnd = user32.FindWindowW("TkTopLevel", APP_NAME)
+    if hwnd:
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        user32.SetForegroundWindow(hwnd)
+    return True
+
+
 def main():
-    if "--watch" in sys.argv:  # importazione automatica in background: nessuna finestra
-        sys.exit(watcher.run(once="--once" in sys.argv))
+    args = sys.argv[1:]
+    if "--watch" in args:  # importazione automatica in background: icona nell'area di notifica, nessuna finestra
+        sys.exit(watcher.run(once="--once" in args, tray="--no-tray" not in args))
+    # chiamate da Windows Installer (azioni dell'MSI): veloci e senza finestre
+    if "--msi-stop" in args:  # aggiornamento: il processo in background si ferma, la nuova versione lo riavvia
+        autostart.stop_running()
+        sys.exit(0)
+    if "--msi-remove" in args:  # disinstallazione: si ferma, l'attività pianificata e la copia del setup spariscono
+        autostart.stop_running()
+        try:
+            autostart.disable()
+        finally:
+            # se la disinstallazione l'ha avviata proprio questa copia, è in uso: la toglie lei quando si chiude
+            import shutil
+            shutil.rmtree(os.path.dirname(SETUP_CACHE), ignore_errors=True)
+        sys.exit(0)
+    if "--msi-start" in args:
+        autostart.start_now()
+        sys.exit(0)
+    if "--uninstall" in args:
+        sys.exit(launch_uninstaller())
+    if already_open():
+        sys.exit(0)
     dpi_aware()
     App().mainloop()
 

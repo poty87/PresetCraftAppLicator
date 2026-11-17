@@ -6,7 +6,8 @@ Windows Installer (msi.dll) senza mostrarne l'interfaccia, e disegna avanzamento
     PresetCraftAppLicator-Setup-x.y.z.exe              installazione guidata
     PresetCraftAppLicator-Setup-x.y.z.exe --update     avviata dall'app per aggiornarsi
     PresetCraftAppLicator-Setup-x.y.z.exe --silent [--dir D] [--lang it] [--no-desktop]
-    PresetCraftAppLicator-Setup-x.y.z.exe --silent --uninstall
+    PresetCraftAppLicator-Setup-x.y.z.exe --uninstall    disinstallazione guidata (la apre Impostazioni › App)
+    PresetCraftAppLicator-Setup-x.y.z.exe --silent --uninstall [--remove-data]
 """
 
 import argparse
@@ -32,6 +33,9 @@ from version import APP_NAME, EXE, UPGRADE_CODE, parse_version
 
 LOCAL = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
 DEFAULT_DIR = os.path.join(LOCAL, "Programs", APP_NAME)
+DATA_DIR = os.path.join(LOCAL, APP_NAME)  # impostazioni, registro, stato dell'importazione automatica
+# copia dell'installazione guidata: la apre la voce di Impostazioni › App per disinstallare
+SETUP_CACHE = os.path.join(DATA_DIR, "Setup", f"{APP_NAME}-Setup.exe")
 LOG = os.path.join(tempfile.gettempdir(), f"{APP_NAME}-setup.log")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 SIDEBAR = "#202020"
@@ -158,18 +162,70 @@ def app_running():
 
 
 def install_properties(folder, lang, desktop, reinstall=False):
+    # PCA_WIZARD: la voce di Impostazioni › App apre questa installazione guidata invece di Windows Installer
     props = {"TARGETDIR": folder.rstrip("\\") + "\\", "PCA_LANGUAGE": lang, "PCA_DESKTOP": "1" if desktop else "0",
-             "REBOOT": "ReallySuppress"}
+             "PCA_WIZARD": "1", "REBOOT": "ReallySuppress"}
     if reinstall:  # stesso pacchetto già installato: lo si reinstalla per intero
         props.update(REINSTALL="ALL", REINSTALLMODE="amus")
     return props
 
 
+def running_from_cache():
+    return getattr(sys, "frozen", False) and os.path.normcase(sys.executable) == os.path.normcase(SETUP_CACHE)
+
+
+def cache_setup():
+    """Dopo un'installazione: copia di questo setup, che la voce di Impostazioni › App apre per disinstallare."""
+    if not getattr(sys, "frozen", False) or running_from_cache():
+        return
+    try:
+        os.makedirs(os.path.dirname(SETUP_CACHE), exist_ok=True)
+        tmp = SETUP_CACHE + ".tmp"
+        import shutil
+        shutil.copyfile(sys.executable, tmp)
+        os.replace(tmp, SETUP_CACHE)
+    except OSError:
+        pass  # senza copia la voce di Impostazioni › App usa Windows Installer: la pulizia la fa comunque l'MSI
+
+
+def remove_leftovers(remove_data):
+    """Dopo una disinstallazione: toglie la copia del setup e, se richiesto, impostazioni, registro e stato
+    dell'importazione automatica. I backup delle librerie (accanto alle librerie) non si toccano mai."""
+    import shutil
+    setup_dir = os.path.dirname(SETUP_CACHE)
+    if remove_data and os.path.isdir(DATA_DIR):
+        for name in os.listdir(DATA_DIR):
+            path = os.path.join(DATA_DIR, name)
+            if os.path.normcase(path) == os.path.normcase(setup_dir) and running_from_cache():
+                continue  # è il programma in esecuzione: si toglie dopo la chiusura
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+    if not running_from_cache():
+        shutil.rmtree(setup_dir, ignore_errors=True)
+        if remove_data:
+            try:
+                os.rmdir(DATA_DIR)
+            except OSError:
+                pass
+        return
+    # il setup in esecuzione è proprio la copia: la cancella un comando che parte quando questo processo è chiuso
+    target = DATA_DIR if remove_data else setup_dir
+    subprocess.Popen(f'cmd /c ping 127.0.0.1 -n 5 >nul & rmdir /s /q "{target}"', creationflags=NO_WINDOW | 0x8,
+                     close_fds=True)  # 0x8 = DETACHED_PROCESS
+
+
 # ---------------------------------------------------------------- installazione guidata
 
 class Wizard(tk.Tk):
-    def __init__(self, update_mode=False):
+    def __init__(self, update_mode=False, uninstall_mode=False):
         super().__init__()
+        self.uninstall_mode = uninstall_mode
+        self.remove_data = None  # BooleanVar della pagina di disinstallazione
         self.withdraw()
         self.resizable(False, False)
         set_icon(self)
@@ -201,6 +257,8 @@ class Wizard(tk.Tk):
         self.deiconify()
 
     def _mode(self):
+        if self.uninstall_mode:
+            return "remove" if self.installed else "absent"
         if not self.installed:
             return "install"
         old = parse_version(self.installed[1])
@@ -231,7 +289,8 @@ class Wizard(tk.Tk):
         tk.Label(side, text=t("about", version=self.version), bg=SIDEBAR, fg=MUTED, font=self.f_small).pack(
             anchor="w", padx=24)
         names = {"welcome": "w_s_welcome", "license": "w_s_license", "folder": "w_s_folder",
-                 "progress": "w_s_install", "finish": "w_s_done"}
+                 "progress": "w_uninstall" if self.mode in ("remove", "absent") else "w_s_install",
+                 "finish": "w_s_done"}
         current = self.steps().index(self.page if self.page != "ready" else "progress")
         steps_box = tk.Frame(side, bg=SIDEBAR)
         steps_box.pack(anchor="w", padx=24, pady=(30, 0))
@@ -279,6 +338,9 @@ class Wizard(tk.Tk):
 
     def page_welcome(self):
         old = self.installed[1] if self.installed else ""
+        if self.mode in ("remove", "absent"):
+            self.page_remove(old)
+            return
         if self.mode == "install":
             self.heading(t("w_welcome_head", version=self.version), t("w_welcome_body"))
         elif self.mode == "upgrade":
@@ -312,6 +374,20 @@ class Wizard(tk.Tk):
             for w in self.nav.winfo_children():
                 w.destroy()
             ttk.Button(self.nav, text=t("w_close"), style="Accent.TButton", command=self.destroy).pack(side="right")
+
+    def page_remove(self, version):
+        """Disinstallazione aperta da Impostazioni › App."""
+        if self.mode == "absent":
+            self.heading(t("w_absent_head"), t("w_absent_body"))
+            ttk.Button(self.nav, text=t("w_close"), style="Accent.TButton", command=self.destroy).pack(side="right")
+            return
+        self.heading(t("w_remove_head", version=version), t("w_remove_body"))
+        if self.remove_data is None:
+            self.remove_data = tk.BooleanVar(value=True)
+        ttk.Checkbutton(self.body, text=t("w_remove_data"), variable=self.remove_data).pack(anchor="w", pady=(28, 0))
+        ttk.Label(self.body, text=t("w_remove_note"), style="Muted.TLabel", wraplength=540, justify="left").pack(
+            anchor="w", pady=(6, 0))
+        self.buttons((t("w_uninstall"), self.start_uninstall, True, True))
 
     def page_license(self):
         self.heading(t("w_s_license"), t("w_license_body"))
@@ -362,7 +438,8 @@ class Wizard(tk.Tk):
             path.configure(state="readonly")
             path.pack(fill="x", pady=(14, 0))
         elif kind == "uninstall":
-            self.heading(t("w_removed_head"), t("w_removed_body"))
+            removed = bool(self.remove_data and self.remove_data.get())
+            self.heading(t("w_removed_head"), t("w_removed_all") if removed else t("w_removed_body"))
         else:
             head = t("w_updated_head", version=self.version) if self.mode == "upgrade" else t("w_done_head")
             self.heading(head, t("w_done_body"))
@@ -413,11 +490,18 @@ class Wizard(tk.Tk):
         self.go("progress")
         self.runner = MsiRunner(lambda value: self.events.put(("progress", value)))
 
+        remove_data = bool(self.remove_data and self.remove_data.get())
+
         def work():
             try:
                 code = call(self.runner)
             except Exception:  # noqa: BLE001
                 code = 1603
+            if code in (ERROR_SUCCESS, ERROR_SUCCESS_REBOOT_REQUIRED):
+                if kind == "install":
+                    cache_setup()
+                else:
+                    remove_leftovers(remove_data)
             self.events.put(("done", code))
         threading.Thread(target=work, daemon=True).start()
         self.after(50, self.poll)
@@ -481,6 +565,7 @@ def silent(args):
                 autostart.disable()
             except Exception:  # noqa: BLE001
                 pass
+            remove_leftovers(args.remove_data)
         return code
     try:
         if installed and parse_version(installed[1]) > parse_version(msi_property(package, "ProductVersion")):
@@ -489,7 +574,10 @@ def silent(args):
         lang = args.lang or registry_value("Language") or "auto"
         desktop = not args.no_desktop
         reinstall = bool(installed and installed[0] == msi_property(package, "ProductCode"))
-        return runner.install(package, install_properties(folder, lang, desktop, reinstall))
+        code = runner.install(package, install_properties(folder, lang, desktop, reinstall))
+        if code in (0, 3010):
+            cache_setup()
+        return code
     finally:
         if was_running:
             autostart.start_now()
@@ -503,6 +591,7 @@ def main():
     parser.add_argument("--dir")
     parser.add_argument("--lang", choices=["auto", *LANGUAGES])
     parser.add_argument("--no-desktop", action="store_true")
+    parser.add_argument("--remove-data", action="store_true")  # con --silent --uninstall
     args, _ = parser.parse_known_args()
     if args.silent:
         sys.exit(silent(args))
@@ -514,7 +603,7 @@ def main():
             if not app_running():
                 break
             threading.Event().wait(0.5)
-    wizard = Wizard(update_mode=args.update)
+    wizard = Wizard(update_mode=args.update, uninstall_mode=args.uninstall)
     wizard.watcher_was_running = watcher_was_running
     wizard.mainloop()
     if watcher_was_running and not getattr(wizard, "result", None):

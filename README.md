@@ -73,15 +73,40 @@ profile. When you open LightCraft, the photos you just shot are already there, w
 3. Tick **On** and click **Save**.
 
 How it works:
-- a scheduled task starts it in the background when you sign in to Windows (no window, no administrator rights);
-- every few minutes (2 by default) it checks the folders; a photo is imported once its file has stopped growing;
+- a scheduled task starts it in the background when you sign in to Windows (no administrator rights);
+- when nothing is arriving it checks the folders every few minutes (2 by default);
+- **a transfer is imported in one go.** Photos from a phone arrive one at a time, so as soon as new files show up the
+  folder is checked every 10 seconds, and the import starts only when nothing has arrived or changed for a while (60
+  seconds by default). All the new photos are then imported together, with a single catalog backup;
 - photos are added where they are: nothing is copied or moved;
-- if LightCraft is open, it waits until you close it;
+- if LightCraft is open, it waits until you close it (and if you open LightCraft halfway, the rest is finished later);
 - the catalog is backed up before every import, and every import is written to the log;
 - a photo you remove from the library is not imported again;
 - photos that arrive in the folder and that you import yourself also get their profile.
 
-Updates and uninstalls stop the background process and start it again when they are done.
+### Notification area icon
+
+While automatic import is on, an icon sits in the notification area. Its dot shows the state: **green** = on and
+waiting for photos, **blue** = photos arriving or being imported, **yellow** = waiting for LightCraft to be closed,
+**red** = error. Hover it for a short status.
+
+- **Double-click** opens PresetCraftAppLicator.
+- **Right-click** shows what it is doing right now (photos arriving, *Importing: 4 of 12 photos*, time left, last
+  import) and the commands *Check now*, *Open log* and *Quit* (it starts again at the next sign-in).
+- A Windows notification tells you when the photos have been imported.
+
+The icon uses [pystray](https://github.com/moses-palmer/pystray) (LGPLv3).
+
+## Uninstall
+
+Uninstall from **Settings › Apps › Installed apps** (or run the setup again). PresetCraftAppLicator's own uninstall
+wizard opens. It removes the program, its shortcuts and the automatic import (background process, icon and scheduled
+task), and can delete your settings and log too. Your photos, your LightCraft libraries and the catalog backups next to
+them are never touched.
+
+The cleanup is done by the installer package itself, so it also happens with `msiexec /x` or a silent uninstall
+(`PresetCraftAppLicator-Setup-x.y.z.exe --silent --uninstall [--remove-data]`). Updates stop the background process and
+start it again once the new version is installed.
 
 ### Measured profiles (Ricoh GR IV)
 
@@ -212,11 +237,25 @@ profilo del suo stile. Quando apri LightCraft trovi già le foto appena scattate
    che non sono nella libreria, scegli se importarle o ignorarle.
 3. Spunta **Attiva** e premi **Salva**.
 
-Un'attività pianificata la avvia all'accesso a Windows, senza finestre e senza diritti di amministratore. Ogni pochi minuti
-(2 di predefinito) controlla le cartelle e importa una foto quando il file ha finito di arrivare. Le foto restano dove
-sono. Se LightCraft è aperto aspetta che venga chiuso. Prima di ogni importazione salva un backup del catalogo e scrive
-tutto nel registro. Una foto tolta dalla libreria non viene reimportata. Aggiornamenti e disinstallazione fermano il
-processo in background e lo fanno ripartire alla fine.
+Un'attività pianificata la avvia all'accesso a Windows, senza diritti di amministratore. Quando non arriva niente controlla
+le cartelle ogni pochi minuti (2 di predefinito). **Un trasferimento si importa in una volta sola:** le foto dal telefono
+arrivano una alla volta, quindi appena compaiono file nuovi la cartella si controlla ogni 10 secondi e l'importazione
+parte solo quando non arriva e non cambia più niente da un po' (60 secondi di predefinito). Allora tutte le foto nuove
+vengono importate insieme, con un solo backup del catalogo. Le foto restano dove sono. Se LightCraft è aperto aspetta che
+venga chiuso. Una foto tolta dalla libreria non viene reimportata.
+
+**Icona nell'area di notifica.** Mentre l'importazione automatica è attiva c'è un'icona vicino all'orologio. Il pallino
+dice lo stato: **verde** = attiva e in attesa, **blu** = foto in arrivo o importazione in corso, **giallo** = aspetta
+la chiusura di LightCraft, **rosso** = errore. **Doppio clic** apre l'app; **tasto destro** mostra cosa sta facendo
+(foto in arrivo, *Importazione: 4 di 12 foto*, quanto manca, ultima importazione) e i comandi *Controlla adesso*, *Apri
+registro* e *Chiudi*. A importazione finita arriva una notifica di Windows. L'icona usa
+[pystray](https://github.com/moses-palmer/pystray) (LGPLv3).
+
+**Disinstallazione.** Da **Impostazioni › App › App installate** si apre la disinstallazione guidata di
+PresetCraftAppLicator: toglie programma, collegamenti e importazione automatica (processo in background, icona e attività
+pianificata) e, se vuoi, anche impostazioni e registro. Foto, librerie LightCraft e backup dei cataloghi non vengono mai
+toccati. La pulizia la fa il pacchetto di installazione stesso, quindi avviene anche con `msiexec /x` o con la
+disinstallazione silenziosa. Gli aggiornamenti fermano il processo in background e lo fanno ripartire alla fine.
 
 Per la GR IV ci sono anche profili **misurati**: LUT ricavate confrontando la resa di LightCraft con l'anteprima salvata
 dalla fotocamera nello stesso raw. Sono usati per Standard, Vivid, Positive Film, Cinema (Yellow) e (Green), dove sono più
