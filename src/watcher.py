@@ -265,6 +265,47 @@ def export_presets(rule, state):
         log(f"watch: presets not published ({e})")
 
 
+PRESET_EXTS = (".xmp", ".lrtemplate", ".lcpreset", ".zip", ".lmp", ".mplumpack")
+IMPORT_GROUP = "ViewerCraftStar"
+
+
+def preset_uploads(rule):
+    """File di preset caricati da ViewerCraftStar in .viewercraftstar/import, in attesa di essere importati."""
+    folder = os.path.join(rule["folder"], CATALOG_DIR, "import")
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return []
+    return [os.path.join(folder, n) for n in sorted(names)
+            if not n.startswith(".") and n.lower().endswith(PRESET_EXTS) and os.path.isfile(os.path.join(folder, n))]
+
+
+def import_uploads(cli, rule, state, uploads, summary):
+    """Importa i preset caricati dal telefono (preset.import) e li sposta in import/done; ripubblica l'elenco."""
+    lib = rule["library"]
+    reply = run_cli(cli, lib, [("preset.import", {"paths": uploads, "group": IMPORT_GROUP})], check=False)[0]
+    if not reply.get("ok"):
+        summary["failed"].append(f"preset.import: {reply.get('error')}")
+        log(f"watch ERROR preset.import: {reply.get('error')}")
+        return 0
+    result = reply.get("result") or {}
+    imported = result.get("imported") or []
+    for f in result.get("failed") or []:
+        summary["failed"].append(f"preset: {f}")
+    done_dir = os.path.join(os.path.dirname(uploads[0]), "done")
+    os.makedirs(done_dir, exist_ok=True)
+    for path in uploads:
+        try:
+            os.replace(path, os.path.join(done_dir, os.path.basename(path)))
+        except OSError:
+            pass
+    summary["presets_imported"] = summary.get("presets_imported", 0) + len(imported)
+    log(f"watch: {len(imported)} presets imported from {IMPORT_GROUP}: " + ", ".join(i.get("name", "?") for i in imported))
+    state.pop("presets_sig", None)  # l'elenco per il telefono si ripubblica subito
+    export_presets(rule, state)
+    return len(imported)
+
+
 def phone_presets(lib, settings):
     """{id della foto: id del preset} scelti con ViewerCraftStar per le foto di una libreria: quelle foto non ricevono
     il profilo automatico (né dall'importazione automatica né dalla finestra dell'app)."""
@@ -500,6 +541,7 @@ def cycle(rule, settings, finder, status=None, now=None):
             xmp_todo[path] = (pid, meta, sig)
     preset_todo = {pid: meta["preset"] for _p, (pid, meta, _s) in xmp_todo.items()
                    if meta["preset"] is not None and phone.get(str(pid), "") != meta["preset"]}
+    uploads = preset_uploads(rule)
 
     def save():
         state["handled"] = sorted(handled)
@@ -510,14 +552,14 @@ def cycle(rule, settings, finder, status=None, now=None):
         status.set(phase="incoming", count=len(pending), library=lib_name, quiet_left=int(quiet - still))
         save()
         return FAST_POLL
-    if not ready and not profile_ids and not xmp_todo:
+    if not ready and not profile_ids and not xmp_todo and not uploads:
         state.pop("waiting", None)
         save()
         return None
 
     reason = library_open_reason(lib)
     if reason:
-        count = len(ready) or len(profile_ids) or len(xmp_todo)
+        count = len(ready) or len(profile_ids) or len(xmp_todo) or len(uploads)
         if not state.get("waiting"):
             log(f"watch: {count} new photos for {lib}, waiting until LightCraft is closed")
         status.set(phase="waiting", count=count, library=lib_name, first_wait=not state.get("waiting"))
@@ -582,6 +624,9 @@ def cycle(rule, settings, finder, status=None, now=None):
         if ready:
             log(f"watch: imported {summary['imported']} of {len(ready)}" +
                 (f", not imported: {summary['failed']}" if summary["failed"] else ""))
+        # preset caricati dal telefono: prima di tutto, così sono già in libreria se una foto li sceglie
+        if uploads and not library_open_reason(lib):
+            import_uploads(cli, rule, state, uploads, summary)
         # le foto con un preset scelto sul telefono non ricevono il profilo automatico
         profile_ids -= {int(p) for p, preset in phone.items() if preset}
         if profile_ids and not library_open_reason(lib):

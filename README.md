@@ -99,6 +99,10 @@ watched folder, and applies the chosen preset in LightCraft (develop settings re
 preset). Photos with a preset chosen on the phone are never given the automatic profile again: the app's list shows them
 as *Preset chosen on the phone*.
 
+Presets can also be **imported from the phone**: ViewerCraftStar uploads the chosen files (Lightroom `.xmp` presets,
+`.lrtemplate`, `.lcpreset`, Luminar looks or `.zip` bundles of these) to `.viewercraftstar/import`, and PresetCraftAppLicator
+imports them into the library (group *ViewerCraftStar*) and publishes the updated list.
+
 ### Notification area icon
 
 While automatic import is on, an icon sits in the notification area. Its dot shows the state: **green** = on and
@@ -268,7 +272,9 @@ o di altri programmi non vengono toccati, e il profilo della foto resta com'è. 
 **preset** della libreria (per esempio gli stili GR IV o i preset importati da Lightroom): PresetCraftAppLicator ne pubblica
 l'elenco in una cartella nascosta `.viewercraftstar` nella cartella osservata e lo applica in LightCraft (sviluppo
 azzerato, profilo dello stile di scatto, poi il preset). Le foto con un preset scelto sul telefono non ricevono più il
-profilo automatico.
+profilo automatico. Dal telefono si possono anche **importare preset da file** (`.xmp` di Lightroom, `.lrtemplate`,
+`.lcpreset`, look di Luminar o `.zip` che li contengono): ViewerCraftStar li carica in `.viewercraftstar/import` e
+PresetCraftAppLicator li importa nella libreria (gruppo *ViewerCraftStar*) e ne ripubblica l'elenco.
 
 **Icona nell'area di notifica.** Mentre l'importazione automatica è attiva c'è un'icona vicino all'orologio. Il pallino
 dice lo stato: **verde** = attiva e in attesa, **blu** = foto in arrivo o importazione in corso, **giallo** = aspetta
