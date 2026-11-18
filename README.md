@@ -159,6 +159,9 @@ off. The background process runs for this even if no folder is watched for impor
 Stars, flags, colour labels, titles, captions and keywords changed in that section of the app are left by the phone in
 `<library name>/changes/` as small requests; PresetCraftAppLicator applies them to the library (with LightCraft closed,
 after a catalog backup), moves them to `changes/done` and publishes the updated index, so the phone sees them confirmed.
+Photos can also be **grouped into a stack** (stacks they are already in are merged) or **moved to LightCraft's trash**
+(*Recently Deleted*): the files stay on the NAS, so at the PC you can still check them in LightCraft or delete them for
+good with [CleanCraftNas](https://github.com/poty87/CleanCraftNas).
 
 ### Notification area icon
 
@@ -387,6 +390,9 @@ il PC spento resta valido l'ultimo. Il processo in background parte anche se non
 Stelle, bandierine, etichette, titoli, didascalie e parole chiave cambiati in quella sezione dell'app vengono lasciati dal
 telefono in `<nome libreria>/changes/`: PresetCraftAppLicator li applica alla libreria (con LightCraft chiuso, dopo un
 backup del catalogo), li sposta in `changes/done` e ripubblica l'indice, così il telefono li vede confermati.
+Dal telefono si possono anche **raggruppare foto in una pila** (le pile in cui sono già vengono unite) o **spostarle nel
+cestino di LightCraft** (*Eliminate di recente*): i file restano sul NAS, così al PC puoi ancora ricontrollarle in
+LightCraft o cancellarle definitivamente con [CleanCraftNas](https://github.com/poty87/CleanCraftNas).
 
 **Icona nell'area di notifica.** Mentre l'importazione automatica è attiva c'è un'icona vicino all'orologio. Il pallino
 dice lo stato: **verde** = attiva e in attesa, **blu** = foto in arrivo o importazione in corso, **giallo** = aspetta

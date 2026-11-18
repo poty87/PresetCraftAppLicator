@@ -888,11 +888,32 @@ def phone_change_commands(change):
         meta["keywords"] = [str(k).strip() for k in change["keywords"] if str(k).strip()]
     if meta:
         cmds.append(("photo.setMeta", {"ids": ids, **meta}))
+    # cestino di LightCraft ("Eliminate di recente"): il file resta sul NAS, si cancella poi con CleanCraftNas
+    if change.get("trash") is True:
+        cmds.append(("photo.delete", {"ids": ids}))
+    elif change.get("trash") is False:
+        cmds.append(("photo.restore", {"ids": ids}))
+    return cmds
+
+
+def phone_stack_commands(per_photo, known):
+    """Pile create sul telefono: ogni foto porta "stack" = l'id della copertina; le foto con la stessa copertina
+    diventano una pila (quelle già in una pila la portano con sé: LightCraft unisce le pile)."""
+    groups = {}
+    for pid, ch in per_photo.items():
+        top = ch.get("stack")
+        if isinstance(top, int) and not isinstance(top, bool) and top in known:
+            groups.setdefault(top, set()).add(pid)
+    cmds = []
+    for top, members in sorted(groups.items()):
+        members.discard(top)
+        if members:
+            cmds.append(("stack.group", {"ids": [top] + sorted(members), "top": top, "collapsed": True}))
     return cmds
 
 
 def apply_phone_changes(lib, folder, settings):
-    """Le modifiche fatte sul telefono (stelle, bandierine, etichette, titolo, didascalia, parole chiave), lasciate da
+    """Le modifiche fatte sul telefono (stelle, bandierine, etichette, titolo, didascalia, parole chiave, cestino, pile), lasciate da
     ViewerCraftStar in <cartella>/<libreria>/changes/*.json: applicate con LightCraft chiuso, dopo un backup; i file
     applicati vanno in changes/done. Se lightcraft-cli non riesce, restano e si riprovano al giro dopo."""
     changes_dir = os.path.join(folder, library_folder_name(lib), "changes")
@@ -919,7 +940,7 @@ def apply_phone_changes(lib, folder, settings):
                 pid, at = int(ch["id"]), int(ch.get("at") or 0)
             except (KeyError, TypeError, ValueError):
                 continue
-            for field in ("rating", "flag", "label", "title", "caption", "keywords"):
+            for field in ("rating", "flag", "label", "title", "caption", "keywords", "trash", "stack"):
                 if field in ch and (at, ) >= (latest.get((pid, field), (-1, None))[0], ):
                     latest[(pid, field)] = (at, ch[field])
     if not read:
@@ -930,6 +951,7 @@ def apply_phone_changes(lib, folder, settings):
         if pid in known:
             per_photo.setdefault(pid, {"id": pid})[field] = value
     commands = [cmd for ch in per_photo.values() for cmd in phone_change_commands(ch)]
+    commands += phone_stack_commands(per_photo, known)
     if commands:
         root, kept = backup_root(lib, settings), settings.get("backups_kept", BACKUPS_KEPT)
         backup = backup_library(lib, root, kept)
