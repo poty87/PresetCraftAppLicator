@@ -156,6 +156,10 @@ folder under *Settings › Home library*. For each one PresetCraftAppLicator wri
 18,000 photos). It is rewritten only when the library changes and LightCraft is closed, so it stays valid while the PC is
 off. The background process runs for this even if no folder is watched for imports.
 
+Stars, flags, colour labels, titles, captions and keywords changed in that section of the app are left by the phone in
+`<library name>/changes/` as small requests; PresetCraftAppLicator applies them to the library (with LightCraft closed,
+after a catalog backup), moves them to `changes/done` and publishes the updated index, so the phone sees them confirmed.
+
 ### Notification area icon
 
 While automatic import is on, an icon sits in the notification area. Its dot shows the state: **green** = on and
@@ -380,6 +384,9 @@ aggiunte con *Aggiungi libreria*). Nell'app imposta la stessa cartella in *Impos
 ci scrive un piccolo indice (`<nome libreria>/index.json.gz`: foto, stelle, bandierine, etichette, titolo, parole chiave,
 dati di scatto e pile — circa 0,3 MB per 18.000 foto), riscritto solo quando la libreria cambia e LightCraft è chiuso: con
 il PC spento resta valido l'ultimo. Il processo in background parte anche se non c'è nessuna cartella da importare.
+Stelle, bandierine, etichette, titoli, didascalie e parole chiave cambiati in quella sezione dell'app vengono lasciati dal
+telefono in `<nome libreria>/changes/`: PresetCraftAppLicator li applica alla libreria (con LightCraft chiuso, dopo un
+backup del catalogo), li sposta in `changes/done` e ripubblica l'indice, così il telefono li vede confermati.
 
 **Icona nell'area di notifica.** Mentre l'importazione automatica è attiva c'è un'icona vicino all'orologio. Il pallino
 dice lo stato: **verde** = attiva e in attesa, **blu** = foto in arrivo o importazione in corso, **giallo** = aspetta

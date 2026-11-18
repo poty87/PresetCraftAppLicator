@@ -867,6 +867,93 @@ def publish_library_index(lib, folder, state):
     return True
 
 
+PHONE_LABELS = {"red", "yellow", "green", "blue", "purple", "none"}
+PHONE_FLAGS = {"pick", "reject", "none"}
+
+
+def phone_change_commands(change):
+    """I comandi di lightcraft-cli per una modifica del telefono: solo i campi presenti, gli altri restano com'erano."""
+    ids = [int(change["id"])]
+    cmds = []
+    if isinstance(change.get("rating"), int) and 0 <= change["rating"] <= 5:
+        cmds.append(("photo.rate", {"ids": ids, "rating": change["rating"]}))
+    if change.get("flag") in PHONE_FLAGS:
+        cmds.append(("photo.flag", {"ids": ids, "flag": change["flag"]}))
+    if "label" in change:
+        label = (change["label"] or "none").lower()
+        if label in PHONE_LABELS:
+            cmds.append(("photo.label", {"ids": ids, "label": label}))
+    meta = {k: change[k] for k in ("title", "caption") if isinstance(change.get(k), str)}
+    if isinstance(change.get("keywords"), list):
+        meta["keywords"] = [str(k).strip() for k in change["keywords"] if str(k).strip()]
+    if meta:
+        cmds.append(("photo.setMeta", {"ids": ids, **meta}))
+    return cmds
+
+
+def apply_phone_changes(lib, folder, settings):
+    """Le modifiche fatte sul telefono (stelle, bandierine, etichette, titolo, didascalia, parole chiave), lasciate da
+    ViewerCraftStar in <cartella>/<libreria>/changes/*.json: applicate con LightCraft chiuso, dopo un backup; i file
+    applicati vanno in changes/done. Se lightcraft-cli non riesce, restano e si riprovano al giro dopo."""
+    changes_dir = os.path.join(folder, library_folder_name(lib), "changes")
+    try:
+        files = sorted(f for f in os.listdir(changes_dir) if f.lower().endswith(".json"))
+    except OSError:
+        return False
+    if not files or library_open_reason(lib):
+        return False
+    cli = settings.get("cli") or DEFAULT_CLI
+    if not is_cli(cli):
+        return False
+    latest = {}  # (id, campo) -> (momento, valore): per ogni campo vale l'ultima modifica
+    read = []
+    for name in files:
+        try:
+            with open(os.path.join(changes_dir, name), encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue  # file a metà o rovinato: si riprova (o resta lì)
+        read.append(name)
+        for ch in data.get("changes") or []:
+            try:
+                pid, at = int(ch["id"]), int(ch.get("at") or 0)
+            except (KeyError, TypeError, ValueError):
+                continue
+            for field in ("rating", "flag", "label", "title", "caption", "keywords"):
+                if field in ch and (at, ) >= (latest.get((pid, field), (-1, None))[0], ):
+                    latest[(pid, field)] = (at, ch[field])
+    if not read:
+        return False
+    known = {int(k) for k in read_catalog(lib)["photos"]}
+    per_photo = {}
+    for (pid, field), (_at, value) in latest.items():
+        if pid in known:
+            per_photo.setdefault(pid, {"id": pid})[field] = value
+    commands = [cmd for ch in per_photo.values() for cmd in phone_change_commands(ch)]
+    if commands:
+        root, kept = backup_root(lib, settings), settings.get("backups_kept", BACKUPS_KEPT)
+        backup = backup_library(lib, root, kept)
+        replies = run_cli(cli, lib, commands, check=False)
+        failed = [r for r in replies if not r.get("ok")]
+        if failed or len(replies) < len(commands):
+            log(f"watch ERROR changes from {XMP_TOOL} for {lib}: {failed[:1] or 'no reply'} (retrying later)")
+            return False
+        log(f"--- watch: changes from {XMP_TOOL} applied to {len(per_photo)} photos in {lib} (backup: {backup})")
+    done_dir = os.path.join(changes_dir, "done")
+    os.makedirs(done_dir, exist_ok=True)
+    for name in read:
+        try:
+            os.replace(os.path.join(changes_dir, name), os.path.join(done_dir, name))
+        except OSError:
+            pass
+    for old in sorted(os.listdir(done_dir))[:-50]:  # si tengono solo le ultime 50 richieste applicate
+        try:
+            os.remove(os.path.join(done_dir, old))
+        except OSError:
+            pass
+    return True
+
+
 def publish_phone_libraries(settings):
     folder, libs = phone_settings(settings)
     if not libs:
@@ -874,6 +961,10 @@ def publish_phone_libraries(settings):
     state = load_json(PHONE_STATE)
     changed = False
     for lib in libs:
+        try:
+            apply_phone_changes(lib, folder, settings)
+        except Exception as e:  # noqa: BLE001
+            log(f"watch ERROR changes from {XMP_TOOL} for {lib}: {e!r}")
         try:
             changed |= publish_library_index(lib, folder, state)
         except Exception as e:  # noqa: BLE001 — una libreria che non si legge non ferma le altre
