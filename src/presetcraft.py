@@ -787,16 +787,18 @@ class AutoImportDialog(tk.Toplevel):
         self.phone_folder = tk.StringVar(value=ph.get("folder") or "")
         ttk.Entry(row, textvariable=self.phone_folder, state="readonly", width=58).pack(side="left", padx=(10, 8))
         ttk.Button(row, text=t("auto_phone_pick"), command=self.pick_phone_folder).pack(side="left")
-        chosen = {watcher.key(x) for x in ph.get("libraries") or []}
-        self.phone_vars = []
-        libs_box = ttk.Frame(frame)
-        libs_box.pack(fill="x", pady=(6, 0))
-        for lib in self.libs:
-            var = tk.BooleanVar(value=watcher.key(lib) in chosen)
-            ttk.Checkbutton(libs_box, text=self.lib_name(lib), variable=var).pack(anchor="w")
-            self.phone_vars.append((lib, var))
         ttk.Label(frame, text=t("auto_phone_hint"), style="Muted.TLabel", wraplength=720, justify="left").pack(
             anchor="w", pady=(4, 0))
+        chosen = {watcher.key(x) for x in ph.get("libraries") or []}
+        self.phone_vars = []
+        ttk.Label(frame, text=t("auto_phone_libs"), style="Body.TLabel").pack(anchor="w", pady=(8, 2))
+        libs_box = ttk.Frame(frame)
+        libs_box.pack(fill="x")
+        for r, lib in enumerate(self.libs):
+            var = tk.BooleanVar(value=watcher.key(lib) in chosen)
+            ttk.Checkbutton(libs_box, text=self.lib_name(lib), variable=var).grid(row=r, column=0, sticky="w")
+            ttk.Label(libs_box, text=lib, style="Muted.TLabel").grid(row=r, column=1, sticky="w", padx=(12, 0))
+            self.phone_vars.append((lib, var))
 
         ttk.Label(frame, text=t("auto_options").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
         self.enabled = tk.BooleanVar(value=bool(w.get("enabled")))
@@ -904,10 +906,26 @@ class AutoImportDialog(tk.Toplevel):
         self.fill()
 
     def pick_phone_folder(self):
-        start = self.phone_folder.get() or (self.rules[0]["folder"] if self.rules else "")
+        # si parte dalla radice dell'unità delle foto, dove creare la cartella nuova (non dentro la cartella delle foto)
+        start = self.phone_folder.get() or (os.path.splitdrive(self.rules[0]["folder"])[0] + "\\" if self.rules else "")
         folder = filedialog.askdirectory(parent=self, title=t("auto_phone_pick_title"), initialdir=start or None)
-        if folder:
-            self.phone_folder.set(watcher.prefer_drive(os.path.normpath(folder)))
+        if not folder:
+            return
+        folder = watcher.prefer_drive(os.path.normpath(folder))
+        if self.has_photos(folder):
+            Dialog.ask(self, t("auto_title"), t("auto_phone_has_photos"), folder, level="warn")
+            return
+        self.phone_folder.set(folder)
+
+    def has_photos(self, folder):
+        """La cartella è una cartella osservata, o contiene direttamente foto: non va bene per il telefono."""
+        if any(watcher.key(r["folder"]) == watcher.key(folder) for r in self.rules):
+            return True
+        try:
+            with os.scandir(folder) as it:
+                return any(e.is_file() and os.path.splitext(e.name)[1].lower() in watcher.PHOTO_EXTS for e in it)
+        except OSError:
+            return False
 
     def remove(self):
         sel = self.tree.selection()

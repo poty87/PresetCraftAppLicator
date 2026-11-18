@@ -148,8 +148,10 @@ LightCraft as soon as the home PC is on — useful when travelling with the PC o
 
 ### Libraries on the phone (ViewerCraftStar)
 
-In **Automatic import…**, under *Libraries to browse on the phone*, choose a folder on the NAS and tick the libraries you
-want to see in ViewerCraftStar's *Library* section. For each one PresetCraftAppLicator writes a small index there
+In **Automatic import…**, under *Libraries to browse on the phone*, choose (or create) a **new, empty service folder** on the
+NAS — for example `Y:\ViewerCraftStar`, not the photos' folder nor the catalogs' one — and tick the libraries you want to
+see in ViewerCraftStar's *Library* section (the list shows the libraries added with *Add library*). In the app, set the same
+folder under *Settings › Home library*. For each one PresetCraftAppLicator writes a small index there
 (`<library name>/index.json.gz`: photos, stars, flags, labels, title, keywords, camera data and stacks — about 0.3 MB for
 18,000 photos). It is rewritten only when the library changes and LightCraft is closed, so it stays valid while the PC is
 off. The background process runs for this even if no folder is watched for imports.
@@ -371,8 +373,10 @@ ViewerCraftStar mostra una casetta verde per le foto già in LightCraft e una bl
 sicuro sul NAS: entrambe si possono togliere dal telefono, e le blu entrano in LightCraft appena il PC di casa è acceso —
 utile in viaggio con il PC spento.
 
-**Librerie sul telefono.** In **Importazione automatica…**, sotto *Librerie da consultare sul telefono*, scegli una cartella
-del NAS e spunta le librerie che vuoi vedere nella sezione *Libreria* di ViewerCraftStar. Per ognuna PresetCraftAppLicator
+**Librerie sul telefono.** In **Importazione automatica…**, sotto *Librerie da consultare sul telefono*, scegli (o crea) una
+**cartella di servizio nuova e vuota** sul NAS — per esempio `Y:\ViewerCraftStar`, non quella delle foto né quella dei
+cataloghi — e spunta le librerie che vuoi vedere nella sezione *Libreria* di ViewerCraftStar (l'elenco mostra quelle
+aggiunte con *Aggiungi libreria*). Nell'app imposta la stessa cartella in *Impostazioni › Libreria di casa*. Per ognuna PresetCraftAppLicator
 ci scrive un piccolo indice (`<nome libreria>/index.json.gz`: foto, stelle, bandierine, etichette, titolo, parole chiave,
 dati di scatto e pile — circa 0,3 MB per 18.000 foto), riscritto solo quando la libreria cambia e LightCraft è chiuso: con
 il PC spento resta valido l'ultimo. Il processo in background parte anche se non c'è nessuna cartella da importare.
