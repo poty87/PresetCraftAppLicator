@@ -317,8 +317,8 @@ class BackupsDialog(tk.Toplevel):
         self.app = app
         self.lib = app.settings.get("library")
         self.title(t("backups_title"))
-        self.geometry("760x460")
-        self.minsize(620, 360)
+        self.geometry("760x510")
+        self.minsize(620, 400)
         self.transient(app)
         set_icon(self)
         frame = ttk.Frame(self, padding=(24, 22, 24, 18))
@@ -339,6 +339,17 @@ class BackupsDialog(tk.Toplevel):
         ttk.Button(buttons, text=t("btn_open_folder"), command=self.open_folder).pack(side="left")
         self.total = ttk.Label(buttons, style="Muted.TLabel")
         self.total.pack(side="left", padx=(12, 0))
+
+        # pulizia per età: si tengono i backup degli ultimi N giorni di calendario, oggi compreso
+        older = ttk.Frame(frame)
+        older.pack(side="bottom", fill="x", pady=(12, 0))
+        ttk.Label(older, text=t("backups_older_label"), style="Body.TLabel").pack(side="left")
+        self.days = ttk.Spinbox(older, from_=1, to=3650, width=5, justify="right")
+        self.days.set(str(app.settings.get("backups_days", 7)))
+        self.days.pack(side="left", padx=(8, 8))
+        ttk.Label(older, text=t("backups_older_days"), style="Muted.TLabel").pack(side="left")
+        self.btn_older = ttk.Button(older, text=t("btn_delete_older"), command=self.delete_older)
+        self.btn_older.pack(side="right")
 
         listf = ttk.Frame(frame)
         listf.pack(fill="both", expand=True, pady=(14, 0))
@@ -379,6 +390,7 @@ class BackupsDialog(tk.Toplevel):
     def update_buttons(self):
         self.btn_sel.state(["!disabled"] if self.tree.selection() else ["disabled"])
         self.btn_all.state(["!disabled"] if self.backups else ["disabled"])
+        self.btn_older.state(["!disabled"] if self.backups else ["disabled"])
 
     def open_folder(self):
         sel = self.tree.selection()
@@ -388,8 +400,30 @@ class BackupsDialog(tk.Toplevel):
         elif path and os.path.isdir(os.path.dirname(path)):
             os.startfile(os.path.dirname(path))
 
-    def delete(self, all_=False):
-        chosen = list(self.backups.values()) if all_ else [self.backups[r] for r in self.tree.selection()]
+    def older_than(self, days, today=None):
+        """I backup fatti prima degli ultimi `days` giorni di calendario (1 = si tengono solo quelli di oggi)."""
+        first_kept = (today or datetime.date.today()) - datetime.timedelta(days=days - 1)
+        return [b for b in self.backups.values() if b["when"].date() < first_kept]
+
+    def delete_older(self):
+        try:
+            days = int(str(self.days.get()).strip())
+            if days < 1:
+                raise ValueError
+        except ValueError:
+            Dialog.ask(self, t("backups_title"), t("backups_older_bad"), None, level="warn")
+            return
+        self.app.settings["backups_days"] = days
+        save_settings(self.app.settings)
+        chosen = self.older_than(days)
+        if not chosen:
+            Dialog.ask(self, t("backups_title"), t("backups_older_none", days=days), None, level="info")
+            return
+        self.delete(chosen=chosen)
+
+    def delete(self, all_=False, chosen=None):
+        if chosen is None:
+            chosen = list(self.backups.values()) if all_ else [self.backups[r] for r in self.tree.selection()]
         if not chosen:
             return
         size = human(sum(b["bytes"] for b in chosen))

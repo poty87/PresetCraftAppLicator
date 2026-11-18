@@ -201,7 +201,8 @@ PresetCraftAppLicator is a sibling of [CleanCraftNas](https://github.com/poty87/
 - several libraries in a drop-down menu;
 - six languages: Italiano, English, Deutsch, Español, Français, Português;
 - sortable, reorderable columns that you can show or hide;
-- a backup of the catalog before every change, with a **Backups…** window to open or delete them;
+- a backup of the catalog before every change (the last 5 are kept, adjustable in the settings), with a **Backups…**
+  window to open or delete them — including *Delete backups older than N days* (1 keeps only today's);
 - a log of every change (automatic imports included);
 - a silent check for updates at start, with a one-click update;
 - a setup wizard with the same dark look.
@@ -266,7 +267,9 @@ Cambia solo il profilo: esposizione, bilanciamento del bianco e le altre regolaz
    dove i giorni con importazioni sono in blu) e, se vuoi, di ore, ed esamini le foto dell'intervallo o solo le
    importazioni che selezioni.
 4. Controlla l'elenco: blu = riceverà il profilo, verde = già a posto, giallo = resta com'è.
-5. Premi **Applica i profili**. Prima viene salvata una copia del catalogo.
+5. Premi **Applica i profili**. Prima viene salvata una copia del catalogo: se ne tengono le ultime 5 (si cambia
+   nelle impostazioni) e dalla finestra **Backup…** puoi eliminare quelle selezionate, tutte, o quelle più vecchie di un
+   certo numero di giorni (1 = tieni solo quelle di oggi).
 
 Le foto a cui hai già scelto un altro profilo in LightCraft non vengono toccate, a meno che tu non lo chieda con il tasto
 destro.
