@@ -778,6 +778,26 @@ class AutoImportDialog(tk.Toplevel):
         self.subfolders = tk.BooleanVar(value=True)
         ttk.Checkbutton(frame, text=t("auto_subfolders"), variable=self.subfolders).pack(anchor="w", pady=(8, 0))
 
+        # librerie da consultare sul telefono (sezione Libreria di ViewerCraftStar): indice scritto in una cartella del NAS
+        ph = app.settings.get("phone") or {}
+        ttk.Label(frame, text=t("auto_phone").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
+        row = ttk.Frame(frame)
+        row.pack(fill="x")
+        ttk.Label(row, text=t("auto_phone_folder"), style="Body.TLabel").pack(side="left")
+        self.phone_folder = tk.StringVar(value=ph.get("folder") or "")
+        ttk.Entry(row, textvariable=self.phone_folder, state="readonly", width=58).pack(side="left", padx=(10, 8))
+        ttk.Button(row, text=t("auto_phone_pick"), command=self.pick_phone_folder).pack(side="left")
+        chosen = {watcher.key(x) for x in ph.get("libraries") or []}
+        self.phone_vars = []
+        libs_box = ttk.Frame(frame)
+        libs_box.pack(fill="x", pady=(6, 0))
+        for lib in self.libs:
+            var = tk.BooleanVar(value=watcher.key(lib) in chosen)
+            ttk.Checkbutton(libs_box, text=self.lib_name(lib), variable=var).pack(anchor="w")
+            self.phone_vars.append((lib, var))
+        ttk.Label(frame, text=t("auto_phone_hint"), style="Muted.TLabel", wraplength=720, justify="left").pack(
+            anchor="w", pady=(4, 0))
+
         ttk.Label(frame, text=t("auto_options").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
         self.enabled = tk.BooleanVar(value=bool(w.get("enabled")))
         ttk.Checkbutton(frame, text=t("auto_enable"), variable=self.enabled).pack(anchor="w")
@@ -883,6 +903,12 @@ class AutoImportDialog(tk.Toplevel):
         self.added.append((rule, import_existing))
         self.fill()
 
+    def pick_phone_folder(self):
+        start = self.phone_folder.get() or (self.rules[0]["folder"] if self.rules else "")
+        folder = filedialog.askdirectory(parent=self, title=t("auto_phone_pick_title"), initialdir=start or None)
+        if folder:
+            self.phone_folder.set(watcher.prefer_drive(os.path.normpath(folder)))
+
     def remove(self):
         sel = self.tree.selection()
         if not sel:
@@ -894,7 +920,13 @@ class AutoImportDialog(tk.Toplevel):
     def save(self):
         s = self.app.settings
         before = s.get("watch") or {}
-        enabled = bool(self.enabled.get()) and bool(self.rules)
+        phone_libs = [lib for lib, var in self.phone_vars if var.get()]
+        phone_folder = self.phone_folder.get().strip()
+        if phone_libs and not phone_folder:
+            Dialog.ask(self, t("auto_title"), t("auto_phone_need_folder"), None, level="warn")
+            return
+        s["phone"] = {"folder": phone_folder, "libraries": phone_libs}
+        enabled = bool(self.enabled.get()) and bool(self.rules or phone_libs)
         try:
             # prima lo stato delle regole nuove, poi le impostazioni: il processo in background non vede mai una
             # regola senza il suo elenco di file da ignorare

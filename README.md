@@ -146,6 +146,14 @@ knows whether the home PC is on. ViewerCraftStar shows a green house for photos 
 for photos whose DNG and latest metadata are safe on the NAS: both can be moved to the phone's bin, and blue ones enter
 LightCraft as soon as the home PC is on — useful when travelling with the PC off.
 
+### Libraries on the phone (ViewerCraftStar)
+
+In **Automatic import…**, under *Libraries to browse on the phone*, choose a folder on the NAS and tick the libraries you
+want to see in ViewerCraftStar's *Library* section. For each one PresetCraftAppLicator writes a small index there
+(`<library name>/index.json.gz`: photos, stars, flags, labels, title, keywords, camera data and stacks — about 0.3 MB for
+18,000 photos). It is rewritten only when the library changes and LightCraft is closed, so it stays valid while the PC is
+off. The background process runs for this even if no folder is watched for imports.
+
 ### Notification area icon
 
 While automatic import is on, an icon sits in the notification area. Its dot shows the state: **green** = on and
@@ -362,6 +370,12 @@ telefono applicata (subito dopo un'importazione, senza aspettare il controllo su
 ViewerCraftStar mostra una casetta verde per le foto già in LightCraft e una blu per quelle con DNG e ultimi metadati al
 sicuro sul NAS: entrambe si possono togliere dal telefono, e le blu entrano in LightCraft appena il PC di casa è acceso —
 utile in viaggio con il PC spento.
+
+**Librerie sul telefono.** In **Importazione automatica…**, sotto *Librerie da consultare sul telefono*, scegli una cartella
+del NAS e spunta le librerie che vuoi vedere nella sezione *Libreria* di ViewerCraftStar. Per ognuna PresetCraftAppLicator
+ci scrive un piccolo indice (`<nome libreria>/index.json.gz`: foto, stelle, bandierine, etichette, titolo, parole chiave,
+dati di scatto e pile — circa 0,3 MB per 18.000 foto), riscritto solo quando la libreria cambia e LightCraft è chiuso: con
+il PC spento resta valido l'ultimo. Il processo in background parte anche se non c'è nessuna cartella da importare.
 
 **Icona nell'area di notifica.** Mentre l'importazione automatica è attiva c'è un'icona vicino all'orologio. Il pallino
 dice lo stato: **verde** = attiva e in attesa, **blu** = foto in arrivo o importazione in corso, **giallo** = aspetta

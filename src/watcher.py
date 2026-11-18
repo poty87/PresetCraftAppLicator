@@ -16,9 +16,11 @@ cui manca ancora il profilo (se LightCraft viene aperto a metà, il profilo arri
 
 import ctypes
 import datetime
+import gzip
 import hashlib
 import json
 import os
+import re
 import threading
 import time
 
@@ -775,7 +777,109 @@ def apply_app_metadata(cli, lib, todo, seen_xmp, key, summary, batch=50):
 def watch_settings(settings):
     w = settings.get("watch") or {}
     rules = [r for r in w.get("rules") or [] if r.get("folder") and r.get("library")]
-    return bool(w.get("enabled")) and bool(rules), rules, max(1, min(60, int(w.get("interval") or DEFAULT_INTERVAL)))
+    _folder, libs = phone_settings(settings)
+    return (bool(w.get("enabled")) and bool(rules or libs), rules,
+            max(1, min(60, int(w.get("interval") or DEFAULT_INTERVAL))))
+
+
+# ---------------------------------------------------------------- librerie consultabili dal telefono
+
+PHONE_INDEX = "index.json.gz"
+PHONE_STATE = os.path.join(STATE_DIR, "phone-libraries.json")
+
+
+def phone_settings(settings):
+    """(cartella sul NAS, librerie) da pubblicare per la sezione Libreria di ViewerCraftStar."""
+    ph = settings.get("phone") or {}
+    folder = (ph.get("folder") or "").strip()
+    return folder, ([lib for lib in ph.get("libraries") or [] if lib] if folder else [])
+
+
+def library_folder_name(lib):
+    """Il nome della sottocartella di una libreria nella cartella del telefono (il nome della libreria)."""
+    name = os.path.basename(os.path.normpath(lib))
+    return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(" .") or "library"
+
+
+def build_library_index(lib):
+    """L'indice compatto di una libreria per il telefono: foto (senza le eliminate e i video), metadati, pile e la
+    corrispondenza tra unità del PC e cartelle condivise. Chiavi corte: l'indice di 18.000 foto pesa poco."""
+    cat = read_catalog(lib)
+    photos = []
+    for p in cat["photos"].values():
+        if p.get("deleted") or p.get("kind") not in ("raw", "image"):
+            continue
+        m = p.get("meta") or {}
+        src = (p.get("source") or {}).get("path") or ""
+        d = {"i": int(p["id"]), "n": p.get("file_name") or os.path.basename(src), "p": src,
+             "c": (p.get("captured") or "")[:19], "d": (p.get("imported") or "")[:19], "r": int(p.get("rating") or 0),
+             "f": p.get("flag") or "none", "l": p.get("label") or "", "k": p.get("kind"),
+             "w": int(p.get("width") or 0), "h": int(p.get("height") or 0)}
+        for short, name in (("t", "title"), ("a", "caption"), ("cr", "creator"), ("cp", "copyright"),
+                            ("m", "camera"), ("ln", "lens"), ("sh", "shutter")):
+            if m.get(name):
+                d[short] = m[name]
+        for short, name in (("fo", "focal_mm"), ("ap", "aperture"), ("iso", "iso")):
+            if m.get(name) is not None:
+                d[short] = m[name]
+        if m.get("keywords"):
+            d["kw"] = list(m["keywords"])
+        if p.get("copy_of"):  # copia virtuale: stesso file, sviluppo diverso
+            d["co"], d["cn"] = int(p["copy_of"]), p.get("copy_name") or ""
+        if p.get("edited"):
+            d["e"] = 1
+        photos.append(d)
+    ids = {d["i"] for d in photos}
+    stacks = []
+    for st in (cat.get("stacks") or {}).values():
+        members = [int(x) for x in st.get("photos") or [] if int(x) in ids]
+        if len(members) > 1:  # la prima foto è la copertina della pila
+            stacks.append({"id": int(st["id"]), "photos": members, "collapsed": bool(st.get("collapsed", True))})
+    return {"version": 1, "library": os.path.basename(os.path.normpath(lib)),
+            "updated": datetime.datetime.now().isoformat(timespec="seconds"),
+            "drives": mapped_drives(), "photos": photos, "stacks": stacks}
+
+
+def publish_library_index(lib, folder, state):
+    """Scrive (o aggiorna) l'indice di una libreria nella cartella del telefono, se il catalogo è cambiato e
+    LightCraft è chiuso (con LightCraft aperto le ultime modifiche non sono ancora nel catalogo). True se scritto."""
+    snap = os.path.join(lib, "catalog.snap")
+    st = os.stat(snap)
+    sig = [st.st_size, st.st_mtime_ns]
+    target_dir = os.path.join(folder, library_folder_name(lib))
+    target = os.path.join(target_dir, PHONE_INDEX)
+    if state.get(lib) == sig and os.path.exists(target):
+        return False
+    if library_open_reason(lib):
+        return False
+    data = build_library_index(lib)
+    os.makedirs(target_dir, exist_ok=True)
+    tmp = target + ".tmp"
+    with gzip.open(tmp, "wt", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
+    os.replace(tmp, target)  # chi legge trova l'indice vecchio o quello nuovo, mai mezzo
+    save_json(os.path.join(target_dir, "info.json"),
+              {"version": 1, "library": data["library"], "photos": len(data["photos"]), "stacks": len(data["stacks"]),
+               "updated": data["updated"]})
+    state[lib] = sig
+    log(f"watch: library index for {XMP_TOOL}: {data['library']} ({len(data['photos'])} photos, "
+        f"{len(data['stacks'])} stacks)")
+    return True
+
+
+def publish_phone_libraries(settings):
+    folder, libs = phone_settings(settings)
+    if not libs:
+        return
+    state = load_json(PHONE_STATE)
+    changed = False
+    for lib in libs:
+        try:
+            changed |= publish_library_index(lib, folder, state)
+        except Exception as e:  # noqa: BLE001 — una libreria che non si legge non ferma le altre
+            log(f"watch ERROR library index {lib}: {e!r}")
+    if changed:
+        save_json(PHONE_STATE, state)
 
 
 _mutex = None
@@ -839,6 +943,7 @@ class Watcher:
                     if wanted:
                         pause = min(pause, wanted)
                     write_heartbeat(rule, interval, self.status.get().get("phase"))
+                publish_phone_libraries(settings)
                 next_check = time.time() + pause
                 self.status.set(next_check=next_check)
                 save_json(STATUS, {"pid": os.getpid(), "checked": datetime.datetime.now().isoformat(timespec="seconds"),

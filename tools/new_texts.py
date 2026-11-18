@@ -776,4 +776,46 @@ NEW = {
     "backups_older_bad": {"it": "Indica un numero di giorni da 1 in su.", "en": "Enter a number of days from 1 up.",
                           "de": "Gib eine Anzahl Tage ab 1 ein.", "es": "Indica un número de días a partir de 1.",
                           "fr": "Indiquez un nombre de jours à partir de 1.", "pt": "Indique um número de dias a partir de 1."},
+    "auto_phone": {"it": "Librerie da consultare sul telefono (ViewerCraftStar)",
+                   "en": "Libraries to browse on the phone (ViewerCraftStar)",
+                   "de": "Bibliotheken zum Durchsehen auf dem Telefon (ViewerCraftStar)",
+                   "es": "Bibliotecas para consultar en el teléfono (ViewerCraftStar)",
+                   "fr": "Bibliothèques à consulter sur le téléphone (ViewerCraftStar)",
+                   "pt": "Bibliotecas para consultar no telemóvel (ViewerCraftStar)"},
+    "auto_phone_folder": {"it": "Cartella sul NAS:", "en": "Folder on the NAS:", "de": "Ordner auf dem NAS:",
+                          "es": "Carpeta en el NAS:", "fr": "Dossier sur le NAS :", "pt": "Pasta no NAS:"},
+    "auto_phone_pick": {"it": "Scegli…", "en": "Choose…", "de": "Wählen…", "es": "Elegir…", "fr": "Choisir…",
+                        "pt": "Escolher…"},
+    "auto_phone_pick_title": {"it": "Cartella del NAS per le librerie del telefono",
+                              "en": "NAS folder for the phone's libraries",
+                              "de": "NAS-Ordner für die Bibliotheken des Telefons",
+                              "es": "Carpeta del NAS para las bibliotecas del teléfono",
+                              "fr": "Dossier du NAS pour les bibliothèques du téléphone",
+                              "pt": "Pasta do NAS para as bibliotecas do telemóvel"},
+    "auto_phone_hint": {
+        "it": "Per ogni libreria spuntata, in questa cartella del NAS viene scritto un piccolo indice (foto, stelle, "
+              "bandierine, etichette, parole chiave, pile) che ViewerCraftStar legge anche da fuori casa. Si aggiorna "
+              "quando la libreria cambia e LightCraft è chiuso. Scegli una cartella che il telefono raggiunge.",
+        "en": "For each ticked library a small index (photos, stars, flags, labels, keywords, stacks) is written to "
+              "this NAS folder, and ViewerCraftStar reads it, even away from home. It is updated when the library "
+              "changes and LightCraft is closed. Choose a folder the phone can reach.",
+        "de": "Für jede angehakte Bibliothek wird in diesen NAS-Ordner ein kleiner Index geschrieben (Fotos, Sterne, "
+              "Markierungen, Farben, Stichwörter, Stapel), den ViewerCraftStar auch unterwegs liest. Er wird "
+              "aktualisiert, wenn sich die Bibliothek ändert und LightCraft geschlossen ist.",
+        "es": "Para cada biblioteca marcada se escribe en esta carpeta del NAS un pequeño índice (fotos, estrellas, "
+              "banderas, etiquetas, palabras clave, pilas) que ViewerCraftStar lee también fuera de casa. Se actualiza "
+              "cuando la biblioteca cambia y LightCraft está cerrado.",
+        "fr": "Pour chaque bibliothèque cochée, un petit index (photos, étoiles, drapeaux, libellés, mots-clés, piles) "
+              "est écrit dans ce dossier du NAS ; ViewerCraftStar le lit, même hors de chez vous. Il est mis à jour "
+              "quand la bibliothèque change et que LightCraft est fermé.",
+        "pt": "Para cada biblioteca marcada é escrito nesta pasta do NAS um pequeno índice (fotos, estrelas, "
+              "bandeiras, etiquetas, palavras-chave, pilhas) que o ViewerCraftStar lê também fora de casa. É "
+              "atualizado quando a biblioteca muda e o LightCraft está fechado.",
+    },
+    "auto_phone_need_folder": {"it": "Scegli la cartella del NAS per le librerie del telefono.",
+                               "en": "Choose the NAS folder for the phone's libraries.",
+                               "de": "Wähle den NAS-Ordner für die Bibliotheken des Telefons.",
+                               "es": "Elige la carpeta del NAS para las bibliotecas del teléfono.",
+                               "fr": "Choisissez le dossier du NAS pour les bibliothèques du téléphone.",
+                               "pt": "Escolha a pasta do NAS para as bibliotecas do telemóvel."},
 }
