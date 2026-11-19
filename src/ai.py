@@ -504,7 +504,8 @@ def library_state(settings, lib):
     st = worker_status(folder)
     name = os.path.basename(os.path.normpath(lib))
     x = (st.get("libraries") or {}).get(name) or {}
-    out = {"count": x.get("count", 0), "photos": x.get("photos", 0), "phase": st.get("phase"), "done": 0, "total": 0}
+    out = {"count": x.get("count", 0), "photos": x.get("photos", 0), "described": x.get("described", 0),
+           "phase": st.get("phase"), "done": 0, "total": 0}
     if not in_queue(settings, lib):
         out["state"] = "none"
     elif st["running"] and st.get("library") == name:

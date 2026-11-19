@@ -1501,6 +1501,24 @@ def ai_progress(settings):
     return text, None
 
 
+def eta_seconds(st):
+    """Secondi che mancano alla fase in corso del motore IA, dal ritmo tenuto da quando è cominciata."""
+    done, total = st.get("done") or 0, st.get("total") or 0
+    try:
+        started = datetime.datetime.fromisoformat(st["phase_started"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    elapsed = (datetime.datetime.now() - started).total_seconds()
+    if done < 20 or elapsed < 30 or done >= total:
+        return None
+    return elapsed / done * (total - done)
+
+
+def short_duration(seconds):
+    m = int(seconds // 60)
+    return f"{m // 60} h {m % 60:02d} min" if m >= 60 else f"{max(1, m)} min"
+
+
 RED = "#f87171"
 BLUE = "#60a5fa"
 RECENT = 3600  # per un'ora l'ultima importazione / l'ultimo aggiornamento della ricerca IA sono una "notizia"
@@ -1602,6 +1620,8 @@ class App(tk.Tk):
         head = ttk.Frame(outer)
         head.pack(fill="x")
         ttk.Button(head, text="⚙  " + t("settings"), command=self.open_settings).pack(side="right", anchor="n")
+        # il motore IA (installazione, modello, descrizioni, coda delle librerie, orari): accanto alle impostazioni
+        ttk.Button(head, text="◈  " + t("ai_button"), command=self.open_ai).pack(side="right", anchor="n", padx=(0, 8))
         ttk.Label(head, text=APP_NAME, style="Title.TLabel").pack(anchor="w")
         ttk.Label(head, text=t("subtitle"), style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
         ttk.Label(head, text="ⓘ  " + t("supported_note"), style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
@@ -1675,19 +1695,27 @@ class App(tk.Tk):
         # chiusa), notizie recenti e avanzamenti con la barra verde. Un clic su una riga apre la sua finestra.
         self.status_zone = tk.Frame(outer, bg=TRACK_BG)
         self.status_zone.pack(side="bottom", fill="x", pady=(12, 0))
-        rows = tk.Frame(self.status_zone, bg=TRACK_BG)
-        rows.pack(fill="x", padx=12, pady=(6, 5))
+        top_zone = tk.Frame(self.status_zone, bg=TRACK_BG)
+        top_zone.pack(fill="x", padx=12, pady=(6, 5))
+        # a destra, solo quando servono: pausa del motore IA e i dettagli del lavoro in corso
+        ctrl = tk.Frame(top_zone, bg=TRACK_BG)
+        ctrl.pack(side="right", anchor="n")
+        self.btn_details = ttk.Button(ctrl, command=self.toggle_details)
+        self.btn_pause = ttk.Button(ctrl, command=self.toggle_ai_pause)
+        self.details_open = False
+        rows = tk.Frame(top_zone, bg=TRACK_BG)
+        rows.pack(side="left", fill="x", expand=True)
         self.status_rows = []
-        for i in range(4):
-            line = tk.Frame(rows, bg=TRACK_BG, cursor="hand2")
-            dot = tk.Label(line, text="●", bg=TRACK_BG, font=self.f_body, cursor="hand2")
+        for _ in range(4):
+            line = tk.Frame(rows, bg=TRACK_BG)
+            dot = tk.Label(line, text="●", bg=TRACK_BG, font=self.f_body)
             dot.pack(side="left")
-            text = tk.Label(line, anchor="w", bg=TRACK_BG, font=self.f_body, cursor="hand2")
+            text = tk.Label(line, anchor="w", bg=TRACK_BG, font=self.f_body)
             text.pack(side="left", padx=(6, 0), fill="x", expand=True)
             self.status_rows.append((line, dot, text))
-            for wdg in (line, dot, text):
-                wdg.bind("<Button-1>", lambda e, row=i: self.status_click(row))
-        self.status_click_kind = [None] * 4
+        # dettagli: i passi del giro del motore IA (fatti, in corso con il tempo che manca, da fare)
+        self.details = tk.Frame(self.status_zone, bg=TRACK_BG)
+        self.detail_rows = []
         self.status_bar = GreenBar(self.status_zone, height=4)
         self.status_bar.pack(fill="x", side="bottom")
         foot = ttk.Frame(outer)
@@ -1822,40 +1850,36 @@ class App(tk.Tk):
         try:
             lib = self.settings.get("library")
             folder = ai.engine_dir(self.settings)
+            # qui solo il riepilogo della libreria scelta (l'avanzamento è nella barra di stato, le impostazioni nel
+            # pulsante Motore IA in alto); l'unico pulsante è Analizza, per una libreria mai analizzata
             if not lib:
                 text, kind = "", None
             elif ai.installing(folder):
-                text, kind = t("ai_short_installing"), "dialog"
+                text, kind = t("ai_short_installing"), None
             elif not ai.installed_info(folder):
-                text, kind = t("ai_row_none"), "dialog"
+                text, kind = t("ai_row_none"), None
             else:
                 st = ai.library_state(self.settings, lib)
                 state = st["state"]
                 if state == "none":
                     text, kind = t("ai_row_not_analyzed"), "analyze"
-                elif state == "running":
-                    pct = st["done"] * 100 // max(1, st["total"])
-                    key = "ai_row_previews" if st["phase"] == "previews" else "ai_row_running"
-                    text, kind = t(key, pct=pct, done=st["done"], total=st["total"]), "pause"
-                elif state == "paused":
-                    text, kind = t("ai_row_paused", count=st["count"], photos=st["photos"] or "?"), "resume"
-                elif state == "waiting":
-                    text = t("ai_row_gpu_busy") if st["phase"] == "gpu_busy" else t("ai_row_window")
-                    kind = "dialog"
-                elif state == "done":
-                    text, kind = t("ai_row_done", count=st["count"]), "dialog"
-                elif state == "partial":
-                    text, kind = t("ai_row_partial", count=st["count"], photos=st["photos"]), "dialog"
+                elif not st["count"]:
+                    text, kind = t("ai_row_queued"), None
                 else:
-                    text, kind = t("ai_row_queued"), "dialog"
+                    n = f"{st['count']:,}".replace(",", ".")
+                    text = t("ai_row_done", count=n) if st["count"] >= (st["photos"] or 0) else \
+                        t("ai_row_partial", count=n, photos=f"{st['photos']:,}".replace(",", "."))
+                    if ai.describer_ready(self.settings) or st.get("described"):
+                        text += "  ·  " + t("ai_q_described", count=f"{st.get('described') or 0:,}".replace(",", "."))
+                    kind = None
+                text = t("ai_row_label") + " " + text if not text.startswith(t("ai_row_label")) else text
                 if not ai.config(self.settings).get("enabled") and state != "none":
-                    text, kind = t("ai_short_off"), "dialog"
+                    text, kind = t("ai_short_off"), None
             self.ai_state.configure(text=text)
             if kind is None:
                 self.btn_ai.pack_forget()
             else:
-                self.btn_ai.configure(text={"analyze": t("ai_analyze"), "pause": t("ai_pause"),
-                                            "resume": t("ai_resume"), "dialog": t("ai_button")}[kind])
+                self.btn_ai.configure(text=t("ai_analyze"))
                 if not self.btn_ai.winfo_ismapped():
                     self.btn_ai.pack(side="left", padx=(10, 0))
             self.ai_action_kind = kind
@@ -1865,17 +1889,8 @@ class App(tk.Tk):
             self.after(4000, lambda: self.update_ai_row(again=True))
 
     def ai_action(self):
-        kind = self.ai_action_kind
-        if kind == "analyze":
+        if self.ai_action_kind == "analyze":
             self.analyze_ai()
-        elif kind in ("pause", "resume"):
-            ai.set_paused(self.settings, kind == "pause")
-            save_settings(self.settings)
-            if kind == "resume":
-                ai.maybe_start(self.settings, log)
-            self.update_ai_row()
-        else:
-            self.open_ai()
 
     def update_status_zone(self):
         """Barra di stato: prima chi sta lavorando, poi errori e attese, le notizie dell'ultima ora e lo stato a
@@ -1890,10 +1905,9 @@ class App(tk.Tk):
                       "info": (MUTED, MUTED)}
             for i, (line, dot, text) in enumerate(self.status_rows):
                 if i < len(lines):
-                    kind, msg, _frac, click = lines[i]
+                    kind, msg = lines[i][0], lines[i][1]
                     dot.configure(fg=colors[kind][0])
                     text.configure(text=msg, fg=colors[kind][1])
-                    self.status_click_kind[i] = click
                     if not line.winfo_ismapped():
                         line.pack(fill="x", pady=1)
                 elif line.winfo_ismapped():
@@ -1904,16 +1918,82 @@ class App(tk.Tk):
                 self.status_bar.set(frac)
             else:
                 self.status_bar.set(0.0)
+            self.update_ai_controls()
         except Exception as e:  # noqa: BLE001 — la barra di stato non deve mai bloccare la finestra
             log(f"status zone: {e!r}")
         self.after(2000, self.update_status_zone)
 
-    def status_click(self, row):
-        kind = self.status_click_kind[row]
-        if kind == "ai":
-            self.open_ai()
-        elif kind == "auto":
-            self.open_auto_import()
+    def update_ai_controls(self):
+        """Pausa/Riprendi e Dettagli nella barra di stato: solo mentre il motore IA ha un giro in corso o in pausa."""
+        folder = ai.engine_dir(self.settings)
+        cfg = ai.config(self.settings)
+        st = ai.worker_status(folder) if folder and ai.installed_info(folder) else {}
+        paused = bool(cfg.get("paused"))
+        busy = bool(st) and cfg.get("enabled") and (st.get("running") or paused) and \
+            st.get("phase") not in (None, "idle")
+        if busy:
+            self.btn_pause.configure(text=("▶  " + t("ai_resume")) if paused else ("⏸  " + t("ai_pause")))
+            if not self.btn_pause.winfo_ismapped():
+                self.btn_pause.pack(side="right")
+        elif self.btn_pause.winfo_ismapped():
+            self.btn_pause.pack_forget()
+        plan = (st.get("plan") or []) if busy else []
+        if plan:
+            self.btn_details.configure(text=("▴  " if self.details_open else "▾  ") + t("status_details"))
+            if not self.btn_details.winfo_ismapped():
+                self.btn_details.pack(side="right", padx=(0, 8))
+        elif self.btn_details.winfo_ismapped():
+            self.btn_details.pack_forget()
+        show = bool(plan) and self.details_open
+        if show:
+            self.fill_details(st, plan)
+            if not self.details.winfo_ismapped():
+                self.details.pack(fill="x", padx=(32, 12), pady=(0, 6), before=self.status_bar)
+        elif self.details.winfo_ismapped():
+            self.details.pack_forget()
+
+    def fill_details(self, st, plan):
+        """Una riga per passo: ✓ fatto, ● in corso (quante, percentuale, tempo che manca), ○ da fare."""
+        step = st.get("step") or 0
+        while len(self.detail_rows) < len(plan):
+            row = tk.Label(self.details, anchor="w", bg=TRACK_BG, font=self.f_body, justify="left")
+            self.detail_rows.append(row)
+        for i, row in enumerate(self.detail_rows):
+            if i >= len(plan):
+                row.pack_forget()
+                continue
+            kind, lib = plan[i]
+            label = f"{i + 1}   {lib}  ·  {t('ai_kind_' + kind)}"
+            if i + 1 < step:
+                mark, color = "✓", MUTED
+            elif i + 1 == step:
+                mark, color = "●", TEXT
+                done, total = st.get("done") or 0, st.get("total") or 0
+                if total and st.get("phase") == kind:
+                    label += f"   {done:,} / {total:,}".replace(",", ".") + f"  ·  {done * 100 // total}%"
+                    left = eta_seconds(st)
+                    if left:
+                        label += "  ·  " + t("status_left", time=short_duration(left))
+                elif st.get("phase") == "loading":
+                    label += "   " + t("ai_phase_loading")
+            else:
+                mark, color = "○", MUTED
+            row.configure(text=f"{mark}  {label}", fg=GREEN if mark == "●" else color)
+            if not row.winfo_ismapped():
+                row.pack(fill="x")
+
+    def toggle_details(self):
+        self.details_open = not self.details_open
+        self.update_ai_controls()
+
+    def toggle_ai_pause(self):
+        paused = not ai.config(self.settings).get("paused")
+        ai.set_paused(self.settings, paused)
+        save_settings(self.settings)
+        if not paused:
+            ai.maybe_start(self.settings, log)
+        self.update_ai_controls()
+        self.update_ai_row()
 
     def open_ai(self):
         d = AiDialog(self, self)

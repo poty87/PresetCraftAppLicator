@@ -170,7 +170,11 @@ class Motore:
     def stato(self, **kw):
         """Aggiorna stato.json (letto dalla finestra di PresetCraftAppLicator)."""
         s = carica_json(self.stato_path, {})
-        s.update(kw, pid=os.getpid(), updated=datetime.datetime.now().isoformat(timespec="seconds"))
+        adesso = datetime.datetime.now().isoformat(timespec="seconds")
+        # quando è cominciata la fase in corso (per il tempo che manca nella finestra): cambia con fase o libreria
+        if ("phase" in kw and kw["phase"] != s.get("phase")) or ("library" in kw and kw["library"] != s.get("library")):
+            kw["phase_started"] = adesso
+        s.update(kw, pid=os.getpid(), updated=adesso)
         salva_json(self.stato_path, s)
 
 

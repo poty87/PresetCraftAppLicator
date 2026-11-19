@@ -663,6 +663,14 @@ TEXTS = {
         'fr': 'attend que le GPU soit libre',
         'pt': 'à espera que a GPU fique livre',
     },
+    'ai_row_label': {
+        'it': 'Ricerca IA:',
+        'en': 'AI search:',
+        'de': 'KI-Suche:',
+        'es': 'Búsqueda IA:',
+        'fr': 'Recherche IA :',
+        'pt': 'Pesquisa IA:',
+    },
     'ai_row_none': {
         'it': 'Ricerca IA: motore non installato',
         'en': 'AI search: engine not installed',
@@ -2543,6 +2551,14 @@ TEXTS = {
         'fr': 'Moteur IA prêt · {count} photos cataloguées',
         'pt': 'Motor IA pronto · {count} fotos catalogadas',
     },
+    'status_details': {
+        'it': 'Dettagli',
+        'en': 'Details',
+        'de': 'Details',
+        'es': 'Detalles',
+        'fr': 'Détails',
+        'pt': 'Detalhes',
+    },
     'status_import_stopped': {
         'it': "Importazione automatica attivata ma non in esecuzione (si riavvia all'accesso a Windows)",
         'en': 'Automatic import is on but not running (it restarts when you sign in to Windows)',
@@ -2550,6 +2566,14 @@ TEXTS = {
         'es': 'Importación automática activada pero no en ejecución (se reinicia al iniciar sesión en Windows)',
         'fr': "Import automatique activé mais pas en cours (redémarre à l'ouverture de session Windows)",
         'pt': 'Importação automática ativada mas não em execução (reinicia ao iniciar sessão no Windows)',
+    },
+    'status_left': {
+        'it': 'mancano {time}',
+        'en': '{time} left',
+        'de': 'noch {time}',
+        'es': 'faltan {time}',
+        'fr': 'encore {time}',
+        'pt': 'faltam {time}',
     },
     'status_ready': {
         'it': 'Pronto',
