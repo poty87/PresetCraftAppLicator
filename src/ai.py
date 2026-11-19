@@ -11,7 +11,8 @@ Impostazioni (settings.json → "ai"): {"enabled": bool, "dir": cartella del mot
 le analisi grandi)}. Una libreria entra in "libraries" solo quando l'utente chiede di analizzarla: la prima analisi la
 decide lui; dopo, le foto nuove si analizzano da sole a ogni aggiornamento della libreria.
 Cartella del motore: uv\\ (strumento che crea l'ambiente), python\\ (Python 3.13), venv\\ (PyTorch e altri),
-modelli\\ (modelli scaricati), cache\\ (miniature), parole\\, motore.json (installazione completata), installazione.json
+modelli\\<modello>\\ (modello scaricato, file normali; le installazioni 1.16.0 lo hanno nella cache di Hugging
+Face in modelli\\hub), cache\\ (miniature), parole\\, motore.json (installazione completata), installazione.json
 (avanzamento dell'installazione), stato.json (avanzamento del lavoro), ia.log, ia_worker.py, config.json.
 """
 
@@ -151,6 +152,11 @@ def installed_info(folder):
     return info
 
 
+def model_dir(folder, model):
+    """Cartella del modello scaricato (dalla 1.16.1): file normali, niente cache di Hugging Face."""
+    return os.path.join(folder, "modelli", model)
+
+
 def venv_python(folder):
     return os.path.join(folder, "venv", "Scripts", "python.exe")
 
@@ -186,26 +192,32 @@ class Installer:
         self.progress_path = os.path.join(folder, "installazione.json")
         self.log_path = os.path.join(folder, "installazione.log")
 
-    def report(self, step, fraction=0.0, error=None, done=False):
+    def report(self, step, fraction=0.0, error=None, done=False, **extra):
         i = self.STEPS.index(step) if step in self.STEPS else len(self.STEPS)
         save_json(self.progress_path, {"pid": os.getpid(), "step": step, "index": i, "steps": len(self.STEPS),
                                        "fraction": fraction, "total": min(1.0, (i + fraction) / len(self.STEPS)),
                                        "model": self.model, "error": error or "", "done": done,
-                                       "updated": datetime.datetime.now().isoformat(timespec="seconds")})
+                                       "updated": datetime.datetime.now().isoformat(timespec="seconds"), **extra})
 
     def log(self, text):
         with open(self.log_path, "a", encoding="utf-8") as f:
             f.write(f"{datetime.datetime.now():%Y-%m-%d %H:%M:%S} {text}\n")
 
-    def run_cmd(self, cmd, step, offline=False):
+    def run_cmd(self, cmd, step, offline=False, extra_env=None, tick=None):
+        """Esegue un comando del motore; `tick` (se c'è) viene chiamata ogni ~2 secondi per l'avanzamento."""
         self.log("> " + " ".join(cmd))
+        e = env(self.folder, offline)
+        e.update(extra_env or {})
         with open(self.log_path, "a", encoding="utf-8") as log:
-            p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env(self.folder, offline),
-                                 creationflags=NO_WINDOW)
+            p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=e, creationflags=NO_WINDOW)
+            n = 0
             while p.poll() is None:
                 if self.cancel.wait(1):
                     p.kill()
                     raise InstallCancelled()
+                n += 1
+                if tick and n % 2 == 0:
+                    tick()
         if p.returncode != 0:
             raise RuntimeError(f"{step}: exit code {p.returncode} (see {self.log_path})")
 
@@ -263,9 +275,21 @@ class Installer:
                     self.download(WORDS_URL.format(lang=lang), dest, "words")
             self.report("model")
             hf = MODELS[self.model]["hf"]
+            target = model_dir(self.folder, self.model)
+            expected = MODELS[self.model]["download"] * 1e9
+
+            def tick():  # avanzamento del modello: quanto c'è già su disco rispetto alla dimensione attesa
+                got = folder_size_gb(target) * 1024 ** 3
+                self.report("model", min(0.99, got / expected), got_gb=round(got / 1e9, 1),
+                            total_gb=MODELS[self.model]["download"])
+
+            # in una cartella normale (la cache di Hugging Face su Windows copierebbe i file: spazio doppio) e senza
+            # Xet, che scrive i file solo alla fine: così la dimensione cresce man mano e l'avanzamento si vede
             self.run_cmd([py, "-c", "from huggingface_hub import snapshot_download as s; "
-                                    f"s('{hf}', allow_patterns=['*.json', '*.safetensors', '*.model', '*.txt'])"],
-                         "model")
+                                    f"s('{hf}', local_dir=r'{target}', "
+                                    "allow_patterns=['*.json', '*.safetensors', '*.model', '*.txt'])"],
+                         "model", extra_env={"HF_HUB_DISABLE_XET": "1"}, tick=tick)
+            shutil.rmtree(os.path.join(target, ".cache"), ignore_errors=True)  # file temporanei del download
             shutil.rmtree(os.path.join(self.folder, "uv-cache"), ignore_errors=True)  # solo spazio occupato
             prima = load_json(os.path.join(self.folder, "motore.json"), {})
             modelli = sorted(set(prima.get("models") or []) | {self.model})

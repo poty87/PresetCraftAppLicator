@@ -460,8 +460,18 @@ class Miniature:
         return self.prep(images=img, return_tensors="pt")["pixel_values"][0]
 
 
+def sorgente(nome, motore_dir=None):
+    """Da dove caricare il modello: la sua cartella nel motore (installazioni dalla 1.16.1) oppure l'id di Hugging
+    Face (cache in modelli\\hub, installazioni 1.16.0)."""
+    if motore_dir:
+        d = os.path.join(motore_dir, "modelli", nome)
+        if os.path.isfile(os.path.join(d, "config.json")):
+            return d
+    return MODELLI[nome]["hf"]
+
+
 class ModelloVisivo:
-    def __init__(self, nome):
+    def __init__(self, nome, motore_dir=None):
         import torch
         from transformers import AutoModel, AutoProcessor
         self.torch = torch
@@ -469,8 +479,9 @@ class ModelloVisivo:
         self.dev = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.float16 if self.dev == "cuda" else torch.float32
         self.dtype = dtype
-        self.m = AutoModel.from_pretrained(MODELLI[nome]["hf"], dtype=dtype).to(self.dev).eval()
-        self.proc = AutoProcessor.from_pretrained(MODELLI[nome]["hf"])
+        src = sorgente(nome, motore_dir)
+        self.m = AutoModel.from_pretrained(src, dtype=dtype).to(self.dev).eval()
+        self.proc = AutoProcessor.from_pretrained(src)
 
     def impronte(self, x):
         t = self.torch
@@ -619,7 +630,7 @@ def prepara_telefono(motore, nome_modello, bits, cartella):
     import torch
     from onnxruntime.quantization.matmul_nbits_quantizer import MatMulNBitsQuantizer
     from transformers import AutoModel, AutoTokenizer
-    hf = MODELLI[nome_modello]["hf"]
+    hf = sorgente(nome_modello, motore.dir)
     motore.stato(phase="phone_model", library="", done=0, total=4)
     motore.log(f"telefono: preparo il modello testo di {nome_modello} ({bits} bit)")
     tok = AutoTokenizer.from_pretrained(hf)
@@ -776,7 +787,7 @@ def lavoro(cfg):
                 controllo(grande=mancano > GRANDE)
                 controllo.subito_gpu()
                 motore.stato(phase="loading", library=nome_lib, done=0, total=0)
-                modello = ModelloVisivo(nome_modello)
+                modello = ModelloVisivo(nome_modello, motore.dir)
             fatte = aggiorna_impronte(motore, modello, cart, foto, visivo, nome_lib, controllo)
             totale_nuove += fatte
             if fatte:

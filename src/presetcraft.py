@@ -1210,7 +1210,8 @@ class AiDialog(tk.Toplevel):
             p = ai.install_progress(folder)
             self.status.configure(text=t("ai_status_installing", model=self.model_name(p.get("model"))))
             self.bar["value"] = float(p.get("total") or 0) * 1000
-            self.detail.configure(text=t("ai_step_" + str(p.get("step") or "uv")) +
+            gb = f"  ·  {p['got_gb']:.1f} / {p['total_gb']:.1f} GB" if p.get("got_gb") is not None else ""
+            self.detail.configure(text=t("ai_step_" + str(p.get("step") or "uv")) + gb +
                                   f"  ·  {float(p.get('total') or 0) * 100:.0f}%")
             return
         info = ai.installed_info(folder) or {}
