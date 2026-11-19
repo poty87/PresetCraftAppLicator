@@ -49,6 +49,17 @@ def save_settings(data):
     os.makedirs(DATA_DIR, exist_ok=True)
     with open(SETTINGS, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+    # copia nella cartella di servizio sul NAS (per ripartire dopo una formattazione), senza bloccare la finestra
+    snapshot = json.loads(json.dumps(data))
+    threading.Thread(target=_copy_settings, args=(snapshot,), daemon=True).start()
+
+
+def _copy_settings(data):
+    try:
+        import watcher
+        watcher.save_settings_copy(data)
+    except Exception:  # noqa: BLE001 — NAS non raggiungibile: la copia si rifà al prossimo giro del watcher
+        pass
 
 
 def human(n):
@@ -245,6 +256,7 @@ class SettingsDialog(tk.Toplevel):
             anchor="w", pady=(18, 0))
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x", pady=(18, 0))
+        ttk.Button(buttons, text=t("wz_open"), command=self.open_wizard).pack(side="left")
         ttk.Button(buttons, text=t("btn_save"), style="Accent.TButton", command=self.save).pack(side="right")
         ttk.Button(buttons, text=t("btn_cancel"), command=self.destroy).pack(side="right", padx=(0, 8))
         self.bind("<Escape>", lambda e: self.destroy())
@@ -253,6 +265,10 @@ class SettingsDialog(tk.Toplevel):
         dark_title_bar(self)
         self.deiconify()
         self.grab_set()
+
+    def open_wizard(self):
+        self.destroy()
+        self.app.after(50, self.app.open_wizard)
 
     def browse(self):
         start = os.path.dirname(self.cli.get()) if os.path.isdir(os.path.dirname(self.cli.get())) else LOCAL
@@ -971,7 +987,7 @@ class AutoImportDialog(tk.Toplevel):
         if phone_libs and not phone_folder:
             Dialog.ask(self, t("auto_title"), t("auto_phone_need_folder"), None, level="warn")
             return
-        s["phone"] = {"folder": phone_folder, "libraries": phone_libs}
+        s["phone"] = {**(s.get("phone") or {}), "folder": phone_folder, "libraries": phone_libs}
         enabled = bool(self.enabled.get()) and bool(self.rules or phone_libs)
         try:
             # prima lo stato delle regole nuove, poi le impostazioni: il processo in background non vede mai una
@@ -1001,6 +1017,492 @@ class AutoImportDialog(tk.Toplevel):
         log("automatic import " + ("on: " + "; ".join(f"{r['folder']} -> {r['library']}" for r in self.rules)
                                    if enabled else "off"))
         self.saved = True
+        self.destroy()
+
+
+class SetupWizard(tk.Toplevel):
+    """Configurazione guidata: al primo avvio (e da Impostazioni). Spiega a cosa serve ogni cartella e, se la cartella
+    di servizio sul NAS ha già una copia delle impostazioni (PC nuovo, formattato), le ripristina."""
+
+    PAGES = ("welcome", "lightcraft", "service", "photos", "phone", "ai", "summary")
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.withdraw()
+        self.app = app
+        self.done = False
+        self.open_ai_after = tk.BooleanVar(value=False)
+        self.title(t("wz_title"))
+        self.resizable(False, False)
+        self.transient(app)
+        set_icon(self)
+        self.load(json.loads(json.dumps(app.settings)))
+        self.restore = tk.StringVar(value="new")
+        self.restore_folder = tk.StringVar(value="")
+        self.found = None  # copia delle impostazioni trovata nella cartella di servizio
+        self.added = []  # (regola, importa anche le foto già presenti)
+        self.page = 0
+        outer = ttk.Frame(self, padding=(26, 22, 26, 18))
+        outer.pack(fill="both", expand=True)
+        self.step_label = ttk.Label(outer, style="Muted.TLabel")
+        self.step_label.pack(anchor="w")
+        self.body = ttk.Frame(outer, width=780, height=500)
+        self.body.pack(fill="both", expand=True, pady=(6, 0))
+        self.body.pack_propagate(False)
+        buttons = ttk.Frame(outer)
+        buttons.pack(fill="x", pady=(14, 0))
+        self.btn_next = ttk.Button(buttons, style="Accent.TButton", command=self.next)
+        self.btn_next.pack(side="right")
+        self.btn_back = ttk.Button(buttons, text=t("wz_back"), command=self.back)
+        self.btn_back.pack(side="right", padx=(0, 8))
+        ttk.Button(buttons, text=t("btn_cancel"), command=self.destroy).pack(side="left")
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.render()
+        center_on(self, app)
+        dark_title_bar(self)
+        self.deiconify()
+        self.grab_set()
+
+    # ---- stato
+
+    def load(self, s):
+        """Prende i valori da un dizionario di impostazioni (quelle attuali o quelle ripristinate)."""
+        self.s = s
+        self.libs = list(s.get("libraries") or [])
+        self.cli = tk.StringVar(value=s.get("cli") or DEFAULT_CLI)
+        ph = s.get("phone") or {}
+        self.service = tk.StringVar(value=ph.get("folder") or "")
+        chosen = {watcher.key(x) for x in ph.get("libraries") or []}
+        self.phone_chosen = {watcher.key(lib): (watcher.key(lib) in chosen if ph else True) for lib in self.libs}
+        self.previews = tk.BooleanVar(value=bool(ph.get("previews", True)))
+        backup_dir = s.get("backup_dir") or ""
+        self.backup_custom = backup_dir
+        in_service = bool(backup_dir and ph.get("folder") and watcher.key(backup_dir) == watcher.key(
+            os.path.join(ph["folder"], "backups")))
+        if in_service or (not backup_dir and not s.get("libraries")):
+            mode = "service"  # consigliato: tutto nella cartella di servizio
+        else:
+            mode = "custom" if backup_dir else "library"
+        self.backup_mode = tk.StringVar(value=mode)
+        self.rules = [dict(r) for r in (s.get("watch") or {}).get("rules") or []]
+        self.subfolders = tk.BooleanVar(value=True)
+
+    def lib_name(self, lib):
+        return os.path.basename(os.path.normpath(lib)) or lib
+
+    # ---- pagine
+
+    def clear(self):
+        for w in self.body.winfo_children():
+            w.destroy()
+
+    def heading(self, title, text):
+        ttk.Label(self.body, text=title, style="Title.TLabel").pack(anchor="w")
+        ttk.Label(self.body, text=text, style="Body.TLabel", wraplength=760, justify="left").pack(anchor="w",
+                                                                                                pady=(6, 0))
+
+    def section(self, text):
+        ttk.Label(self.body, text=text.upper(), style="Muted.TLabel").pack(anchor="w", pady=(16, 4))
+
+    def hint(self, text):
+        ttk.Label(self.body, text=text, style="Muted.TLabel", wraplength=760, justify="left").pack(
+            anchor="w", pady=(4, 0))
+
+    def render(self):
+        self.clear()
+        name = self.PAGES[self.page]
+        self.step_label.configure(text=t("wz_step", n=self.page + 1, total=len(self.PAGES)))
+        getattr(self, "page_" + name)()
+        self.btn_back.state(["disabled"] if self.page == 0 else ["!disabled"])
+        self.btn_next.configure(text=t("wz_finish") if name == "summary" else t("wz_next"))
+
+    def page_welcome(self):
+        self.heading(t("wz_welcome_title"), t("wz_welcome_text"))
+        box = ttk.Frame(self.body)
+        box.pack(fill="x", pady=(12, 0))
+        for icon, key in (("▣", "wz_place_photos"), ("◧", "wz_place_library"), ("◈", "wz_place_service")):
+            row = ttk.Frame(box)
+            row.pack(fill="x", pady=3)
+            ttk.Label(row, text=icon, style="Strong.TLabel", width=3).pack(side="left", anchor="n")
+            ttk.Label(row, text=t(key), style="Body.TLabel", wraplength=720, justify="left").pack(side="left")
+        self.section(t("wz_start"))
+        ttk.Radiobutton(self.body, text=t("wz_start_new"), value="new", variable=self.restore).pack(anchor="w")
+        ttk.Radiobutton(self.body, text=t("wz_start_restore"), value="restore", variable=self.restore).pack(
+            anchor="w", pady=(4, 0))
+        row = ttk.Frame(self.body)
+        row.pack(fill="x", pady=(6, 0), padx=(24, 0))
+        ttk.Entry(row, textvariable=self.restore_folder, state="readonly", width=60).pack(side="left")
+        ttk.Button(row, text=t("btn_browse"), command=self.pick_restore).pack(side="left", padx=(8, 0))
+        self.restore_info = ttk.Label(self.body, style="Muted.TLabel", wraplength=720, justify="left")
+        self.restore_info.pack(anchor="w", padx=(24, 0), pady=(4, 0))
+        self.show_found()
+
+    def pick_restore(self):
+        folder = filedialog.askdirectory(parent=self, title=t("wz_restore_pick"),
+                                         initialdir=self.restore_folder.get() or None)
+        if not folder:
+            return
+        folder = watcher.prefer_drive(os.path.normpath(folder))
+        self.restore_folder.set(folder)
+        self.restore.set("restore")
+        self.found = watcher.read_settings_copy(folder)
+        self.show_found()
+
+    def show_found(self):
+        if not self.restore_folder.get():
+            text = t("wz_restore_hint")
+        elif self.found:
+            text = "✓  " + t("wz_restore_found", computer=self.found.get("computer") or "?",
+                             when=when_text(self.found.get("saved") or ""))
+        else:
+            text = "⚠  " + t("wz_restore_none")
+        self.restore_info.configure(text=text)
+
+    def page_lightcraft(self):
+        self.heading(t("wz_lc_title"), t("wz_lc_text"))
+        self.section(t("cli_label"))
+        row = ttk.Frame(self.body)
+        row.pack(fill="x")
+        ttk.Entry(row, textvariable=self.cli, width=70).pack(side="left", fill="x", expand=True)
+        ttk.Button(row, text=t("btn_browse"), command=self.pick_cli).pack(side="left", padx=(8, 0))
+        self.cli_state = ttk.Label(self.body, style="Muted.TLabel")
+        self.cli_state.pack(anchor="w", pady=(4, 0))
+        self.cli_trace = self.cli.trace_add("write", lambda *_: self.show_cli())
+        self.show_cli()
+        self.section(t("wz_lc_libraries"))
+        self.lib_tree = ttk.Treeview(self.body, columns=("name", "path"), show="headings", height=5,
+                                     selectmode="browse")
+        self.lib_tree.heading("name", text=t("wz_col_name"), anchor="w")
+        self.lib_tree.heading("path", text=t("wz_col_folder"), anchor="w")
+        self.lib_tree.column("name", width=230, anchor="w")
+        self.lib_tree.column("path", width=520, anchor="w")
+        self.lib_tree.pack(fill="x")
+        row = ttk.Frame(self.body)
+        row.pack(fill="x", pady=(8, 0))
+        ttk.Button(row, text="＋  " + t("wz_add_library"), command=self.add_library).pack(side="left")
+        ttk.Button(row, text=t("auto_remove"), command=self.remove_library).pack(side="left", padx=(8, 0))
+        self.hint(t("wz_lc_hint"))
+        self.fill_libs()
+
+    def show_cli(self):
+        if not self.cli_state.winfo_exists():
+            return
+        ok = is_cli(self.cli.get().strip())
+        self.cli_state.configure(text="✓  " + t("wz_cli_ok") if ok else "⚠  " + t("wz_cli_missing"))
+
+    def pick_cli(self):
+        start = os.path.dirname(self.cli.get()) if os.path.isdir(os.path.dirname(self.cli.get())) else LOCAL
+        path = filedialog.askopenfilename(parent=self, title=t("cli_pick"), initialdir=start,
+                                          filetypes=[("lightcraft-cli.exe", "lightcraft-cli.exe")])
+        if path:
+            self.cli.set(os.path.normpath(path))
+
+    def fill_libs(self):
+        self.lib_tree.delete(*self.lib_tree.get_children())
+        for i, lib in enumerate(self.libs):
+            mark = "" if is_library(lib) else "⚠  "
+            self.lib_tree.insert("", "end", iid=str(i), values=(mark + self.lib_name(lib), lib))
+
+    def add_library(self):
+        start = os.path.dirname(self.libs[-1]) if self.libs else os.path.expanduser("~")
+        lib = filedialog.askdirectory(parent=self, title=t("pick_library"), initialdir=start)
+        if not lib:
+            return
+        lib = os.path.normpath(lib)
+        if not is_library(lib):
+            Dialog.ask(self, t("wz_title"), t("pick_library"), t("not_library"), level="error")
+            return
+        if not any(watcher.key(x) == watcher.key(lib) for x in self.libs):
+            self.libs.append(lib)
+            self.phone_chosen[watcher.key(lib)] = True
+        self.fill_libs()
+
+    def remove_library(self):
+        sel = self.lib_tree.selection()
+        if sel:
+            lib = self.libs.pop(int(sel[0]))
+            self.rules = [r for r in self.rules if watcher.key(r["library"]) != watcher.key(lib)]
+            self.fill_libs()
+
+    def page_service(self):
+        self.heading(t("wz_service_title"), t("wz_service_text"))
+        self.section(t("wz_service_folder"))
+        row = ttk.Frame(self.body)
+        row.pack(fill="x")
+        ttk.Entry(row, textvariable=self.service, state="readonly", width=70).pack(side="left", fill="x", expand=True)
+        ttk.Button(row, text=t("auto_phone_pick"), command=self.pick_service).pack(side="left", padx=(8, 0))
+        self.hint(t("wz_service_hint"))
+        self.section(t("wz_service_inside"))
+        tree = ttk.Frame(self.body)
+        tree.pack(fill="x")
+        for name, key in (("libraries\\<…>\\", "wz_dir_libraries"), ("settings\\", "wz_dir_settings"),
+                          ("backups\\", "wz_dir_backups")):
+            r = ttk.Frame(tree)
+            r.pack(fill="x", pady=1)
+            ttk.Label(r, text=name, style="Strong.TLabel", width=18).pack(side="left", anchor="n")
+            ttk.Label(r, text=t(key), style="Body.TLabel", wraplength=600, justify="left").pack(side="left")
+        self.section(t("backup_label"))
+        ttk.Radiobutton(self.body, text=t("wz_backup_service"), value="service", variable=self.backup_mode).pack(
+            anchor="w")
+        ttk.Radiobutton(self.body, text=t("backup_next_to"), value="library", variable=self.backup_mode).pack(
+            anchor="w", pady=(2, 0))
+        if self.backup_custom and self.backup_mode.get() == "custom":
+            ttk.Radiobutton(self.body, text=t("wz_backup_keep", folder=self.backup_custom), value="custom",
+                            variable=self.backup_mode).pack(anchor="w", pady=(2, 0))
+
+    def pick_service(self):
+        start = self.service.get() or (os.path.splitdrive(self.rules[0]["folder"])[0] + "\\" if self.rules else "")
+        folder = filedialog.askdirectory(parent=self, title=t("auto_phone_pick_title"), initialdir=start or None)
+        if not folder:
+            return
+        folder = watcher.prefer_drive(os.path.normpath(folder))
+        if self.has_photos(folder):
+            Dialog.ask(self, t("wz_title"), t("auto_phone_has_photos"), folder, level="warn")
+            return
+        self.service.set(folder)
+
+    def has_photos(self, folder):
+        if any(watcher.key(r["folder"]) == watcher.key(folder) for r in self.rules):
+            return True
+        try:
+            with os.scandir(folder) as it:
+                return any(e.is_file() and os.path.splitext(e.name)[1].lower() in watcher.PHOTO_EXTS for e in it)
+        except OSError:
+            return False
+
+    def page_photos(self):
+        self.heading(t("wz_photos_title"), t("wz_photos_text"))
+        self.section(t("auto_folders"))
+        self.rule_tree = ttk.Treeview(self.body, columns=("folder", "subfolders", "library"), show="headings",
+                                      height=5, selectmode="browse")
+        self.rule_tree.heading("folder", text=t("auto_col_folder"), anchor="w")
+        self.rule_tree.heading("subfolders", text=t("auto_col_subfolders"), anchor="w")
+        self.rule_tree.heading("library", text=t("auto_col_library"), anchor="w")
+        self.rule_tree.column("folder", width=400, anchor="w")
+        self.rule_tree.column("subfolders", width=110, anchor="w", stretch=False)
+        self.rule_tree.column("library", width=240, anchor="w")
+        self.rule_tree.pack(fill="x")
+        row = ttk.Frame(self.body)
+        row.pack(fill="x", pady=(8, 0))
+        ttk.Label(row, text=t("auto_into"), style="Body.TLabel").pack(side="left")
+        self.rule_lib = ttk.Combobox(row, state="readonly", width=36, values=[self.lib_name(x) for x in self.libs])
+        if self.libs:
+            self.rule_lib.current(0)
+        self.rule_lib.pack(side="left", padx=(10, 0))
+        ttk.Button(row, text=t("auto_remove"), command=self.remove_rule).pack(side="right")
+        ttk.Button(row, text="＋  " + t("auto_add"), command=self.add_rule).pack(side="right", padx=(0, 8))
+        ttk.Checkbutton(self.body, text=t("auto_subfolders"), variable=self.subfolders).pack(anchor="w", pady=(8, 0))
+        self.hint(t("wz_photos_hint"))
+        self.fill_rules()
+
+    def fill_rules(self):
+        self.rule_tree.delete(*self.rule_tree.get_children())
+        for i, r in enumerate(self.rules):
+            self.rule_tree.insert("", "end", iid=str(i), values=(
+                r["folder"], t("w_yes") if r.get("subfolders") else t("w_no"), self.lib_name(r["library"])))
+
+    def add_rule(self):
+        if not self.libs:
+            Dialog.ask(self, t("wz_title"), t("auto_no_library"), None, level="warn")
+            return
+        lib = self.libs[max(0, self.rule_lib.current())]
+        folder = filedialog.askdirectory(parent=self, title=t("auto_pick"), initialdir=os.path.dirname(lib))
+        if not folder:
+            return
+        folder = watcher.prefer_drive(os.path.normpath(folder))
+        if self.service.get() and watcher.key(folder) == watcher.key(self.service.get()):
+            Dialog.ask(self, t("wz_title"), t("wz_photos_is_service"), folder, level="warn")
+            return
+        if any(watcher.key(r["folder"]) == watcher.key(folder) and watcher.key(r["library"]) == watcher.key(lib)
+               for r in self.rules):
+            Dialog.ask(self, t("wz_title"), t("auto_dup"), folder, level="warn")
+            return
+        subfolders = bool(self.subfolders.get())
+        self.configure(cursor="watch")
+        self.update_idletasks()
+        try:
+            existing = watcher.new_files(folder, lib, subfolders)
+        except OSError as e:
+            Dialog.ask(self, t("wz_title"), t("auto_folder_bad"), str(e), level="error")
+            return
+        finally:
+            self.configure(cursor="")
+        import_existing = False
+        if existing:
+            answer = Dialog.ask(self, t("wz_title"), t("auto_existing_head", count=len(existing)),
+                                t("auto_existing_body"), level="info",
+                                buttons=[("import", t("btn_import_too"), False), ("ignore", t("btn_ignore"), True)],
+                                default="ignore")
+            if answer is None:
+                return
+            import_existing = answer == "import"
+        rule = {"folder": folder, "library": lib, "subfolders": subfolders}
+        self.rules.append(rule)
+        self.added.append((rule, import_existing))
+        self.fill_rules()
+
+    def remove_rule(self):
+        sel = self.rule_tree.selection()
+        if sel:
+            rule = self.rules.pop(int(sel[0]))
+            self.added = [(r, x) for r, x in self.added if r is not rule]
+            self.fill_rules()
+
+    def page_phone(self):
+        self.heading(t("wz_phone_title"), t("wz_phone_text"))
+        self.section(t("wz_phone_libs"))
+        for lib in self.libs:
+            var = tk.BooleanVar(value=self.phone_chosen.get(watcher.key(lib), True))
+            ttk.Checkbutton(self.body, text=self.lib_name(lib), variable=var,
+                            command=lambda k=watcher.key(lib), v=var: self.phone_chosen.__setitem__(k, v.get())).pack(
+                anchor="w")
+        if not self.libs:
+            self.hint(t("auto_no_library"))
+        if not self.service.get():
+            self.hint("⚠  " + t("wz_phone_no_service"))
+        self.section(t("wz_previews"))
+        ttk.Checkbutton(self.body, text=t("wz_previews_check"), variable=self.previews).pack(anchor="w")
+        self.hint(t("wz_previews_hint"))
+        self.section(t("wz_phone_app"))
+        self.hint(t("wz_phone_hint"))
+
+    def page_ai(self):
+        self.heading(t("wz_ai_title"), t("wz_ai_text"))
+        folder = ai.engine_dir(self.s)
+        info = ai.installed_info(folder)
+        self.section(t("ai_button"))
+        ttk.Label(self.body, text=("✓  " + t("wz_ai_installed", folder=folder)) if info else t("wz_ai_not_installed"),
+                  style="Body.TLabel", wraplength=760, justify="left").pack(anchor="w")
+        ttk.Checkbutton(self.body, text=t("wz_ai_open"), variable=self.open_ai_after).pack(anchor="w", pady=(12, 0))
+        self.hint(t("wz_ai_hint"))
+
+    def page_summary(self):
+        self.heading(t("wz_summary_title"), t("wz_summary_text"))
+        svc = self.service.get()
+        backups = {"service": os.path.join(svc, "backups") if svc else t("backup_next_to"),
+                   "library": t("backup_next_to"), "custom": self.backup_custom}[self.backup_mode.get()]
+        phone = [self.lib_name(x) for x in self.libs if self.phone_chosen.get(watcher.key(x), True)] if svc else []
+        lines = [(t("wz_lc_libraries"), "\n".join(self.libs) or "—"),
+                 (t("wz_service_folder"), svc or t("wz_none")),
+                 (t("backup_label"), backups),
+                 (t("auto_folders"), "\n".join(f"{r['folder']}  →  {self.lib_name(r['library'])}"
+                                               for r in self.rules) or t("wz_none")),
+                 (t("wz_phone_libs"), ", ".join(phone) or t("wz_none")),
+                 (t("wz_previews"), t("w_yes") if phone and self.previews.get() else t("w_no"))]
+        grid = ttk.Frame(self.body)
+        grid.pack(fill="x", pady=(14, 0))
+        for r, (k, v) in enumerate(lines):
+            ttk.Label(grid, text=k, style="Muted.TLabel", wraplength=230, justify="left").grid(
+                row=r, column=0, sticky="nw", pady=3, padx=(0, 14))
+            ttk.Label(grid, text=v, style="Body.TLabel", wraplength=510, justify="left").grid(
+                row=r, column=1, sticky="nw", pady=3)
+        self.hint(t("wz_summary_hint"))
+
+    # ---- navigazione
+
+    def check(self, name):
+        """Un testo d'avviso se nella pagina manca qualcosa per andare avanti, altrimenti None."""
+        if name == "welcome" and self.restore.get() == "restore" and not self.found:
+            return t("wz_restore_none")
+        if name == "lightcraft" and not self.libs:
+            return t("wz_need_library")
+        if name == "service" and not self.service.get() and self.backup_mode.get() == "service":
+            return t("wz_need_service_backup")
+        return None
+
+    def next(self):
+        name = self.PAGES[self.page]
+        problem = self.check(name)
+        if problem:
+            Dialog.ask(self, t("wz_title"), problem, None, level="warn")
+            return
+        if name == "welcome" and self.restore.get() == "restore" and self.found:
+            restored = dict(self.found["settings"])
+            for k in watcher.LOCAL_ONLY:
+                if k in self.app.settings:
+                    restored[k] = self.app.settings[k]
+            ph = dict(restored.get("phone") or {})
+            ph["folder"] = self.restore_folder.get()  # la cartella scelta adesso (la lettera può essere cambiata)
+            restored["phone"] = ph
+            self.load(restored)
+            self.found = None  # ripristinate: le pagine seguenti mostrano i valori da controllare
+            self.restore.set("new")
+        if name == "summary":
+            self.finish()
+            return
+        self.page += 1
+        self.render()
+
+    def back(self):
+        if self.page:
+            self.page -= 1
+            self.render()
+
+    def finish(self):
+        s = self.s
+        s["libraries"] = self.libs
+        if s.get("library") not in self.libs:
+            if self.libs:
+                s["library"] = self.libs[0]
+            else:
+                s.pop("library", None)
+        cli = self.cli.get().strip()
+        if cli and os.path.normcase(cli) != os.path.normcase(DEFAULT_CLI):
+            s["cli"] = cli
+        else:
+            s.pop("cli", None)
+        svc = self.service.get().strip()
+        phone_libs = [x for x in self.libs if self.phone_chosen.get(watcher.key(x), True)] if svc else []
+        s["phone"] = {**(s.get("phone") or {}), "folder": svc, "libraries": phone_libs,
+                      "previews": bool(self.previews.get())}
+        mode = self.backup_mode.get()
+        if mode == "service" and svc:
+            s["backup_dir"] = os.path.join(svc, "backups")
+        elif mode == "custom" and self.backup_custom:
+            s["backup_dir"] = self.backup_custom
+        else:
+            s.pop("backup_dir", None)
+        before = self.app.settings.get("watch") or {}
+        w = dict(s.get("watch") or {})
+        enabled = bool(self.rules or phone_libs)
+        s["watch"] = {"enabled": enabled, "interval": int(w.get("interval") or watcher.DEFAULT_INTERVAL),
+                      "quiet": int(w.get("quiet") or watcher.DEFAULT_QUIET), "rules": self.rules}
+        s["setup_done"] = True
+        self.configure(cursor="watch")
+        self.update_idletasks()
+        try:
+            if svc:
+                subs = [watcher.LIBRARIES_DIR, watcher.SETTINGS_DIR] + (["backups"] if mode == "service" else [])
+                for sub in subs:
+                    os.makedirs(os.path.join(svc, sub), exist_ok=True)
+            # regole: prima lo stato delle nuove (quali file ignorare), poi le impostazioni
+            for rule, import_existing in self.added:
+                watcher.create_rule_state(rule, import_existing)
+            kept = {(watcher.key(r["folder"]), watcher.key(r["library"])) for r in self.rules}
+            for r in before.get("rules") or []:
+                if (watcher.key(r["folder"]), watcher.key(r["library"])) not in kept:
+                    watcher.forget_rule(r)
+            # regole ripristinate da un altro PC (senza stato qui): i file già presenti contano come già importati
+            for r in self.rules:
+                if not os.path.exists(watcher.rule_state_path(r)):
+                    watcher.create_rule_state(r, False)
+            self.app.settings.clear()
+            self.app.settings.update(s)
+            save_settings(self.app.settings)
+            autostart.stop_running(timeout=30)
+            if enabled:
+                autostart.enable()
+            elif autostart.is_enabled():
+                autostart.disable()
+        except Exception as e:  # noqa: BLE001
+            log(f"ERROR setup wizard: {e!r}")
+            Dialog.ask(self, t("wz_title"), t("wz_error"), str(e), level="error")
+            return
+        finally:
+            if self.winfo_exists():
+                self.configure(cursor="")
+        log(f"setup wizard: {len(self.libs)} libraries, service folder {svc or '-'}, {len(self.rules)} watched folders")
+        self.done = True
         self.destroy()
 
 
@@ -1556,6 +2058,15 @@ def import_lines(settings):
         lines.append(("error", " · ".join(x for x in (main, sub) if x), False, "auto"))
     else:
         lines.append(("info", " · ".join(x for x in (main, sub) if x), False, "auto"))
+    try:  # anteprime sviluppate per il telefono (thread del processo in background)
+        import developed
+        pv = watcher.load_json(developed.STATUS)
+        if pv.get("running") and pv.get("pid") == st.get("pid") and pv.get("phase") == "render" and pv.get("total"):
+            done, total = pv.get("done") or 0, pv["total"]
+            lines.append(("work", t("previews_line", library=pv.get("library") or "", done=done, total=total),
+                          done / total, "auto"))
+    except Exception as e:  # noqa: BLE001
+        log(f"status previews: {e!r}")
     if last and recent((st.get("last") or {}).get("when")):
         lines.append(("news", last, False, "auto"))
     return lines
@@ -1610,6 +2121,12 @@ class App(tk.Tk):
         dark_title_bar(self)
         self.deiconify()
         self.after(150, self.refresh)
+        if not self.settings.get("setup_done"):
+            if self.settings.get("libraries"):  # già configurata da una versione precedente: niente procedura guidata
+                self.settings["setup_done"] = True
+                save_settings(self.settings)
+            else:
+                self.after(400, self.open_wizard)
         if self.settings.get("check_updates", True):
             self.after(2500, self.check_updates)
 
@@ -2557,6 +3074,18 @@ class App(tk.Tk):
 
     def open_backups(self):
         self.wait_window(BackupsDialog(self))
+
+    def open_wizard(self):
+        d = SetupWizard(self)
+        self.wait_window(d)
+        if not d.done:
+            return
+        self.finder = cs.ProfileFinder(self.settings.get("profiles_dir"))
+        on = (self.settings.get("watch") or {}).get("enabled")
+        self.btn_auto.configure(text=("● " if on else "") + t("auto_btn"))
+        self.refresh()
+        if d.open_ai_after.get():
+            self.open_ai()
 
     def open_auto_import(self):
         d = AutoImportDialog(self)

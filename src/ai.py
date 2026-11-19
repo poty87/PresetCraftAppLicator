@@ -412,13 +412,16 @@ def remove_engine(folder):
 
 
 def nas_outputs(settings):
-    """Le cartelle <libreria>/ia scritte dal motore nella cartella del telefono."""
+    """Le cartelle <libreria>/ia scritte dal motore nella cartella di servizio (anche nel posto delle versioni prima
+    della 1.19, se non ancora spostate)."""
     import watcher
     folder, libs = watcher.phone_settings(settings)
     out = []
-    if folder and os.path.isdir(folder):
-        for name in os.listdir(folder):
-            p = os.path.join(folder, name, "ia")
+    for root in (watcher.libraries_root(folder), folder) if folder else ():
+        if not os.path.isdir(root):
+            continue
+        for name in os.listdir(root):
+            p = os.path.join(root, name, "ia")
             if os.path.isfile(os.path.join(p, "manifest.json")):
                 out.append(p)
     return out
@@ -618,12 +621,14 @@ def maybe_start(settings, log=None):
     state_path = os.path.join(folder, "avvii.json")
     last = load_json(state_path, {})
     sig = library_signatures(libs)
-    missing = any(not os.path.isfile(os.path.join(phone_folder, watcher.library_folder_name(lib), "ia",
-                                                  "manifest.json")) for lib in libs)
+    if watcher.old_layout_folders(phone_folder):
+        return False  # prima si spostano le cartelle delle librerie nel posto nuovo (lo fa il giro del watcher)
+    missing = any(not os.path.isfile(os.path.join(watcher.library_dir(phone_folder, lib), "ia", "manifest.json"))
+                  for lib in libs)
     describer = describer_ready(settings)
     if describer and not missing:  # descrizioni attivate ma non ancora fatte (o non complete) per qualche libreria
         for lib in libs:
-            m = load_json(os.path.join(phone_folder, watcher.library_folder_name(lib), "ia", "manifest.json"), {})
+            m = load_json(os.path.join(watcher.library_dir(phone_folder, lib), "ia", "manifest.json"), {})
             if (m.get("descriptions") or {}).get("count", 0) < m.get("count", 0):
                 missing = True
                 break
@@ -643,7 +648,8 @@ def maybe_start(settings, log=None):
     dst = os.path.join(folder, "ia_worker.py")
     shutil.copyfile(src, dst)  # il codice del lavoratore segue la versione dell'app
     conf = os.path.join(folder, "config.json")
-    save_json(conf, {"engine_dir": folder, "phone_folder": phone_folder, "libraries": libs, "model": model,
+    save_json(conf, {"engine_dir": folder, "phone_folder": watcher.libraries_root(phone_folder), "libraries": libs,
+                     "model": model,
                      "phone_bits": int(cfg.get("phone_bits") or 8), "gpu_check": bool(cfg.get("gpu_check", True)),
                      "window": window, "descriptions": describer})
     subprocess.Popen([venv_python(folder), dst, "--config", conf], cwd=folder, env=env(folder),

@@ -1385,3 +1385,390 @@ NEW.update({
     "ai_q_described": _t("{count} descritte", "{count} described", "{count} beschrieben", "{count} descritas",
                          "{count} décrites", "{count} descritas"),
 })
+
+
+# configurazione guidata (1.19)
+NEW.update({
+    "wz_title": _t("Configurazione guidata", "Setup guide", "Einrichtungsassistent", "Configuración guiada",
+                   "Configuration guidée", "Configuração guiada"),
+    "wz_open": _t("Configurazione guidata…", "Setup guide…", "Einrichtungsassistent…", "Configuración guiada…",
+                  "Configuration guidée…", "Configuração guiada…"),
+    "wz_back": _t("Indietro", "Back", "Zurück", "Atrás", "Retour", "Voltar"),
+    "wz_next": _t("Avanti", "Next", "Weiter", "Siguiente", "Suivant", "Seguinte"),
+    "wz_finish": _t("Inizia", "Start", "Loslegen", "Empezar", "Commencer", "Começar"),
+    "wz_step": _t("Passo {n} di {total}", "Step {n} of {total}", "Schritt {n} von {total}", "Paso {n} de {total}",
+                  "Étape {n} sur {total}", "Passo {n} de {total}"),
+    "wz_none": _t("nessuna", "none", "keine", "ninguna", "aucune", "nenhuma"),
+    "wz_welcome_title": _t("Benvenuto in PresetCraftAppLicator", "Welcome to PresetCraftAppLicator",
+                           "Willkommen bei PresetCraftAppLicator", "Bienvenido a PresetCraftAppLicator",
+                           "Bienvenue dans PresetCraftAppLicator", "Bem-vindo ao PresetCraftAppLicator"),
+    "wz_welcome_text": _t(
+        "In pochi passi scegli le cartelle con cui lavora. Sono di tre tipi, e conviene tenerle distinte:",
+        "In a few steps you choose the folders it works with. There are three kinds, best kept apart:",
+        "In wenigen Schritten wählst du die Ordner, mit denen es arbeitet. Es gibt drei Arten, die getrennt bleiben "
+        "sollten:",
+        "En pocos pasos eliges las carpetas con las que trabaja. Son de tres tipos y conviene mantenerlas separadas:",
+        "En quelques étapes, vous choisissez les dossiers avec lesquels il travaille. Il y en a trois sortes, à garder "
+        "séparées :",
+        "Em poucos passos escolhe as pastas com que trabalha. São de três tipos, e convém mantê-las separadas:"),
+    "wz_place_photos": _t(
+        "Le foto: restano dove sono (per esempio sul NAS). PresetCraftAppLicator le legge soltanto.",
+        "The photos: they stay where they are (for example on the NAS). PresetCraftAppLicator only reads them.",
+        "Die Fotos: Sie bleiben, wo sie sind (zum Beispiel auf dem NAS). PresetCraftAppLicator liest sie nur.",
+        "Las fotos: se quedan donde están (por ejemplo en el NAS). PresetCraftAppLicator solo las lee.",
+        "Les photos : elles restent où elles sont (par exemple sur le NAS). PresetCraftAppLicator ne fait que les lire.",
+        "As fotos: ficam onde estão (por exemplo no NAS). O PresetCraftAppLicator só as lê."),
+    "wz_place_library": _t(
+        "Le librerie di LightCraft: le cartelle dei cataloghi (con il file catalog.snap), dove le tieni tu.",
+        "The LightCraft libraries: the catalog folders (with the catalog.snap file), wherever you keep them.",
+        "Die LightCraft-Bibliotheken: die Katalogordner (mit der Datei catalog.snap), wo immer du sie hast.",
+        "Las bibliotecas de LightCraft: las carpetas de los catálogos (con el archivo catalog.snap), donde las tengas.",
+        "Les bibliothèques LightCraft : les dossiers des catalogues (avec le fichier catalog.snap), là où vous les "
+        "gardez.",
+        "As bibliotecas do LightCraft: as pastas dos catálogos (com o ficheiro catalog.snap), onde as guardar."),
+    "wz_place_service": _t(
+        "La cartella di servizio: una cartella sul NAS dove PresetCraftAppLicator tiene tutto quello che prepara "
+        "(librerie per il telefono, anteprime sviluppate, ricerca IA, copia delle impostazioni, backup). Dopo una "
+        "reinstallazione basta indicarla di nuovo per ritrovare tutto.",
+        "The service folder: a folder on the NAS where PresetCraftAppLicator keeps everything it prepares (libraries "
+        "for the phone, developed previews, AI search, a copy of the settings, backups). After a reinstall, just point "
+        "to it again to get everything back.",
+        "Der Dienstordner: ein Ordner auf dem NAS, in dem PresetCraftAppLicator alles ablegt, was es vorbereitet "
+        "(Bibliotheken fürs Telefon, entwickelte Vorschauen, KI-Suche, eine Kopie der Einstellungen, Backups). Nach "
+        "einer Neuinstallation genügt es, ihn wieder anzugeben.",
+        "La carpeta de servicio: una carpeta en el NAS donde PresetCraftAppLicator guarda todo lo que prepara "
+        "(bibliotecas para el teléfono, vistas reveladas, búsqueda IA, copia de los ajustes, copias de seguridad). "
+        "Tras reinstalar, basta con indicarla de nuevo para recuperarlo todo.",
+        "Le dossier de service : un dossier sur le NAS où PresetCraftAppLicator garde tout ce qu'il prépare "
+        "(bibliothèques pour le téléphone, aperçus développés, recherche IA, copie des réglages, sauvegardes). Après "
+        "une réinstallation, il suffit de l'indiquer à nouveau pour tout retrouver.",
+        "A pasta de serviço: uma pasta no NAS onde o PresetCraftAppLicator guarda tudo o que prepara (bibliotecas para "
+        "o telemóvel, pré-visualizações reveladas, pesquisa IA, cópia das definições, cópias de segurança). Depois de "
+        "reinstalar, basta indicá-la de novo para recuperar tudo."),
+    "wz_start": _t("Come vuoi iniziare", "How do you want to start", "Wie möchtest du beginnen", "Cómo quieres empezar",
+                   "Comment voulez-vous commencer", "Como quer começar"),
+    "wz_start_new": _t("Prima configurazione", "First setup", "Erste Einrichtung", "Primera configuración",
+                       "Première configuration", "Primeira configuração"),
+    "wz_start_restore": _t(
+        "Ho già una cartella di servizio: ripristina le impostazioni salvate lì (PC nuovo o reinstallato)",
+        "I already have a service folder: restore the settings saved there (new or reinstalled PC)",
+        "Ich habe schon einen Dienstordner: dort gespeicherte Einstellungen wiederherstellen (neuer oder neu "
+        "installierter PC)",
+        "Ya tengo una carpeta de servicio: restaurar los ajustes guardados allí (PC nuevo o reinstalado)",
+        "J'ai déjà un dossier de service : restaurer les réglages qui y sont enregistrés (PC neuf ou réinstallé)",
+        "Já tenho uma pasta de serviço: restaurar as definições guardadas lá (PC novo ou reinstalado)"),
+    "wz_restore_pick": _t("Cartella di servizio", "Service folder", "Dienstordner", "Carpeta de servicio",
+                          "Dossier de service", "Pasta de serviço"),
+    "wz_restore_hint": _t("Scegli la cartella di servizio (per esempio Y:\\ViewerCraftStar).",
+                          "Choose the service folder (for example Y:\\ViewerCraftStar).",
+                          "Wähle den Dienstordner (zum Beispiel Y:\\ViewerCraftStar).",
+                          "Elige la carpeta de servicio (por ejemplo Y:\\ViewerCraftStar).",
+                          "Choisissez le dossier de service (par exemple Y:\\ViewerCraftStar).",
+                          "Escolha a pasta de serviço (por exemplo Y:\\ViewerCraftStar)."),
+    "wz_restore_found": _t("Impostazioni salvate da {computer} il {when}: nei passi seguenti puoi controllarle.",
+                           "Settings saved by {computer} on {when}: you can check them in the next steps.",
+                           "Einstellungen gespeichert von {computer} am {when}: in den nächsten Schritten kannst du "
+                           "sie prüfen.",
+                           "Ajustes guardados por {computer} el {when}: puedes revisarlos en los pasos siguientes.",
+                           "Réglages enregistrés par {computer} le {when} : vous pouvez les vérifier dans les étapes "
+                           "suivantes.",
+                           "Definições guardadas por {computer} em {when}: pode verificá-las nos passos seguintes."),
+    "wz_restore_none": _t("In questa cartella non ci sono impostazioni salvate (settings\\settings.json).",
+                          "There are no saved settings in this folder (settings\\settings.json).",
+                          "In diesem Ordner gibt es keine gespeicherten Einstellungen (settings\\settings.json).",
+                          "En esta carpeta no hay ajustes guardados (settings\\settings.json).",
+                          "Ce dossier ne contient pas de réglages enregistrés (settings\\settings.json).",
+                          "Nesta pasta não há definições guardadas (settings\\settings.json)."),
+    "wz_lc_title": _t("LightCraft e le sue librerie", "LightCraft and its libraries", "LightCraft und seine Bibliotheken",
+                      "LightCraft y sus bibliotecas", "LightCraft et ses bibliothèques", "LightCraft e as suas bibliotecas"),
+    "wz_lc_text": _t(
+        "PresetCraftAppLicator usa lightcraft-cli (installato con LightCraft) per leggere e modificare le librerie. "
+        "Aggiungi le librerie con cui vuoi lavorare: è la cartella del catalogo, quella che apri in LightCraft.",
+        "PresetCraftAppLicator uses lightcraft-cli (installed with LightCraft) to read and change the libraries. Add "
+        "the libraries you want to work with: the catalog folder, the one you open in LightCraft.",
+        "PresetCraftAppLicator verwendet lightcraft-cli (mit LightCraft installiert), um die Bibliotheken zu lesen und "
+        "zu ändern. Füge die Bibliotheken hinzu, mit denen du arbeiten willst: den Katalogordner, den du in LightCraft "
+        "öffnest.",
+        "PresetCraftAppLicator usa lightcraft-cli (instalado con LightCraft) para leer y modificar las bibliotecas. "
+        "Añade las bibliotecas con las que quieres trabajar: la carpeta del catálogo, la que abres en LightCraft.",
+        "PresetCraftAppLicator utilise lightcraft-cli (installé avec LightCraft) pour lire et modifier les "
+        "bibliothèques. Ajoutez celles avec lesquelles vous voulez travailler : le dossier du catalogue, celui que vous "
+        "ouvrez dans LightCraft.",
+        "O PresetCraftAppLicator usa o lightcraft-cli (instalado com o LightCraft) para ler e alterar as bibliotecas. "
+        "Adicione as bibliotecas com que quer trabalhar: a pasta do catálogo, a que abre no LightCraft."),
+    "wz_lc_libraries": _t("Librerie", "Libraries", "Bibliotheken", "Bibliotecas", "Bibliothèques", "Bibliotecas"),
+    "wz_col_name": _t("Nome", "Name", "Name", "Nombre", "Nom", "Nome"),
+    "wz_col_folder": _t("Cartella", "Folder", "Ordner", "Carpeta", "Dossier", "Pasta"),
+    "wz_add_library": _t("Aggiungi libreria…", "Add library…", "Bibliothek hinzufügen…", "Añadir biblioteca…",
+                         "Ajouter une bibliothèque…", "Adicionar biblioteca…"),
+    "wz_lc_hint": _t(
+        "Le librerie restano dove sono: PresetCraftAppLicator non le sposta e fa un backup prima di ogni modifica. ⚠ = "
+        "cartella non trovata (unità non collegata o libreria spostata).",
+        "The libraries stay where they are: PresetCraftAppLicator does not move them and makes a backup before every "
+        "change. ⚠ = folder not found (drive not connected or library moved).",
+        "Die Bibliotheken bleiben, wo sie sind: PresetCraftAppLicator verschiebt sie nicht und macht vor jeder Änderung "
+        "ein Backup. ⚠ = Ordner nicht gefunden (Laufwerk nicht verbunden oder Bibliothek verschoben).",
+        "Las bibliotecas se quedan donde están: PresetCraftAppLicator no las mueve y hace una copia antes de cada "
+        "cambio. ⚠ = carpeta no encontrada (unidad no conectada o biblioteca movida).",
+        "Les bibliothèques restent où elles sont : PresetCraftAppLicator ne les déplace pas et fait une sauvegarde avant "
+        "chaque modification. ⚠ = dossier introuvable (lecteur non connecté ou bibliothèque déplacée).",
+        "As bibliotecas ficam onde estão: o PresetCraftAppLicator não as move e faz uma cópia antes de cada alteração. "
+        "⚠ = pasta não encontrada (unidade não ligada ou biblioteca movida)."),
+    "wz_cli_ok": _t("lightcraft-cli trovato.", "lightcraft-cli found.", "lightcraft-cli gefunden.",
+                    "lightcraft-cli encontrado.", "lightcraft-cli trouvé.", "lightcraft-cli encontrado."),
+    "wz_cli_missing": _t("lightcraft-cli non trovato: installa LightCraft o indica dove si trova.",
+                         "lightcraft-cli not found: install LightCraft or show where it is.",
+                         "lightcraft-cli nicht gefunden: installiere LightCraft oder gib an, wo es liegt.",
+                         "lightcraft-cli no encontrado: instala LightCraft o indica dónde está.",
+                         "lightcraft-cli introuvable : installez LightCraft ou indiquez où il se trouve.",
+                         "lightcraft-cli não encontrado: instale o LightCraft ou indique onde está."),
+    "wz_need_library": _t("Aggiungi almeno una libreria di LightCraft.", "Add at least one LightCraft library.",
+                          "Füge mindestens eine LightCraft-Bibliothek hinzu.",
+                          "Añade al menos una biblioteca de LightCraft.",
+                          "Ajoutez au moins une bibliothèque LightCraft.",
+                          "Adicione pelo menos uma biblioteca do LightCraft."),
+    "wz_service_title": _t("La cartella di servizio", "The service folder", "Der Dienstordner", "La carpeta de servicio",
+                           "Le dossier de service", "A pasta de serviço"),
+    "wz_service_text": _t(
+        "Una cartella nuova e vuota sul NAS, per esempio Y:\\ViewerCraftStar: non quella delle foto né quella dei "
+        "cataloghi. Serve per il telefono e per ripartire dopo una reinstallazione. Se non usi ViewerCraftStar puoi "
+        "lasciarla vuota.",
+        "A new, empty folder on the NAS, for example Y:\\ViewerCraftStar: not the photos' folder nor the catalogs' one. "
+        "It is used by the phone and to start again after a reinstall. If you don't use ViewerCraftStar you can leave "
+        "it empty.",
+        "Ein neuer, leerer Ordner auf dem NAS, zum Beispiel Y:\\ViewerCraftStar: weder der Foto- noch der "
+        "Katalogordner. Er dient dem Telefon und dem Neustart nach einer Neuinstallation. Ohne ViewerCraftStar kann er "
+        "leer bleiben.",
+        "Una carpeta nueva y vacía en el NAS, por ejemplo Y:\\ViewerCraftStar: no la de las fotos ni la de los "
+        "catálogos. Sirve para el teléfono y para volver a empezar tras reinstalar. Si no usas ViewerCraftStar puedes "
+        "dejarla vacía.",
+        "Un dossier neuf et vide sur le NAS, par exemple Y:\\ViewerCraftStar : ni celui des photos ni celui des "
+        "catalogues. Il sert au téléphone et à repartir après une réinstallation. Sans ViewerCraftStar, vous pouvez le "
+        "laisser vide.",
+        "Uma pasta nova e vazia no NAS, por exemplo Y:\\ViewerCraftStar: não a das fotos nem a dos catálogos. Serve "
+        "para o telemóvel e para recomeçar depois de reinstalar. Se não usa o ViewerCraftStar pode deixá-la vazia."),
+    "wz_service_folder": _t("Cartella di servizio", "Service folder", "Dienstordner", "Carpeta de servicio",
+                            "Dossier de service", "Pasta de serviço"),
+    "wz_service_hint": _t(
+        "Nell'app ViewerCraftStar imposta poi la stessa cartella in Impostazioni › Libreria di casa.",
+        "Then set the same folder in the ViewerCraftStar app under Settings › Home library.",
+        "Stelle danach denselben Ordner in der App ViewerCraftStar unter Einstellungen › Heimbibliothek ein.",
+        "Luego indica la misma carpeta en la app ViewerCraftStar, en Ajustes › Biblioteca de casa.",
+        "Indiquez ensuite le même dossier dans l'app ViewerCraftStar, sous Réglages › Bibliothèque de la maison.",
+        "Depois indique a mesma pasta na app ViewerCraftStar, em Definições › Biblioteca de casa."),
+    "wz_service_inside": _t("Cosa ci sarà dentro", "What it will contain", "Was darin liegen wird", "Qué contendrá",
+                            "Ce qu'il contiendra", "O que vai conter"),
+    "wz_dir_libraries": _t(
+        "una cartella per libreria: indice per il telefono, modifiche fatte sul telefono, anteprime sviluppate, "
+        "ricerca IA",
+        "one folder per library: index for the phone, changes made on the phone, developed previews, AI search",
+        "ein Ordner pro Bibliothek: Index fürs Telefon, Änderungen vom Telefon, entwickelte Vorschauen, KI-Suche",
+        "una carpeta por biblioteca: índice para el teléfono, cambios hechos en el teléfono, vistas reveladas, "
+        "búsqueda IA",
+        "un dossier par bibliothèque : index pour le téléphone, modifications faites sur le téléphone, aperçus "
+        "développés, recherche IA",
+        "uma pasta por biblioteca: índice para o telemóvel, alterações feitas no telemóvel, pré-visualizações "
+        "reveladas, pesquisa IA"),
+    "wz_dir_settings": _t("la copia delle impostazioni di PresetCraftAppLicator, per ripristinarle",
+                          "the copy of PresetCraftAppLicator's settings, to restore them",
+                          "die Kopie der Einstellungen von PresetCraftAppLicator, zum Wiederherstellen",
+                          "la copia de los ajustes de PresetCraftAppLicator, para restaurarlos",
+                          "la copie des réglages de PresetCraftAppLicator, pour les restaurer",
+                          "a cópia das definições do PresetCraftAppLicator, para as restaurar"),
+    "wz_dir_backups": _t("i backup delle librerie fatti prima di ogni modifica (se li vuoi qui)",
+                         "the library backups made before every change (if you want them here)",
+                         "die Backups der Bibliotheken vor jeder Änderung (wenn du sie hier willst)",
+                         "las copias de las bibliotecas hechas antes de cada cambio (si las quieres aquí)",
+                         "les sauvegardes des bibliothèques faites avant chaque modification (si vous les voulez ici)",
+                         "as cópias das bibliotecas feitas antes de cada alteração (se as quiser aqui)"),
+    "wz_backup_service": _t("Nella cartella di servizio (consigliato: tutto in un posto solo)",
+                            "In the service folder (recommended: everything in one place)",
+                            "Im Dienstordner (empfohlen: alles an einem Ort)",
+                            "En la carpeta de servicio (recomendado: todo en un solo sitio)",
+                            "Dans le dossier de service (recommandé : tout au même endroit)",
+                            "Na pasta de serviço (recomendado: tudo num só sítio)"),
+    "wz_backup_keep": _t("In {folder} (come adesso)", "In {folder} (as now)", "In {folder} (wie bisher)",
+                         "En {folder} (como ahora)", "Dans {folder} (comme maintenant)", "Em {folder} (como agora)"),
+    "wz_need_service_backup": _t(
+        "Per tenere i backup nella cartella di servizio, scegli prima la cartella (o metti i backup accanto alle "
+        "librerie).",
+        "To keep the backups in the service folder, choose the folder first (or keep the backups next to the "
+        "libraries).",
+        "Um die Backups im Dienstordner zu behalten, wähle zuerst den Ordner (oder lege sie neben die Bibliotheken).",
+        "Para guardar las copias en la carpeta de servicio, elige primero la carpeta (o ponlas junto a las "
+        "bibliotecas).",
+        "Pour garder les sauvegardes dans le dossier de service, choisissez d'abord le dossier (ou mettez-les à côté "
+        "des bibliothèques).",
+        "Para guardar as cópias na pasta de serviço, escolha primeiro a pasta (ou ponha-as junto às bibliotecas)."),
+    "wz_photos_title": _t("Foto nuove in arrivo", "Incoming new photos", "Neu eintreffende Fotos",
+                          "Fotos nuevas que llegan", "Nouvelles photos qui arrivent", "Fotos novas a chegar"),
+    "wz_photos_text": _t(
+        "Facoltativo. Se le foto nuove arrivano in una cartella (per esempio caricate dal telefono sul NAS), "
+        "PresetCraftAppLicator la tiene d'occhio in background: importa le foto nella libreria scelta e dà a ognuna il "
+        "profilo dello stile con cui è stata scattata.",
+        "Optional. If new photos arrive in a folder (for example uploaded from the phone to the NAS), "
+        "PresetCraftAppLicator watches it in the background: it imports the photos into the chosen library and gives "
+        "each one the profile of the style it was shot with.",
+        "Optional. Wenn neue Fotos in einem Ordner ankommen (zum Beispiel vom Telefon aufs NAS hochgeladen), behält "
+        "PresetCraftAppLicator ihn im Hintergrund im Auge: Es importiert die Fotos in die gewählte Bibliothek und gibt "
+        "jedem das Profil seines Bildstils.",
+        "Opcional. Si las fotos nuevas llegan a una carpeta (por ejemplo subidas desde el teléfono al NAS), "
+        "PresetCraftAppLicator la vigila en segundo plano: importa las fotos en la biblioteca elegida y da a cada una "
+        "el perfil del estilo con el que se hizo.",
+        "Facultatif. Si les nouvelles photos arrivent dans un dossier (par exemple envoyées du téléphone vers le NAS), "
+        "PresetCraftAppLicator le surveille en arrière-plan : il importe les photos dans la bibliothèque choisie et "
+        "donne à chacune le profil du style de prise de vue.",
+        "Opcional. Se as fotos novas chegam a uma pasta (por exemplo enviadas do telemóvel para o NAS), o "
+        "PresetCraftAppLicator vigia-a em segundo plano: importa as fotos na biblioteca escolhida e dá a cada uma o "
+        "perfil do estilo com que foi tirada."),
+    "wz_photos_hint": _t(
+        "È la cartella delle foto, non quella di servizio. Le foto restano lì: LightCraft le legge da quella cartella.",
+        "This is the photos' folder, not the service one. The photos stay there: LightCraft reads them from that "
+        "folder.",
+        "Das ist der Fotoordner, nicht der Dienstordner. Die Fotos bleiben dort: LightCraft liest sie aus diesem Ordner.",
+        "Es la carpeta de las fotos, no la de servicio. Las fotos se quedan allí: LightCraft las lee desde esa carpeta.",
+        "C'est le dossier des photos, pas celui de service. Les photos y restent : LightCraft les lit depuis ce dossier.",
+        "É a pasta das fotos, não a de serviço. As fotos ficam lá: o LightCraft lê-as dessa pasta."),
+    "wz_photos_is_service": _t("Questa è la cartella di servizio: per le foto scegline un'altra.",
+                               "This is the service folder: choose another one for the photos.",
+                               "Das ist der Dienstordner: Wähle für die Fotos einen anderen.",
+                               "Esta es la carpeta de servicio: elige otra para las fotos.",
+                               "C'est le dossier de service : choisissez-en un autre pour les photos.",
+                               "Esta é a pasta de serviço: escolha outra para as fotos."),
+    "wz_phone_title": _t("Il telefono (ViewerCraftStar)", "The phone (ViewerCraftStar)", "Das Telefon (ViewerCraftStar)",
+                         "El teléfono (ViewerCraftStar)", "Le téléphone (ViewerCraftStar)",
+                         "O telemóvel (ViewerCraftStar)"),
+    "wz_phone_text": _t(
+        "Le librerie spuntate si possono sfogliare con ViewerCraftStar, anche fuori casa: foto, stelle, bandierine, "
+        "etichette, parole chiave e pile. Le modifiche fatte sul telefono tornano in LightCraft.",
+        "The ticked libraries can be browsed with ViewerCraftStar, even away from home: photos, stars, flags, labels, "
+        "keywords and stacks. Changes made on the phone go back to LightCraft.",
+        "Die angehakten Bibliotheken lassen sich mit ViewerCraftStar durchsuchen, auch unterwegs: Fotos, Sterne, "
+        "Markierungen, Farben, Stichwörter und Stapel. Änderungen auf dem Telefon gehen zurück zu LightCraft.",
+        "Las bibliotecas marcadas se pueden ver con ViewerCraftStar, incluso fuera de casa: fotos, estrellas, banderas, "
+        "etiquetas, palabras clave y pilas. Los cambios hechos en el teléfono vuelven a LightCraft.",
+        "Les bibliothèques cochées se consultent avec ViewerCraftStar, même hors de chez vous : photos, étoiles, "
+        "drapeaux, libellés, mots-clés et piles. Les modifications faites sur le téléphone reviennent dans LightCraft.",
+        "As bibliotecas assinaladas podem ser vistas com o ViewerCraftStar, mesmo fora de casa: fotos, estrelas, "
+        "bandeiras, etiquetas, palavras-chave e pilhas. As alterações feitas no telemóvel voltam ao LightCraft."),
+    "wz_phone_no_service": _t("Serve la cartella di servizio (passo 3): senza, il telefono non vede le librerie.",
+                              "The service folder is needed (step 3): without it the phone doesn't see the libraries.",
+                              "Der Dienstordner ist nötig (Schritt 3): ohne ihn sieht das Telefon die Bibliotheken nicht.",
+                              "Hace falta la carpeta de servicio (paso 3): sin ella el teléfono no ve las bibliotecas.",
+                              "Le dossier de service est nécessaire (étape 3) : sans lui, le téléphone ne voit pas les "
+                              "bibliothèques.",
+                              "É precisa a pasta de serviço (passo 3): sem ela o telemóvel não vê as bibliotecas."),
+    "wz_phone_libs": _t("Librerie da consultare sul telefono", "Libraries to browse on the phone",
+                        "Bibliotheken zum Durchsuchen auf dem Telefon", "Bibliotecas para ver en el teléfono",
+                        "Bibliothèques à consulter sur le téléphone", "Bibliotecas para ver no telemóvel"),
+    "wz_previews": _t("Anteprime sviluppate", "Developed previews", "Entwickelte Vorschauen", "Vistas reveladas",
+                      "Aperçus développés", "Pré-visualizações reveladas"),
+    "wz_previews_check": _t("Mostra sul telefono le foto ritoccate in LightCraft come sono adesso",
+                            "Show photos retouched in LightCraft on the phone as they are now",
+                            "In LightCraft bearbeitete Fotos auf dem Telefon so zeigen, wie sie jetzt sind",
+                            "Mostrar en el teléfono las fotos retocadas en LightCraft tal como están ahora",
+                            "Montrer sur le téléphone les photos retouchées dans LightCraft telles qu'elles sont",
+                            "Mostrar no telemóvel as fotos retocadas no LightCraft como estão agora"),
+    "wz_previews_hint": _t(
+        "Il telefono mostra l'anteprima che la fotocamera ha messo nel file, cioè la foto com'era allo scatto. Per le "
+        "foto ritoccate (oltre al profilo della fotocamera) il PC prepara in background un'anteprima sviluppata con "
+        "LightCraft (circa 3 secondi a foto, ~600 KB nella cartella di servizio), e la rifà quando cambi lo sviluppo.",
+        "The phone shows the preview the camera put in the file, that is the photo as it was shot. For retouched photos "
+        "(beyond the camera profile) the PC prepares in the background a preview developed with LightCraft (about 3 "
+        "seconds per photo, ~600 KB in the service folder), and redoes it when you change the development.",
+        "Das Telefon zeigt die Vorschau, die die Kamera in die Datei gelegt hat, also das Foto wie aufgenommen. Für "
+        "bearbeitete Fotos (über das Kameraprofil hinaus) bereitet der PC im Hintergrund eine mit LightCraft "
+        "entwickelte Vorschau vor (etwa 3 Sekunden pro Foto, ~600 KB im Dienstordner) und erneuert sie, wenn du die "
+        "Entwicklung änderst.",
+        "El teléfono muestra la vista previa que la cámara puso en el archivo, es decir la foto tal como se hizo. Para "
+        "las fotos retocadas (más allá del perfil de la cámara) el PC prepara en segundo plano una vista revelada con "
+        "LightCraft (unos 3 segundos por foto, ~600 KB en la carpeta de servicio) y la rehace cuando cambias el "
+        "revelado.",
+        "Le téléphone montre l'aperçu que l'appareil a mis dans le fichier, c'est-à-dire la photo telle que prise. Pour "
+        "les photos retouchées (au-delà du profil de l'appareil), le PC prépare en arrière-plan un aperçu développé "
+        "avec LightCraft (environ 3 secondes par photo, ~600 Ko dans le dossier de service) et le refait quand vous "
+        "changez le développement.",
+        "O telemóvel mostra a pré-visualização que a câmara pôs no ficheiro, ou seja, a foto como foi tirada. Para as "
+        "fotos retocadas (além do perfil da câmara) o PC prepara em segundo plano uma pré-visualização revelada com o "
+        "LightCraft (cerca de 3 segundos por foto, ~600 KB na pasta de serviço) e refá-la quando muda a revelação."),
+    "wz_phone_app": _t("Nell'app", "In the app", "In der App", "En la app", "Dans l'app", "Na app"),
+    "wz_phone_hint": _t(
+        "In ViewerCraftStar, Impostazioni › Libreria di casa: la cartella di servizio e le credenziali del NAS.",
+        "In ViewerCraftStar, Settings › Home library: the service folder and the NAS credentials.",
+        "In ViewerCraftStar, Einstellungen › Heimbibliothek: der Dienstordner und die NAS-Zugangsdaten.",
+        "En ViewerCraftStar, Ajustes › Biblioteca de casa: la carpeta de servicio y las credenciales del NAS.",
+        "Dans ViewerCraftStar, Réglages › Bibliothèque de la maison : le dossier de service et les identifiants du NAS.",
+        "No ViewerCraftStar, Definições › Biblioteca de casa: a pasta de serviço e as credenciais do NAS."),
+    "wz_ai_title": _t("Ricerca per soggetti (facoltativa)", "Search by subject (optional)",
+                      "Suche nach Motiven (optional)", "Búsqueda por temas (opcional)",
+                      "Recherche par sujet (facultative)", "Pesquisa por assuntos (opcional)"),
+    "wz_ai_text": _t(
+        "Con il Motore IA il telefono trova le foto scrivendo cosa c'è dentro («bambini al mare»). Il motore gira su "
+        "questo PC (meglio con una scheda video NVIDIA) e scarica i modelli, circa 30 GB: è l'unica cosa che resta sul "
+        "PC. Le impronte e le descrizioni che prepara vanno nella cartella di servizio, così dopo una reinstallazione "
+        "non si rifanno.",
+        "With the AI engine the phone finds photos by typing what is in them («children at the beach»). The engine runs "
+        "on this PC (best with an NVIDIA graphics card) and downloads the models, about 30 GB: the only thing that stays "
+        "on the PC. The fingerprints and descriptions it prepares go to the service folder, so they are not redone "
+        "after a reinstall.",
+        "Mit der KI-Engine findet das Telefon Fotos, indem man eingibt, was darauf ist („Kinder am Strand“). Die Engine "
+        "läuft auf diesem PC (am besten mit einer NVIDIA-Grafikkarte) und lädt die Modelle herunter, etwa 30 GB: das "
+        "Einzige, was auf dem PC bleibt. Fingerabdrücke und Beschreibungen kommen in den Dienstordner und werden nach "
+        "einer Neuinstallation nicht neu erstellt.",
+        "Con el motor IA el teléfono encuentra las fotos escribiendo lo que hay en ellas («niños en la playa»). El motor "
+        "funciona en este PC (mejor con una tarjeta gráfica NVIDIA) y descarga los modelos, unos 30 GB: lo único que "
+        "se queda en el PC. Las huellas y descripciones que prepara van a la carpeta de servicio, así no se rehacen "
+        "tras reinstalar.",
+        "Avec le moteur IA, le téléphone trouve les photos en tapant ce qu'elles contiennent (« enfants à la plage »). "
+        "Le moteur tourne sur ce PC (de préférence avec une carte graphique NVIDIA) et télécharge les modèles, environ "
+        "30 Go : la seule chose qui reste sur le PC. Les empreintes et descriptions qu'il prépare vont dans le dossier "
+        "de service, elles ne sont donc pas refaites après une réinstallation.",
+        "Com o motor IA o telemóvel encontra as fotos escrevendo o que têm («crianças na praia»). O motor corre neste "
+        "PC (melhor com uma placa gráfica NVIDIA) e descarrega os modelos, cerca de 30 GB: a única coisa que fica no "
+        "PC. As impressões e descrições que prepara vão para a pasta de serviço, por isso não se refazem depois de "
+        "reinstalar."),
+    "wz_ai_installed": _t("Motore IA installato in {folder}.", "AI engine installed in {folder}.",
+                          "KI-Engine installiert in {folder}.", "Motor IA instalado en {folder}.",
+                          "Moteur IA installé dans {folder}.", "Motor IA instalado em {folder}."),
+    "wz_ai_not_installed": _t("Il Motore IA non è installato.", "The AI engine is not installed.",
+                              "Die KI-Engine ist nicht installiert.", "El motor IA no está instalado.",
+                              "Le moteur IA n'est pas installé.", "O motor IA não está instalado."),
+    "wz_ai_open": _t("Alla fine apri le impostazioni del Motore IA", "Open the AI engine settings at the end",
+                     "Am Ende die Einstellungen der KI-Engine öffnen", "Al final abrir los ajustes del motor IA",
+                     "À la fin, ouvrir les réglages du moteur IA", "No fim abrir as definições do motor IA"),
+    "wz_ai_hint": _t("Si può fare anche dopo, con il pulsante Motore IA in alto.",
+                     "You can also do it later, with the AI engine button at the top.",
+                     "Das geht auch später, mit der Schaltfläche KI-Engine oben.",
+                     "También se puede hacer después, con el botón Motor IA de arriba.",
+                     "Vous pouvez aussi le faire plus tard, avec le bouton Moteur IA en haut.",
+                     "Também se pode fazer depois, com o botão Motor IA em cima."),
+    "wz_summary_title": _t("Riepilogo", "Summary", "Zusammenfassung", "Resumen", "Récapitulatif", "Resumo"),
+    "wz_summary_text": _t("Controlla e premi Inizia. Puoi cambiare tutto anche dopo.",
+                          "Check and press Start. You can change everything later too.",
+                          "Prüfe und drücke Loslegen. Du kannst später alles ändern.",
+                          "Revisa y pulsa Empezar. También puedes cambiarlo todo después.",
+                          "Vérifiez et appuyez sur Commencer. Vous pourrez tout changer ensuite.",
+                          "Verifique e prima Começar. Também pode mudar tudo depois."),
+    "wz_summary_hint": _t(
+        "Con cartelle da tenere d'occhio o librerie per il telefono, PresetCraftAppLicator lavora in background (icona "
+        "vicino all'orologio), anche con la finestra chiusa.",
+        "With folders to watch or libraries for the phone, PresetCraftAppLicator works in the background (icon near the "
+        "clock), even with the window closed.",
+        "Mit überwachten Ordnern oder Bibliotheken fürs Telefon arbeitet PresetCraftAppLicator im Hintergrund (Symbol "
+        "neben der Uhr), auch bei geschlossenem Fenster.",
+        "Con carpetas vigiladas o bibliotecas para el teléfono, PresetCraftAppLicator trabaja en segundo plano (icono "
+        "junto al reloj), incluso con la ventana cerrada.",
+        "Avec des dossiers surveillés ou des bibliothèques pour le téléphone, PresetCraftAppLicator travaille en "
+        "arrière-plan (icône près de l'horloge), même fenêtre fermée.",
+        "Com pastas vigiadas ou bibliotecas para o telemóvel, o PresetCraftAppLicator trabalha em segundo plano (ícone "
+        "perto do relógio), mesmo com a janela fechada."),
+    "wz_error": _t("Non sono riuscito a salvare la configurazione.", "Could not save the setup.",
+                   "Die Einrichtung konnte nicht gespeichert werden.", "No se pudo guardar la configuración.",
+                   "Impossible d'enregistrer la configuration.", "Não foi possível guardar a configuração."),
+    "previews_line": _t("Anteprime sviluppate: {library} {done} di {total}",
+                        "Developed previews: {library} {done} of {total}",
+                        "Entwickelte Vorschauen: {library} {done} von {total}",
+                        "Vistas reveladas: {library} {done} de {total}",
+                        "Aperçus développés : {library} {done} sur {total}",
+                        "Pré-visualizações reveladas: {library} {done} de {total}"),
+})

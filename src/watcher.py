@@ -803,6 +803,10 @@ def watch_settings(settings):
 
 PHONE_INDEX = "index.json.gz"
 PHONE_STATE = os.path.join(STATE_DIR, "phone-libraries.json")
+# la cartella di servizio sul NAS: tutto quello che PresetCraftAppLicator prepara per il telefono e per ripartire
+LIBRARIES_DIR = "libraries"  # <libreria>/: indice, modifiche dal telefono (changes), ricerca IA (ia), anteprime
+SETTINGS_DIR = "settings"  # copia delle impostazioni, per ripristinarle su un PC nuovo
+SERVICE_DIRS = (LIBRARIES_DIR, SETTINGS_DIR, "backups")
 
 
 def phone_settings(settings):
@@ -810,6 +814,56 @@ def phone_settings(settings):
     ph = settings.get("phone") or {}
     folder = (ph.get("folder") or "").strip()
     return folder, ([lib for lib in ph.get("libraries") or [] if lib] if folder else [])
+
+
+def libraries_root(folder):
+    return os.path.join(folder, LIBRARIES_DIR)
+
+
+def library_dir(folder, lib):
+    """La cartella di una libreria dentro la cartella di servizio."""
+    return os.path.join(libraries_root(folder), library_folder_name(lib))
+
+
+def old_layout_folders(folder):
+    """Le cartelle delle librerie lasciate dalle versioni prima della 1.19 direttamente nella cartella di servizio."""
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return []
+    out = []
+    for name in names:
+        p = os.path.join(folder, name)
+        if name.lower() in SERVICE_DIRS or not os.path.isdir(p):
+            continue
+        if any(os.path.exists(os.path.join(p, x)) for x in (PHONE_INDEX, "info.json", "ia", "changes")):
+            out.append(name)
+    return out
+
+
+def migrate_service_folder(folder, engine_busy=False):
+    """Sposta le cartelle delle librerie nel posto nuovo (<cartella>/libraries/<libreria>). Solo a motore IA fermo
+    (scrive in quelle cartelle); se una cartella non si sposta (aperta dal telefono) si riprova al giro dopo.
+    True se la cartella è in ordine."""
+    old = old_layout_folders(folder)
+    if not old:
+        return True
+    if engine_busy:
+        return False
+    ok = True
+    for name in old:
+        dest = os.path.join(libraries_root(folder), name)
+        try:
+            os.makedirs(libraries_root(folder), exist_ok=True)
+            if os.path.exists(dest):
+                log(f"watch: service folder: both {name} and {LIBRARIES_DIR}/{name} exist, the old one stays")
+                continue
+            os.replace(os.path.join(folder, name), dest)
+            log(f"watch: service folder: moved {name} into {LIBRARIES_DIR}")
+        except OSError as e:
+            log(f"watch: service folder: cannot move {name} yet ({e!r})")
+            ok = False
+    return ok
 
 
 def library_folder_name(lib):
@@ -863,7 +917,7 @@ def publish_library_index(lib, folder, state):
     snap = os.path.join(lib, "catalog.snap")
     st = os.stat(snap)
     sig = [st.st_size, st.st_mtime_ns]
-    target_dir = os.path.join(folder, library_folder_name(lib))
+    target_dir = library_dir(folder, lib)
     target = os.path.join(target_dir, PHONE_INDEX)
     if state.get(lib) == sig and os.path.exists(target):
         return False
@@ -931,9 +985,9 @@ def phone_stack_commands(per_photo, known):
 
 def apply_phone_changes(lib, folder, settings):
     """Le modifiche fatte sul telefono (stelle, bandierine, etichette, titolo, didascalia, parole chiave, cestino, pile), lasciate da
-    ViewerCraftStar in <cartella>/<libreria>/changes/*.json: applicate con LightCraft chiuso, dopo un backup; i file
+    ViewerCraftStar in <cartella>/libraries/<libreria>/changes/*.json: applicate con LightCraft chiuso, dopo un backup; i file
     applicati vanno in changes/done. Se lightcraft-cli non riesce, restano e si riprovano al giro dopo."""
-    changes_dir = os.path.join(folder, library_folder_name(lib), "changes")
+    changes_dir = os.path.join(library_dir(folder, lib), "changes")
     try:
         files = sorted(f for f in os.listdir(changes_dir) if f.lower().endswith(".json"))
     except OSError:
@@ -993,10 +1047,50 @@ def apply_phone_changes(lib, folder, settings):
     return True
 
 
+SETTINGS_COPY = "settings.json"
+# impostazioni che valgono solo su questo PC: non si copiano (né si ripristinano) dalla cartella di servizio
+LOCAL_ONLY = ("last_update_check", "window", "sort")
+
+
+def settings_copy_path(folder):
+    return os.path.join(folder, SETTINGS_DIR, SETTINGS_COPY)
+
+
+def save_settings_copy(settings):
+    """Tiene nella cartella di servizio una copia delle impostazioni: su un PC nuovo (o dopo una formattazione) la
+    prima configurazione le trova e le ripristina. Scrive solo se sono cambiate."""
+    folder, _libs = phone_settings(settings)
+    if not folder or not os.path.isdir(folder):
+        return False
+    data = {k: v for k, v in settings.items() if k not in LOCAL_ONLY}
+    path = settings_copy_path(folder)
+    old = load_json(path)
+    if old.get("settings") == data:
+        return False
+    from version import VERSION
+    save_json(path, {"version": 1, "app": VERSION, "computer": os.environ.get("COMPUTERNAME", ""),
+                     "saved": datetime.datetime.now().isoformat(timespec="seconds"), "settings": data})
+    return True
+
+
+def read_settings_copy(folder):
+    """La copia delle impostazioni trovata in una cartella di servizio: {"app", "computer", "saved", "settings"} o
+    None."""
+    data = load_json(settings_copy_path(folder))
+    return data if isinstance(data.get("settings"), dict) else None
+
+
 def publish_phone_libraries(settings):
     folder, libs = phone_settings(settings)
     if not libs:
         return
+    try:
+        import ai
+        busy = ai.worker_status(ai.engine_dir(settings))["running"]
+    except Exception:  # noqa: BLE001
+        busy = False
+    if not migrate_service_folder(folder, busy):
+        return  # cartelle ancora nel posto vecchio: si pubblica quando sono state spostate
     state = load_json(PHONE_STATE)
     changed = False
     for lib in libs:
@@ -1074,6 +1168,15 @@ class Watcher:
                         pause = min(pause, wanted)
                     write_heartbeat(rule, interval, self.status.get().get("phase"))
                 publish_phone_libraries(settings)
+                try:
+                    save_settings_copy(settings)
+                except Exception as e:  # noqa: BLE001
+                    log(f"watch ERROR settings copy: {e!r}")
+                try:  # anteprime sviluppate per il telefono (thread a priorità minima)
+                    import developed
+                    developed.maybe_start(settings)
+                except Exception as e:  # noqa: BLE001
+                    log(f"watch ERROR previews: {e!r}")
                 try:  # ricerca IA: impronte delle foto nuove (processo a parte, a bassa priorità)
                     import ai
                     ai.maybe_start(settings, log)
@@ -1090,6 +1193,11 @@ class Watcher:
                     log("watch: stopped" + ("" if self.quit else " (update or uninstall)"))
                     return 0
         finally:
+            try:
+                import developed
+                developed.stop()
+            except Exception:  # noqa: BLE001
+                pass
             try:
                 os.remove(STATUS)
             except OSError:

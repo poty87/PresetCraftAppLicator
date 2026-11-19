@@ -431,13 +431,32 @@ def pulisci_miniature(motore, cart, foto, nome_lib, errori, errori_path):
         motore.log(f"{nome_lib}: tolte {via} miniature di foto non più in libreria")
 
 
-def prepara_miniature(motore, cart, foto, nome_lib, controllo):
-    """Le miniature che mancano (lette dal NAS in parallelo). Ritorna le foto che hanno la miniatura."""
+def servono_miniature(cfg, ia, foto):
+    """Gli id delle foto a cui serve la miniatura: senza impronta o (con le descrizioni attive) senza descrizione.
+    Le altre sono già fatte sul NAS: dopo una reinstallazione la cache delle miniature non si rifà per loro."""
+    ids = {p["id"] for p in foto}
+    manifest = carica_json(os.path.join(ia, "manifest.json"), {})
+    fatti = set()
+    if manifest.get("model") == cfg["model"]:
+        try:
+            f, _ = carica_impronte(os.path.join(ia, "visivo.bin"))
+            fatti = set(f.tolist()) if f is not None else set()
+        except Exception:  # noqa: BLE001
+            fatti = set()
+    servono = ids - fatti
+    if cfg.get("descriptions") in DESCRITTORI:
+        servono |= ids - {int(k) for k in carica_descrizioni(os.path.join(ia, "descrizioni.json.gz"))}
+    return servono
+
+
+def prepara_miniature(motore, cart, foto, nome_lib, controllo, servono=None):
+    """Le miniature che mancano (lette dal NAS in parallelo), solo per le foto in `servono` (None = tutte).
+    Ritorna (foto che hanno la miniatura, id dei file che non si leggono)."""
     os.makedirs(cart, exist_ok=True)
     errori_path = os.path.join(cart, "errori.json")
     errori = carica_json(errori_path, {})
     pulisci_miniature(motore, cart, foto, nome_lib, errori, errori_path)
-    da_fare = miniature_da_fare(cart, foto, errori)
+    da_fare = miniature_da_fare(cart, [p for p in foto if servono is None or p["id"] in servono], errori)
 
     def una(p):
         try:
@@ -473,7 +492,7 @@ def prepara_miniature(motore, cart, foto, nome_lib, controllo):
             salva_json(errori_path, errori)
         dt = time.time() - t0
         motore.log(f"{nome_lib}: miniature lette in {dt:.0f}s ({len(da_fare) / max(dt, 1e-6):.1f}/s)")
-    return [p for p in foto if os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))]
+    return [p for p in foto if os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))], set(int(k) for k in errori)
 
 
 # ---------------------------------------------------------------- impronte
@@ -553,7 +572,8 @@ class ModelloVisivo:
 
 
 def aggiorna_impronte(motore, modello, cart, foto, dest, nome_lib, controllo):
-    """Calcola le impronte delle foto nuove, toglie quelle delle foto non più in libreria, salva visivo.bin.
+    """Calcola le impronte delle foto nuove (che hanno la miniatura), toglie quelle delle foto non più in libreria
+    (`foto` = tutte quelle della libreria), salva visivo.bin.
     I progressi si salvano ogni ~100 lotti: se la GPU si ferma si riparte da lì."""
     import numpy as np
     import torch
@@ -567,7 +587,7 @@ def aggiorna_impronte(motore, modello, cart, foto, dest, nome_lib, controllo):
             scrivi_impronte(dest, ids, v)
             motore.log(f"{nome_lib}: tolte le impronte di {int((~tieni).sum())} foto non più in libreria")
     fatte = set(ids.tolist()) if ids is not None else set()
-    nuove = [p["id"] for p in foto if p["id"] not in fatte]
+    nuove = [p["id"] for p in foto if p["id"] not in fatte and os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))]
     if not nuove:
         return 0
     grande = len(nuove) > GRANDE
@@ -943,10 +963,12 @@ def lavoro(cfg):
         nome_lib = os.path.basename(os.path.normpath(lib))
         if lib not in cataloghi:
             continue
-        foto = cataloghi[lib]
+        foto = cataloghi[lib]  # tutte le foto della libreria
         cart = cartella_miniature(motore, lib)
-        foto = prepara_miniature(motore, cart, foto, nome_lib, controllo)
         ia = os.path.join(phone_folder, nome_cartella(lib), "ia")
+        con_mini, illeggibili = prepara_miniature(motore, cart, foto, nome_lib, controllo,
+                                                  servono_miniature(cfg, ia, foto))
+        leggibili = [p for p in foto if p["id"] not in illeggibili]
         manifest_path = os.path.join(ia, "manifest.json")
         manifest = carica_json(manifest_path, {})
         visivo = os.path.join(ia, "visivo.bin")
@@ -956,7 +978,7 @@ def lavoro(cfg):
                     os.remove(p)
             manifest = {}
         ids_fatti, _ = carica_impronte(visivo)
-        mancano = len({p["id"] for p in foto} - set(ids_fatti.tolist() if ids_fatti is not None else []))
+        mancano = len({p["id"] for p in con_mini} - set(ids_fatti.tolist() if ids_fatti is not None else []))
         tolte = 0 if ids_fatti is None else len(set(ids_fatti.tolist()) - {p["id"] for p in foto})
         if mancano or tolte:
             if mancano:
@@ -1002,7 +1024,7 @@ def lavoro(cfg):
         if nuovo_manifest != manifest:
             salva_json(manifest_path, nuovo_manifest)
         libs = carica_json(motore.stato_path, {}).get("libraries") or {}
-        libs[nome_lib] = {"count": int(len(ids_fatti)), "photos": len(foto), "model": nome_modello,
+        libs[nome_lib] = {"count": int(len(ids_fatti)), "photos": len(leggibili), "model": nome_modello,
                           "updated": nuovo_manifest["updated"], "path": lib,
                           "described": (manifest.get("descriptions") or {}).get("count", 0)}
         motore.stato(libraries=libs)
@@ -1070,10 +1092,11 @@ def pianifica(cfg, motore, cataloghi):
         cart = cartella_miniature(motore, lib)
         errori = carica_json(os.path.join(cart, "errori.json"), {})
         ids = {p["id"] for p in foto}
-        senza = {p["id"] for p in miniature_da_fare(cart, foto, errori)} if os.path.isdir(cart) else ids
+        ia = os.path.join(cfg["phone_folder"], nome_cartella(lib), "ia")
+        servono = servono_miniature(cfg, ia, foto)
+        senza = {p["id"] for p in miniature_da_fare(cart, [p for p in foto if p["id"] in servono], errori)}
         if senza:
             passi.append(["previews", nome_lib])
-        ia = os.path.join(cfg["phone_folder"], nome_cartella(lib), "ia")
         manifest = carica_json(os.path.join(ia, "manifest.json"), {})
         fatti = set()
         if manifest.get("model") == nome_modello:
