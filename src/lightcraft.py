@@ -35,12 +35,28 @@ def log(text):
         f.write(f"{stamp} {text}\n")
 
 
+# lightcraft-cli avviati da PresetCraftAppLicator senza libreria (anteprime sviluppate): non toccano le librerie, quindi
+# non contano come "LightCraft aperto"
+OWN_PIDS = set()
+
+
 def lightcraft_running():
-    """Nomi dei processi LightCraft in esecuzione (app o riga di comando)."""
+    """Nomi dei processi LightCraft in esecuzione (app o riga di comando), esclusi quelli in OWN_PIDS."""
     out = subprocess.run(["tasklist", "/fo", "csv", "/nh"], capture_output=True, text=True,
                          creationflags=NO_WINDOW).stdout
-    names = {line.split('","')[0].strip('"').lower() for line in out.splitlines() if line}
-    return sorted(n for n in names if n in ("lightcraft.exe", "lightcraft-cli.exe"))
+    names = set()
+    for line in out.splitlines():
+        parts = [x.strip('"') for x in line.split('","')]
+        if len(parts) < 2:
+            continue
+        name = parts[0].lower()
+        try:
+            pid = int(parts[1])
+        except ValueError:
+            pid = None
+        if name in ("lightcraft.exe", "lightcraft-cli.exe") and pid not in OWN_PIDS:
+            names.add(name)
+    return sorted(names)
 
 
 def library_open_reason(lib):

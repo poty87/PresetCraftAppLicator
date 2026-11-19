@@ -27,7 +27,7 @@ import time
 import camera_styles as cs
 import matcher
 from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, backup_library, backup_root, is_cli, is_library,
-                        library_open_reason, log, read_catalog, run_cli)
+                        library_open_reason, lightcraft_running, log, read_catalog, run_cli)
 
 SETTINGS = os.path.join(DATA_DIR, "settings.json")
 STATE_DIR = os.path.join(DATA_DIR, "watch")
@@ -38,6 +38,7 @@ STOP_EVENT = "Local\\PresetCraftAppLicator-watch-stop"
 DEFAULT_INTERVAL = 2  # minuti tra un controllo e l'altro quando non arriva niente
 DEFAULT_QUIET = 60  # secondi senza novità nella cartella: il trasferimento è finito
 FAST_POLL = 10  # secondi tra un controllo e l'altro mentre le foto arrivano
+CLOSE_POLL = 10  # secondi tra un controllo e l'altro di LightCraft aperto: alla chiusura il giro parte subito
 WAIT_POLL = 30  # secondi tra un controllo e l'altro mentre si aspetta la chiusura di LightCraft
 IMPORT_CHUNK = 10  # minimo di foto per ogni esecuzione di lightcraft-cli (vedi matcher.chunk_size)
 MAX_TRIES = 5  # giri falliti dopo i quali un file non si riprova più (resta nel registro)
@@ -1141,6 +1142,30 @@ class Watcher:
         r = ctypes.windll.kernel32.WaitForMultipleObjects(2, self.events, False, int(seconds * 1000))
         return r == 0 or self.quit
 
+    def app_open(self):
+        try:
+            return "lightcraft.exe" in lightcraft_running()
+        except Exception:  # noqa: BLE001
+            return False
+
+    def wait_or_closed(self, seconds):
+        """Aspetta fino al prossimo giro, ma se nel frattempo LightCraft si chiude il giro parte subito (pochi secondi
+        dopo, il tempo che salvi il catalogo): indice, modifiche dal telefono e anteprime arrivano prima.
+        True se è arrivata la richiesta di chiudersi."""
+        end = time.time() + seconds
+        was_open = self.app_open()
+        while True:
+            left = end - time.time()
+            if left <= 0:
+                return False
+            if self.wait(min(left, CLOSE_POLL)):
+                return True
+            now_open = self.app_open()
+            if was_open and not now_open:
+                log("watch: LightCraft closed, checking now")
+                return self.wait(5)
+            was_open = now_open
+
     def run(self, once=False):
         log("watch: started")
         try:
@@ -1189,7 +1214,7 @@ class Watcher:
                                                             if k in LIVE_KEYS}})
                 if once:
                     return 0
-                if self.wait(pause):
+                if self.wait_or_closed(pause):
                     log("watch: stopped" + ("" if self.quit else " (update or uninstall)"))
                     return 0
         finally:

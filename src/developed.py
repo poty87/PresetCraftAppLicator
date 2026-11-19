@@ -20,7 +20,8 @@ import tempfile
 import threading
 import time
 
-from lightcraft import DATA_DIR, DEFAULT_CLI, NO_WINDOW, is_cli, library_open_reason, log, read_catalog, read_prefs
+from lightcraft import (DATA_DIR, DEFAULT_CLI, NO_WINDOW, OWN_PIDS, is_cli, library_open_reason, log, read_catalog,
+                        read_prefs)
 
 PREVIEWS_DIR = "previews"
 LIST_FILE = "previews.json"
@@ -34,6 +35,27 @@ STATE = os.path.join(DATA_DIR, "watch", "previews-state.json")  # per libreria: 
 STATUS = os.path.join(DATA_DIR, "watch", "previews-status.json")  # per la finestra dell'app
 DEFAULTS = os.path.join(DATA_DIR, "watch", "develop-defaults.json")
 IGNORED = ("version", "process")  # numeri di versione delle impostazioni: non cambiano l'aspetto
+
+
+class _Result:
+    def __init__(self, returncode, stdout, stderr):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+
+def run_cli(args, timeout):
+    """lightcraft-cli senza libreria, a priorità minima; il suo pid sta in OWN_PIDS mentre gira, così il processo in
+    background non lo scambia per LightCraft aperto."""
+    p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
+                         creationflags=NO_WINDOW | IDLE)
+    OWN_PIDS.add(p.pid)
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        out, err = p.communicate()
+    finally:
+        OWN_PIDS.discard(p.pid)
+    return _Result(p.returncode, out, err)
 
 
 def load_json(path, default=None):
@@ -105,8 +127,7 @@ def default_develop(cli, photo, cache):
     if k in cache:
         return cache[k]
     path = (photo.get("source") or {}).get("path") or ""
-    r = subprocess.run([cli, "run", "--import", path, "develop.get"], capture_output=True, text=True,
-                       encoding="utf-8", creationflags=NO_WINDOW | IDLE, timeout=300)
+    r = run_cli([cli, "run", "--import", path, "develop.get"], timeout=300)
     for line in reversed(r.stdout.splitlines()):
         try:
             reply = json.loads(line)
@@ -194,9 +215,7 @@ def render(cli, photo, profiles, dest):
         with open(script, "w", encoding="utf-8", newline="\n") as f:
             for c in commands + tail:
                 f.write(json.dumps(c) + "\n")
-        r = subprocess.run([cli, "run", "--import", photo["source"]["path"], "--script", script],
-                           capture_output=True, text=True, encoding="utf-8", creationflags=NO_WINDOW | IDLE,
-                           timeout=900)
+        r = run_cli([cli, "run", "--import", photo["source"]["path"], "--script", script], timeout=900)
         if r.returncode != 0 or not os.path.isfile(out):
             raise RuntimeError(f"lightcraft-cli ({r.returncode}): {(r.stdout + r.stderr)[-300:]}")
         os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -215,8 +234,7 @@ def _run(cli, photo, work, commands):
     with open(script, "w", encoding="utf-8", newline="\n") as f:
         for c in commands:
             f.write(json.dumps(c) + "\n")
-    r = subprocess.run([cli, "run", "--import", photo["source"]["path"], "--script", script],
-                       capture_output=True, text=True, encoding="utf-8", creationflags=NO_WINDOW | IDLE, timeout=300)
+    r = run_cli([cli, "run", "--import", photo["source"]["path"], "--script", script], timeout=300)
     out = []
     for line in r.stdout.splitlines():
         try:
