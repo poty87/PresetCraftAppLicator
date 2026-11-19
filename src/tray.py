@@ -118,7 +118,8 @@ def ai_text(settings):
     if st["running"] and phase in ("previews", "embeddings", "descriptions") and st.get("total"):
         pct = (st.get("done") or 0) * 100 // max(1, st["total"])
         key = "tray_ai_describing" if phase == "descriptions" else "tray_ai_running"
-        return t(key, library=st.get("library") or "", pct=pct)
+        step = f" ({t('ai_step_of', n=st['step'], tot=st['steps'])})" if st.get("step") and (st.get("steps") or 0) > 1             else ""
+        return t(key, library=st.get("library") or "", pct=pct) + step
     if st["running"]:
         return t("tray_ai_working")
     if phase == "gpu_busy":

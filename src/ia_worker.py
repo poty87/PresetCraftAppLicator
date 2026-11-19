@@ -153,6 +153,20 @@ class Motore:
         except OSError:
             pass
 
+    passi = []
+
+    def piano(self, passi):
+        """I passi di questo giro, decisi all'inizio: [[tipo, libreria], ...] (tipo = previews, embeddings,
+        phone_model, descriptions). La finestra e l'icona mostrano «passo 2 di 3» e il passo dopo."""
+        self.passi = [list(x) for x in passi]
+        self.stato(step=0, steps=len(self.passi), plan=self.passi)
+
+    def passo(self, tipo, libreria):
+        k = [tipo, libreria]
+        if k not in self.passi:  # un passo non previsto (la libreria è cambiata nel frattempo): si aggiunge
+            self.passi.append(k)
+        self.stato(step=self.passi.index(k) + 1, steps=len(self.passi), plan=self.passi)
+
     def stato(self, **kw):
         """Aggiorna stato.json (letto dalla finestra di PresetCraftAppLicator)."""
         s = carica_json(self.stato_path, {})
@@ -384,13 +398,42 @@ def anteprima(path):
     return img
 
 
+def miniature_da_fare(cart, foto, errori):
+    """Le foto senza miniatura (i file che non si leggono non si riprovano a ogni giro)."""
+    return [p for p in foto if not os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))
+            and errori.get(str(p["id"])) != p["path"]]
+
+
+def pulisci_miniature(motore, cart, foto, nome_lib, errori, errori_path):
+    """Toglie le miniature (e gli errori ricordati) delle foto non più in libreria: tolte da LightCraft o nel suo
+    cestino. Se la foto torna, la miniatura si rifà. Con un catalogo vuoto non si tocca niente (lettura a metà)."""
+    if not foto:
+        return
+    presenti = {str(p["id"]) for p in foto}
+    via = 0
+    for nome in os.listdir(cart):
+        if nome.endswith(".jpg") and nome.split(".")[0] not in presenti:
+            try:
+                os.remove(os.path.join(cart, nome))
+                via += 1
+            except OSError:
+                pass
+    vecchi = [k for k in errori if k not in presenti]
+    for k in vecchi:
+        del errori[k]
+    if vecchi:
+        salva_json(errori_path, errori)
+    if via:
+        motore.log(f"{nome_lib}: tolte {via} miniature di foto non più in libreria")
+
+
 def prepara_miniature(motore, cart, foto, nome_lib, controllo):
     """Le miniature che mancano (lette dal NAS in parallelo). Ritorna le foto che hanno la miniatura."""
     os.makedirs(cart, exist_ok=True)
     errori_path = os.path.join(cart, "errori.json")
     errori = carica_json(errori_path, {})
-    da_fare = [p for p in foto if not os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))
-               and errori.get(str(p["id"])) != p["path"]]  # i file che non si leggono non si riprovano a ogni giro
+    pulisci_miniature(motore, cart, foto, nome_lib, errori, errori_path)
+    da_fare = miniature_da_fare(cart, foto, errori)
 
     def una(p):
         try:
@@ -405,6 +448,8 @@ def prepara_miniature(motore, cart, foto, nome_lib, controllo):
     if da_fare:
         grande = len(da_fare) > GRANDE
         controllo(grande=grande)
+        motore.passo("previews", nome_lib)
+        motore.stato(phase="previews", library=nome_lib, done=0, total=len(da_fare))
         motore.log(f"{nome_lib}: {len(da_fare)} miniature da leggere")
         t0 = time.time()
         # a blocchi, così pausa e fascia oraria si rispettano anche durante una lettura lunga
@@ -882,15 +927,20 @@ def lavoro(cfg):
     nuove_per_lib = {}
     descritte_per_lib = {}
     fatte_libs = []  # (libreria, foto, miniature, cartella ia) per il secondo giro: le descrizioni
+    cataloghi = {}
+    for lib in cfg["libraries"]:
+        try:
+            cataloghi[lib] = foto_libreria(lib)
+        except (OSError, ValueError, KeyError) as e:
+            motore.log(f"{os.path.basename(os.path.normpath(lib))}: catalogo non leggibile adesso ({e!r}), riprovo al "
+                       f"prossimo giro")
+    motore.piano(pianifica(cfg, motore, cataloghi))
     for lib in cfg["libraries"]:
         nome_lib = os.path.basename(os.path.normpath(lib))
-        try:
-            foto = foto_libreria(lib)
-        except (OSError, ValueError, KeyError) as e:
-            motore.log(f"{nome_lib}: catalogo non leggibile adesso ({e!r}), riprovo al prossimo giro")
+        if lib not in cataloghi:
             continue
-        cart = os.path.join(motore.dir, "cache", nome_cartella(lib) + "-" + hashlib.sha1(
-            os.path.normcase(os.path.normpath(lib)).encode()).hexdigest()[:8], "mini")
+        foto = cataloghi[lib]
+        cart = cartella_miniature(motore, lib)
         foto = prepara_miniature(motore, cart, foto, nome_lib, controllo)
         ia = os.path.join(phone_folder, nome_cartella(lib), "ia")
         manifest_path = os.path.join(ia, "manifest.json")
@@ -905,6 +955,8 @@ def lavoro(cfg):
         mancano = len({p["id"] for p in foto} - set(ids_fatti.tolist() if ids_fatti is not None else []))
         tolte = 0 if ids_fatti is None else len(set(ids_fatti.tolist()) - {p["id"] for p in foto})
         if mancano or tolte:
+            if mancano:
+                motore.passo("embeddings", nome_lib)
             if modello is None:
                 controllo(grande=mancano > GRANDE)
                 controllo.subito_gpu()
@@ -930,6 +982,7 @@ def lavoro(cfg):
                     torch.cuda.empty_cache()
                 except Exception:  # noqa: BLE001
                     pass
+            motore.passo("phone_model", nome_lib)
             tel_info = prepara_telefono(motore, nome_modello, bits, tel)
         if ids_fatti is None:
             continue
@@ -970,6 +1023,8 @@ def lavoro(cfg):
             presenti = {p["id"] for p in foto}
             con_miniatura = {p["id"] for p in foto if os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))}
             if (con_miniatura - set(items)) or (set(items) - presenti):  # foto nuove da descrivere o foto tolte
+                if con_miniatura - set(items):
+                    motore.passo("descriptions", nome_lib)
                 if desc is None:
                     controllo.subito_gpu()
                     motore.stato(phase="loading", library=nome_lib, done=0, total=0)
@@ -991,7 +1046,48 @@ def lavoro(cfg):
         # per la notifica di Windows (la mostra l'icona di PresetCraftAppLicator, una volta sola)
         motore.stato(last_run={"id": datetime.datetime.now().isoformat(timespec="seconds"),
                                "libraries": nuove_per_lib, "described": descritte_per_lib})
-    motore.stato(phase="idle", library="", done=0, total=0, error="")
+    motore.stato(phase="idle", library="", done=0, total=0, error="", step=0, steps=0, plan=[])
+
+
+def cartella_miniature(motore, lib):
+    return os.path.join(motore.dir, "cache", nome_cartella(lib) + "-" + hashlib.sha1(
+        os.path.normcase(os.path.normpath(lib)).encode()).hexdigest()[:8], "mini")
+
+
+def pianifica(cfg, motore, cataloghi):
+    """I passi che questo giro farà davvero, nell'ordine: per ogni libreria anteprime, catalogazione e modello del
+    telefono; poi, per ogni libreria, le descrizioni. Una stima fatta all'inizio: un passo che si scopre inutile si
+    salta, uno non previsto si aggiunge."""
+    nome_modello = cfg["model"]
+    bits = int(cfg.get("phone_bits") or 8)
+    passi, desc = [], []
+    for lib, foto in cataloghi.items():
+        nome_lib = os.path.basename(os.path.normpath(lib))
+        cart = cartella_miniature(motore, lib)
+        errori = carica_json(os.path.join(cart, "errori.json"), {})
+        ids = {p["id"] for p in foto}
+        senza = {p["id"] for p in miniature_da_fare(cart, foto, errori)} if os.path.isdir(cart) else ids
+        if senza:
+            passi.append(["previews", nome_lib])
+        ia = os.path.join(cfg["phone_folder"], nome_cartella(lib), "ia")
+        manifest = carica_json(os.path.join(ia, "manifest.json"), {})
+        fatti = set()
+        if manifest.get("model") == nome_modello:
+            try:
+                f, _ = carica_impronte(os.path.join(ia, "visivo.bin"))
+                fatti = set(f.tolist()) if f is not None else set()
+            except Exception:  # noqa: BLE001
+                fatti = set()
+        if ids - fatti:
+            passi.append(["embeddings", nome_lib])
+        tel = manifest.get("phone") or {}
+        if not (tel.get("model") == nome_modello and tel.get("bits") == bits and tel.get("format") == FORMATO_TELEFONO):
+            passi.append(["phone_model", nome_lib])
+        if cfg.get("descriptions") in DESCRITTORI:
+            scritte = set(int(k) for k in carica_descrizioni(os.path.join(ia, "descrizioni.json.gz")))
+            if ids - scritte - set(int(k) for k in errori):
+                desc.append(["descriptions", nome_lib])
+    return passi + desc
 
 
 def gpu_persa(e):

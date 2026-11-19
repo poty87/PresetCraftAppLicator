@@ -1252,8 +1252,9 @@ class AiDialog(tk.Toplevel):
             lines = [t("ai_status_off")]
         elif st.get("running") and phase in ("previews", "embeddings", "descriptions", "phone_model", "loading",
                                              "starting"):
-            lines.append(t("ai_phase_" + phase, library=st.get("library") or "", done=st.get("done") or 0,
-                           total=st.get("total") or 0))
+            step = f"{t('ai_step_of', n=st['step'], tot=st['steps'])}  ·  "                 if st.get("step") and (st.get("steps") or 0) > 1 else ""
+            lines.append(step + t("ai_phase_" + phase, library=st.get("library") or "", done=st.get("done") or 0,
+                                  total=st.get("total") or 0))
         elif phase == "error":
             lines.append(t("ai_status_error", error=st.get("error") or ""))
         self.status.configure(text=lines[0])
@@ -1486,10 +1487,17 @@ def ai_progress(settings):
                  total=f"{total:,}".replace(",", "."))
     else:
         text = t("tray_ai_working")
-    if not text.startswith(t("footer_ai")):
-        text = f"{t('footer_ai')}  ·  {text}"
+    step, steps, plan = st.get("step") or 0, st.get("steps") or 0, st.get("plan") or []
+    head = t("footer_ai") + (f"  ·  {t('ai_step_of', n=step, tot=steps)}" if step and steps > 1 else "")
+    text = f"{head}  ·  {text}"
     if total and phase in ("previews", "embeddings", "descriptions"):
-        return f"{text}  ·  {done * 100 // total}%", done / total
+        text += f"  ·  {done * 100 // total}%"
+    if step and step < len(plan):  # cosa viene dopo (con la libreria se è un'altra)
+        kind, lib = plan[step]
+        nxt = t("ai_kind_" + kind) + (f" ({lib})" if lib != st.get("library") else "")
+        text += f"  ·  {t('ai_next', what=nxt)}"
+    if total and phase in ("previews", "embeddings", "descriptions"):
+        return text, done / total
     return text, None
 
 
