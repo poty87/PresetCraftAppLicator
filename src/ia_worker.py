@@ -733,6 +733,11 @@ def tokenizzatore_ridotto(tok, tenuti):
     return Tokenizer.from_str(json.dumps(js)), js
 
 
+# formato del modello per il telefono: 2 = frase lunga quanto serve (non più 77 token) e conti in int8 sulla CPU
+# (accuracy_level 4): stesse impronte, ~45 volte più veloce su un Pixel. Se cambia, il modello si rigenera.
+FORMATO_TELEFONO = 2
+
+
 def prepara_telefono(motore, nome_modello, bits, cartella):
     """La parte testo del modello per il telefono: vocabolario it+en, pesi a `bits` bit, tabella del vocabolario a
     8 bit, in ONNX; più tokenizer.json e i parametri per usarli. Ritorna il dizionario per manifest.json."""
@@ -812,13 +817,13 @@ def prepara_telefono(motore, nome_modello, bits, cartella):
     os.makedirs(os.path.join(lavoro, "finale"))
     grezzo = os.path.join(lavoro, "grezzo", "grezzo.onnx")  # l'esportazione può spargere i pesi in molti file
     torch.onnx.export(testo, (torch.tensor(ids_new[:1]),), grezzo, input_names=["input_ids"],
-                      output_names=["impronta"], dynamic_axes={"input_ids": {0: "n"}, "impronta": {0: "n"}},
+                      output_names=["impronta"], dynamic_axes={"input_ids": {0: "n", 1: "lunghezza"}, "impronta": {0: "n"}},
                       opset_version=17, dynamo=False)
     del testo
     gc.collect()
     motore.stato(done=2)
     m = onnx.load(grezzo)
-    qz = MatMulNBitsQuantizer(m, block_size=32, is_symmetric=True, bits=bits)
+    qz = MatMulNBitsQuantizer(m, block_size=32, is_symmetric=True, bits=bits, accuracy_level=4)
     qz.process()
     finale = os.path.join(lavoro, "finale", "testo.onnx")
     qz.model.save_model_to_file(finale, use_external_data_format=True)
@@ -831,6 +836,10 @@ def prepara_telefono(motore, nome_modello, bits, cartella):
     s = ort.InferenceSession(finale, providers=["CPUExecutionProvider"])
     out = s.run(None, {"input_ids": ids_new})[0]
     somiglianza = float(np.sum(rif * out, 1).mean())
+    # il telefono passa solo i token della frase, senza riempitivo: deve dare le stesse impronte
+    corte = np.stack([s.run(None, {"input_ids": np.array([nuovo_tok.encode(t).ids[:max_len]], np.int64)})[0][0]
+                      for t in CONTROLLO])
+    somiglianza = min(somiglianza, float(np.sum(rif * corte, 1).mean()))
     del s
     motore.log(f"telefono: somiglianza media con l'originale {somiglianza:.4f}")
     if somiglianza < 0.97:
@@ -853,7 +862,7 @@ def prepara_telefono(motore, nome_modello, bits, cartella):
     files = {n: {"size": os.path.getsize(os.path.join(cartella, n)), "sha256": sha256(os.path.join(cartella, n))}
              for n in ("testo.onnx", dati[0], "tokenizer.json")}
     motore.stato(done=4)
-    return {"model": nome_modello, "bits": bits, "files": files, "onnx": "testo.onnx", "tokenizer": "tokenizer.json",
+    return {"model": nome_modello, "bits": bits, "format": FORMATO_TELEFONO, "dynamic_len": True, "files": files, "onnx": "testo.onnx", "tokenizer": "tokenizer.json",
             "input": "input_ids", "output": "impronta", "max_len": max_len, "pad_id": pad_new, "eos_id": eos_new,
             "lowercase": False, "vocab": len(tenuti), "similarity": round(somiglianza, 4)}
 
@@ -907,7 +916,8 @@ def lavoro(cfg):
         ids_fatti, v = carica_impronte(visivo)
         tel = os.path.join(ia, "telefono")
         tel_info = manifest.get("phone") or {}
-        valido = (tel_info.get("model") == nome_modello and tel_info.get("bits") == bits and all(
+        valido = (tel_info.get("model") == nome_modello and tel_info.get("bits") == bits and
+                  tel_info.get("format") == FORMATO_TELEFONO and all(
             os.path.exists(os.path.join(tel, n)) for n in (tel_info.get("files") or {"x": 0})))
         if not valido and ids_fatti is not None:
             if modello is not None:  # libera la GPU e la memoria per la preparazione (sulla CPU)
