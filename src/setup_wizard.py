@@ -62,12 +62,13 @@ def set_ai_settings(values):
     ai.save_json(SETTINGS, s)
 
 
-def start_ai_install(app_folder, ai_folder, model):
+def start_ai_install(app_folder, ai_folder, model, describer=None):
     """Dopo l'installazione: il motore lo scarica l'app in un processo a sé (può durare a lungo)."""
-    set_ai_settings({"enabled": True, "dir": ai_folder, "model": model, "phone_bits": 8})
+    set_ai_settings({"enabled": True, "dir": ai_folder, "model": model, "phone_bits": 8,
+                     "descriptions": bool(describer), "describer": describer})
     exe = os.path.join(app_folder, EXE)
     if os.path.isfile(exe):
-        ai.start_install_process(exe, ai_folder, model)
+        ai.start_install_process(exe, ai_folder, model, describer)
         return True
     return False
 
@@ -494,12 +495,13 @@ class Wizard(tk.Tk):
         self.heading(t("w_ai_head"), t("w_ai_body"))
         prev = self.ai_choice
         self.ai_panel = AiChoice(self.body, folder=prev[1] if prev else None, model=prev[2] if prev else None,
-                                 allow_none=True, install=prev[0] if prev else False)
+                                 allow_none=True, install=prev[0] if prev else False,
+                                 describe=(prev[3] is not None) if prev else None)
         self.ai_panel.pack(fill="x", pady=(16, 0))
 
         def keep():
             p = self.ai_panel
-            self.ai_choice = (bool(p.install.get()), p.folder.get().strip(), p.model())
+            self.ai_choice = (bool(p.install.get()), p.folder.get().strip(), p.model(), p.describer())
 
         def back():
             keep()
@@ -611,7 +613,7 @@ class Wizard(tk.Tk):
                     cache_setup()
                     if choice and choice[0]:
                         try:
-                            self.ai_started = start_ai_install(app_folder, choice[1], choice[2])
+                            self.ai_started = start_ai_install(app_folder, choice[1], choice[2], choice[3])
                         except Exception:  # noqa: BLE001 — l'app è installata: il motore si può installare dopo
                             self.ai_started = False
                 else:

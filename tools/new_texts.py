@@ -1290,3 +1290,60 @@ NEW.update({
                           "As fotos novas deixam de ser analisadas. O catálogo já feito fica no NAS (e o telemóvel "
                           "usa-o) até remover o motor."),
 })
+
+
+NEW.update({
+    "ai_desc_opt": _t("Scrivi anche le descrizioni delle foto (Qwen3-VL, altri {gb} GB)",
+                      "Also write descriptions of the photos (Qwen3-VL, {gb} GB more)",
+                      "Auch Beschreibungen der Fotos schreiben (Qwen3-VL, weitere {gb} GB)",
+                      "Escribir también descripciones de las fotos (Qwen3-VL, {gb} GB más)",
+                      "Écrire aussi des descriptions des photos (Qwen3-VL, {gb} Go de plus)",
+                      "Escrever também descrições das fotos (Qwen3-VL, mais {gb} GB)"),
+    "ai_desc_hint": _t("Una o due frasi e le parole chiave in italiano per ogni foto: la ricerca sul telefono diventa più "
+                       "precisa nei dettagli (colori, oggetti, «auto» invece di «Vespa»). Più lente: circa mezzo secondo a "
+                       "foto con una GPU da 24 GB, cioè 2-3 ore ogni 18.000 foto la prima volta.",
+                       "One or two sentences and keywords for each photo: search on the phone gets more precise in the "
+                       "details (colours, objects, “car” rather than “scooter”). Slower: about half a second per photo on "
+                       "a 24 GB GPU, that is 2-3 hours per 18,000 photos the first time.",
+                       "Ein bis zwei Sätze und Stichwörter pro Foto: Die Suche auf dem Handy wird in Details genauer "
+                       "(Farben, Gegenstände, „Auto“ statt „Roller“). Langsamer: etwa eine halbe Sekunde pro Foto mit "
+                       "einer 24-GB-GPU, also 2-3 Stunden pro 18.000 Fotos beim ersten Mal.",
+                       "Una o dos frases y palabras clave por foto: la búsqueda en el teléfono gana precisión en los "
+                       "detalles (colores, objetos, «coche» en vez de «moto»). Más lento: medio segundo por foto con una "
+                       "GPU de 24 GB, es decir 2-3 horas cada 18.000 fotos la primera vez.",
+                       "Une ou deux phrases et des mots-clés par photo : la recherche sur le téléphone devient plus "
+                       "précise dans les détails (couleurs, objets, « voiture » plutôt que « scooter »). Plus lent : "
+                       "environ une demi-seconde par photo avec un GPU de 24 Go, soit 2 à 3 heures pour 18 000 photos "
+                       "la première fois.",
+                       "Uma ou duas frases e palavras-chave por foto: a pesquisa no telemóvel fica mais precisa nos "
+                       "detalhes (cores, objetos, «carro» em vez de «mota»). Mais lento: cerca de meio segundo por foto "
+                       "com uma GPU de 24 GB, ou seja 2-3 horas por 18.000 fotos da primeira vez."),
+    "ai_desc_none": _t("Descrizioni delle foto: servono una GPU NVIDIA con almeno 12 GB.",
+                       "Photo descriptions: they need an NVIDIA GPU with at least 12 GB.",
+                       "Fotobeschreibungen: Dafür ist eine NVIDIA-GPU mit mindestens 12 GB nötig.",
+                       "Descripciones de las fotos: necesitan una GPU NVIDIA de al menos 12 GB.",
+                       "Descriptions des photos : il faut un GPU NVIDIA d'au moins 12 Go.",
+                       "Descrições das fotos: precisam de uma GPU NVIDIA com pelo menos 12 GB."),
+    "ai_desc_enable": _t("Scrivi le descrizioni delle foto (ricerca più precisa nei dettagli)",
+                         "Write photo descriptions (more precise search in the details)",
+                         "Fotobeschreibungen schreiben (genauere Suche in Details)",
+                         "Escribir descripciones de las fotos (búsqueda más precisa en los detalles)",
+                         "Écrire les descriptions des photos (recherche plus précise dans les détails)",
+                         "Escrever descrições das fotos (pesquisa mais precisa nos detalhes)"),
+    "ai_desc_q": _t("Per le descrizioni va scaricato il loro modello ({gb} GB). Scaricarlo adesso?",
+                    "Descriptions need their model ({gb} GB). Download it now?",
+                    "Für die Beschreibungen muss ihr Modell geladen werden ({gb} GB). Jetzt herunterladen?",
+                    "Las descripciones necesitan su modelo ({gb} GB). ¿Descargarlo ahora?",
+                    "Les descriptions ont besoin de leur modèle ({gb} Go). Le télécharger maintenant ?",
+                    "As descrições precisam do seu modelo ({gb} GB). Transferi-lo agora?"),
+    "ai_step_describer": _t("Modello delle descrizioni", "Description model", "Beschreibungsmodell",
+                            "Modelo de descripciones", "Modèle des descriptions", "Modelo das descrições"),
+    "ai_phase_descriptions": _t("{library}: scrivo le descrizioni {done} di {total}",
+                                "{library}: writing descriptions {done} of {total}",
+                                "{library}: Beschreibungen werden geschrieben, {done} von {total}",
+                                "{library}: escribiendo descripciones {done} de {total}",
+                                "{library} : rédaction des descriptions {done} sur {total}",
+                                "{library}: a escrever descrições {done} de {total}"),
+    "ai_q_described": _t("{count} descritte", "{count} described", "{count} beschrieben", "{count} descritas",
+                         "{count} décrites", "{count} descritas"),
+})

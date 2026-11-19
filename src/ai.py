@@ -49,6 +49,11 @@ MODELS = {
     "metaclip2-huge": {"hf": "facebook/metaclip-2-worldwide-huge-378", "download": 7.5, "vram": 8},
     "metaclip2-b16": {"hf": "facebook/metaclip-2-worldwide-b16", "download": 2.4, "vram": 0},
 }
+# modelli delle descrizioni (facoltative): id Hugging Face, download (GB), memoria video minima (GB)
+DESCRIBERS = {
+    "qwen3-vl-8b": {"hf": "Qwen/Qwen3-VL-8B-Instruct", "download": 17.5, "vram": 20},
+    "qwen3-vl-4b": {"hf": "Qwen/Qwen3-VL-4B-Instruct", "download": 8.9, "vram": 12},
+}
 ENV_GB = {"cuda": 6.5, "cpu": 1.5}  # ambiente Python installato
 CACHE_GB = 1.0  # miniature: circa 40 KB a foto (1 GB ogni ~25.000 foto)
 # velocità misurate (RTX 3090): foto al secondo per l'analisi; anteprime lette dal NAS circa 25 al secondo
@@ -93,12 +98,22 @@ def recommended_model(gpu):
     return "metaclip2-b16"
 
 
+def recommended_describer(gpu):
+    """Il modello delle descrizioni adatto alla GPU, o None (senza una GPU NVIDIA abbastanza grande sarebbe troppo lento)."""
+    vram = gpu[1] / 1024 if gpu else 0
+    for name, info in DESCRIBERS.items():
+        if vram >= info["vram"] * 0.95:
+            return name
+    return None
+
+
 def device(gpu):
     return "cuda" if gpu else "cpu"
 
 
-def space_needed_gb(model, gpu):
-    return ENV_GB[device(gpu)] + MODELS[model]["download"] + CACHE_GB
+def space_needed_gb(model, gpu, describer=None):
+    return ENV_GB[device(gpu)] + MODELS[model]["download"] + CACHE_GB + \
+        (DESCRIBERS[describer]["download"] if describer in DESCRIBERS else 0)
 
 
 def free_space_gb(path):
@@ -184,10 +199,11 @@ class Installer:
     """Installa il motore in `folder` (riprendibile: i passi già fatti si saltano). L'avanzamento va in
     installazione.json, che finestra e installazione guidata leggono; `cancel` (threading.Event) lo interrompe."""
 
-    STEPS = ("uv", "python", "torch", "packages", "words", "model")
+    STEPS = ("uv", "python", "torch", "packages", "words", "model", "describer")
 
-    def __init__(self, folder, model, gpu, cancel=None):
+    def __init__(self, folder, model, gpu, cancel=None, describer=None):
         self.folder, self.model, self.gpu = folder, model, gpu
+        self.describer = describer if describer in DESCRIBERS else None
         self.cancel = cancel or threading.Event()
         self.progress_path = os.path.join(folder, "installazione.json")
         self.log_path = os.path.join(folder, "installazione.log")
@@ -290,15 +306,33 @@ class Installer:
                                     "allow_patterns=['*.json', '*.safetensors', '*.model', '*.txt'])"],
                          "model", extra_env={"HF_HUB_DISABLE_XET": "1"}, tick=tick)
             shutil.rmtree(os.path.join(target, ".cache"), ignore_errors=True)  # file temporanei del download
+            if self.describer:
+                self.report("describer")
+                dtarget = model_dir(self.folder, self.describer)
+                dexpected = DESCRIBERS[self.describer]["download"] * 1e9
+
+                def dtick():
+                    got = folder_size_gb(dtarget) * 1024 ** 3
+                    self.report("describer", min(0.99, got / dexpected), got_gb=round(got / 1e9, 1),
+                                total_gb=DESCRIBERS[self.describer]["download"])
+
+                dhf = DESCRIBERS[self.describer]["hf"]
+                self.run_cmd([py, "-c", "from huggingface_hub import snapshot_download as s; "
+                                        f"s('{dhf}', local_dir=r'{dtarget}', "
+                                        "allow_patterns=['*.json', '*.safetensors', '*.txt', '*.jinja'])"],
+                             "describer", extra_env={"HF_HUB_DISABLE_XET": "1"}, tick=dtick)
+                shutil.rmtree(os.path.join(dtarget, ".cache"), ignore_errors=True)
             shutil.rmtree(os.path.join(self.folder, "uv-cache"), ignore_errors=True)  # solo spazio occupato
             prima = load_json(os.path.join(self.folder, "motore.json"), {})
             modelli = sorted(set(prima.get("models") or []) | {self.model})
+            descrittori = sorted(set(prima.get("describers") or []) | ({self.describer} if self.describer else set()))
             save_json(os.path.join(self.folder, "motore.json"),
-                      {"version": ENGINE_VERSION, "model": self.model, "models": modelli, "device": device(self.gpu),
+                      {"version": ENGINE_VERSION, "model": self.model, "models": modelli, "describers": descrittori,
+                       "device": device(self.gpu),
                        "gpu": self.gpu[0] if self.gpu else "", "installed":
                            datetime.datetime.now().isoformat(timespec="seconds"),
                        "packages": TORCH + PACKAGES})
-            self.report("model", 1.0, done=True)
+            self.report("describer" if self.describer else "model", 1.0, done=True)
             self.log("install done")
             return True
         except InstallCancelled:
@@ -320,18 +354,30 @@ def installing(folder):
     return bool(p) and not p.get("done") and not p.get("error") and pid_alive(p.get("pid"))
 
 
-def start_install_process(app_exe, folder, model):
-    """Installazione in un processo a sé (l'app può chiudersi nel frattempo): <app> --install-ai <cartella> <modello>."""
-    args = [app_exe, "--install-ai", folder, model] if getattr(sys, "frozen", False) else \
+def start_install_process(app_exe, folder, model, describer=None):
+    """Installazione in un processo a sé (l'app può chiudersi nel frattempo):
+    <app> --install-ai <cartella> <modello> [<modello delle descrizioni>]."""
+    extra = [describer] if describer else []
+    args = [app_exe, "--install-ai", folder, model, *extra] if getattr(sys, "frozen", False) else \
         [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "presetcraft.py"),
-         "--install-ai", folder, model]
+         "--install-ai", folder, model, *extra]
     os.makedirs(folder, exist_ok=True)
     return subprocess.Popen(args, creationflags=NO_WINDOW | BELOW_NORMAL | 0x8, close_fds=True)  # 0x8 DETACHED
 
 
-def install_main(folder, model):
+def install_main(folder, model, describer=None):
     """Punto d'ingresso di --install-ai (nessuna finestra)."""
-    return 0 if Installer(folder, model, detect_gpu()).run() else 1
+    return 0 if Installer(folder, model, detect_gpu(), describer=describer).run() else 1
+
+
+def describer_ready(settings):
+    """Il modello delle descrizioni scelto, se attivo e installato; altrimenti None."""
+    cfg = config(settings)
+    name = cfg.get("describer")
+    info = installed_info(engine_dir(settings)) or {}
+    if cfg.get("descriptions") and name in (info.get("describers") or []):
+        return name
+    return None
 
 
 def remove_engine(folder):
@@ -549,6 +595,13 @@ def maybe_start(settings, log=None):
     sig = library_signatures(libs)
     missing = any(not os.path.isfile(os.path.join(phone_folder, watcher.library_folder_name(lib), "ia",
                                                   "manifest.json")) for lib in libs)
+    describer = describer_ready(settings)
+    if describer and not missing:  # descrizioni attivate ma non ancora fatte (o non complete) per qualche libreria
+        for lib in libs:
+            m = load_json(os.path.join(phone_folder, watcher.library_folder_name(lib), "ia", "manifest.json"), {})
+            if (m.get("descriptions") or {}).get("count", 0) < m.get("count", 0):
+                missing = True
+                break
     phase = status.get("phase")
     unfinished = phase not in (None, "idle", "paused")
     if phase == "waiting_window" and window and not in_window(window):
@@ -556,7 +609,8 @@ def maybe_start(settings, log=None):
     retry_wait = {"error": 1800, "gpu_busy": 600}.get(phase, 0)
     since = (datetime.datetime.now() - datetime.datetime.fromisoformat(last["when"])).total_seconds() \
         if last.get("when") else 1e9
-    if last.get("sig") == sig and last.get("model") == model and not missing and not unfinished:
+    if last.get("sig") == sig and last.get("model") == model and last.get("describer") == describer and not missing \
+            and not unfinished:
         return False
     if since < retry_wait:
         return False
@@ -566,10 +620,11 @@ def maybe_start(settings, log=None):
     conf = os.path.join(folder, "config.json")
     save_json(conf, {"engine_dir": folder, "phone_folder": phone_folder, "libraries": libs, "model": model,
                      "phone_bits": int(cfg.get("phone_bits") or 8), "gpu_check": bool(cfg.get("gpu_check", True)),
-                     "window": window})
+                     "window": window, "descriptions": describer})
     subprocess.Popen([venv_python(folder), dst, "--config", conf], cwd=folder, env=env(folder),
                      creationflags=NO_WINDOW | BELOW_NORMAL, close_fds=True)
-    save_json(state_path, {"sig": sig, "model": model, "when": datetime.datetime.now().isoformat(timespec="seconds")})
+    save_json(state_path, {"sig": sig, "model": model, "describer": describer,
+                           "when": datetime.datetime.now().isoformat(timespec="seconds")})
     if log:
         log(f"ai: started ({model}, {len(libs)} libraries)")
     return True

@@ -11,7 +11,11 @@ Solo lettura su librerie e foto: legge catalog.snap e le anteprime incorporate n
       telefono/       la parte "testo" del modello, ridotta e compressa per il telefono (ONNX) + tokenizer.json
 
 Configurazione (JSON): {"engine_dir", "phone_folder", "libraries": [cartelle, nell'ordine della coda], "model",
-"phone_bits": 8 o 4, "gpu_check": bool, "window": {"from": "22:00", "to": "07:00"} o null}.
+"phone_bits": 8 o 4, "gpu_check": bool, "window": {"from": "22:00", "to": "07:00"} o null,
+"descriptions": id del modello delle descrizioni (vedi DESCRITTORI) o null}.
+Descrizioni (facoltative, dopo le impronte): un modello visivo-linguistico (Qwen3-VL) scrive per ogni foto una o due
+frasi e le parole chiave in italiano, in <libreria>/ia/descrizioni.json.gz; il telefono le usa per riordinare i
+risultati (le foto con le parole cercate salgono).
 Il lavoro si ferma da solo, salvando i progressi, se: compare il file "pausa" nella cartella del motore (pausa chiesta
 dall'utente), un altro programma usa la GPU ("gpu_check"), oppure un lavoro grande (prima analisi) esce dalla fascia
 oraria ("window"). Lo stato finale lo dice: "paused", "gpu_busy", "waiting_window" o "idle".
@@ -48,6 +52,15 @@ MODELLI = {
     "metaclip2-huge": {"hf": "facebook/metaclip-2-worldwide-huge-378", "lotto": 32},
     "metaclip2-b16": {"hf": "facebook/metaclip-2-worldwide-b16", "lotto": 64},
 }
+# modelli delle descrizioni: id Hugging Face, lotto (con 24 GB di memoria video il lotto da 32 è il più veloce)
+DESCRITTORI = {
+    "qwen3-vl-8b": {"hf": "Qwen/Qwen3-VL-8B-Instruct", "lotto": 32},
+    "qwen3-vl-4b": {"hf": "Qwen/Qwen3-VL-4B-Instruct", "lotto": 16},
+}
+DOMANDA_DESCRIZIONE = ("Descrivi la foto in italiano in 1 o 2 frasi concrete: cosa e chi si vede (persone, animali, "
+                       "oggetti, veicoli con tipo e colore), dove, cosa succede. Niente nomi di persone, niente ipotesi.\n"
+                       "Poi una riga 'Parole chiave:' con 8-12 parole chiave in italiano separate da virgole.")
+FORMATO_DESCRIZIONI = 1
 PAROLE_URL = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/{lang}/{lang}_50k.txt"
 # ricerche di controllo: il modello del telefono deve dare le stesse impronte dell'originale
 CONTROLLO = ["gatti", "cane che corre sulla spiaggia", "auto d'epoca", "tramonto al mare", "bambini che giocano",
@@ -552,6 +565,104 @@ def aggiorna_impronte(motore, modello, cart, foto, dest, nome_lib, controllo):
 
 # ---------------------------------------------------------------- modello del telefono (solo la parte testo)
 
+def carica_descrizioni(path):
+    """{id: testo} da descrizioni.json.gz, o {} se manca."""
+    import gzip
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            d = json.load(f)
+        return {int(k): v for k, v in (d.get("items") or {}).items()}
+    except (OSError, ValueError, EOFError):
+        return {}
+
+
+def scrivi_descrizioni(path, items, modello):
+    import gzip
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with gzip.open(tmp, "wt", encoding="utf-8") as f:
+        json.dump({"version": FORMATO_DESCRIZIONI, "model": modello, "items": {str(k): v for k, v in items.items()}},
+                  f, ensure_ascii=False, separators=(",", ":"))
+    os.replace(tmp, path)
+
+
+class Descrittore:
+    """Il modello visivo-linguistico che scrive le descrizioni (sulla GPU, bfloat16)."""
+
+    def __init__(self, nome, motore_dir):
+        import torch
+        from transformers import AutoModelForImageTextToText, AutoProcessor
+        d = os.path.join(motore_dir, "modelli", nome)
+        src = d if os.path.isfile(os.path.join(d, "config.json")) else DESCRITTORI[nome]["hf"]
+        self.torch = torch
+        self.nome = nome
+        self.proc = AutoProcessor.from_pretrained(src)
+        self.proc.tokenizer.padding_side = "left"
+        self.m = AutoModelForImageTextToText.from_pretrained(src, dtype=torch.bfloat16).to("cuda").eval()
+
+    def descrivi(self, imgs):
+        msgs = [[{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": DOMANDA_DESCRIZIONE}]}]
+                for _ in imgs]
+        testi = [self.proc.apply_chat_template(m, tokenize=False, add_generation_prompt=True) for m in msgs]
+        x = self.proc(text=testi, images=imgs, return_tensors="pt", padding=True).to("cuda")
+        with self.torch.no_grad():
+            out = self.m.generate(**x, max_new_tokens=160, do_sample=False)
+        return [t.strip() for t in self.proc.batch_decode(out[:, x["input_ids"].shape[1]:], skip_special_tokens=True)]
+
+
+def annuncia_descrizioni(ia, dest, nome_desc):
+    """Aggiorna nel manifest la voce delle descrizioni (il telefono le scarica quando cambia la dimensione del file)."""
+    manifest_path = os.path.join(ia, "manifest.json")
+    m = carica_json(manifest_path, {})
+    if not m or not os.path.exists(dest):
+        return
+    info = {"file": "descrizioni.json.gz", "model": DESCRITTORI[nome_desc]["hf"], "count": len(carica_descrizioni(dest)),
+            "size": os.path.getsize(dest), "format": FORMATO_DESCRIZIONI}
+    if m.get("descriptions") != info:
+        m["descriptions"] = info
+        salva_json(manifest_path, m)
+
+
+def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
+    """Descrive le foto che non hanno ancora una descrizione (salvando ogni ~10 lotti), toglie quelle delle foto non più
+    in libreria. Ritorna quante ne ha scritte."""
+    from PIL import Image
+    items = carica_descrizioni(dest)
+    presenti = {p["id"] for p in foto}
+    tolte = [k for k in items if k not in presenti]
+    for k in tolte:
+        del items[k]
+    nuove = [p["id"] for p in foto if p["id"] not in items and os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))]
+    if tolte and not nuove:
+        scrivi_descrizioni(dest, items, DESCRITTORI[desc.nome]["hf"])
+    if not nuove:
+        return 0
+    grande = len(nuove) > GRANDE
+    controllo(grande=grande)
+    lotto = DESCRITTORI[desc.nome]["lotto"]
+    motore.log(f"{nome_lib}: {len(nuove)} foto da descrivere con {desc.nome}")
+    t0 = time.time()
+    fatte = 0
+    for k in range(0, len(nuove), lotto):
+        parte = nuove[k:k + lotto]
+        imgs = [Image.open(os.path.join(cart, f"{i}.jpg")).convert("RGB") for i in parte]
+        for i, t in zip(parte, desc.descrivi(imgs)):
+            items[i] = t
+        fatte += len(parte)
+        motore.stato(phase="descriptions", library=nome_lib, done=fatte, total=len(nuove))
+        if (k // lotto + 1) % 30 == 0 or fatte == len(nuove):  # ~1.000 foto: il telefono vede quelle già fatte
+            scrivi_descrizioni(dest, items, DESCRITTORI[desc.nome]["hf"])
+            annuncia_descrizioni(os.path.dirname(dest), dest, desc.nome)
+        try:
+            controllo(grande=grande, gpu_in_uso=True)
+        except Stop:
+            scrivi_descrizioni(dest, items, DESCRITTORI[desc.nome]["hf"])
+            raise
+    dt = time.time() - t0
+    motore.log(f"{nome_lib}: {fatte} descrizioni in {dt:.0f}s ({dt / max(fatte, 1):.2f} s/foto)")
+    return fatte
+
+
 def parole(motore, lang):
     path = os.path.join(motore.dir, "parole", f"{lang}_50k.txt")
     if not os.path.exists(path):
@@ -760,6 +871,7 @@ def lavoro(cfg):
     totale_nuove = 0
     controllo = Controllo(motore)
     nuove_per_lib = {}
+    fatte_libs = []  # (libreria, foto, miniature, cartella ia) per il secondo giro: le descrizioni
     for lib in cfg["libraries"]:
         nome_lib = os.path.basename(os.path.normpath(lib))
         try:
@@ -817,12 +929,49 @@ def lavoro(cfg):
             "visual_size": os.path.getsize(visivo), "phone": tel_info,
             "updated": manifest.get("updated") if manifest.get("count") == len(ids_fatti) and not totale_nuove
             else datetime.datetime.now().isoformat(timespec="seconds")}
+        if manifest.get("descriptions"):
+            nuovo_manifest["descriptions"] = manifest["descriptions"]
         if nuovo_manifest != manifest:
             salva_json(manifest_path, nuovo_manifest)
         libs = carica_json(motore.stato_path, {}).get("libraries") or {}
         libs[nome_lib] = {"count": int(len(ids_fatti)), "photos": len(foto), "model": nome_modello,
-                          "updated": nuovo_manifest["updated"], "path": lib}
+                          "updated": nuovo_manifest["updated"], "path": lib,
+                          "described": (manifest.get("descriptions") or {}).get("count", 0)}
         motore.stato(libraries=libs)
+        fatte_libs.append((lib, nome_lib, foto, cart, ia))
+
+    # secondo giro: le descrizioni (lente: dopo che tutte le librerie hanno le impronte)
+    nome_desc = cfg.get("descriptions")
+    if nome_desc in DESCRITTORI:
+        if modello is not None:  # la GPU serve tutta al modello delle descrizioni
+            del modello
+            modello = None
+            gc.collect()
+            try:
+                import torch
+                torch.cuda.empty_cache()
+            except Exception:  # noqa: BLE001
+                pass
+        desc = None
+        for lib, nome_lib, foto, cart, ia in fatte_libs:
+            dest = os.path.join(ia, "descrizioni.json.gz")
+            items = carica_descrizioni(dest)
+            presenti = {p["id"] for p in foto}
+            con_miniatura = {p["id"] for p in foto if os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))}
+            if (con_miniatura - set(items)) or (set(items) - presenti):  # foto nuove da descrivere o foto tolte
+                if desc is None:
+                    controllo.subito_gpu()
+                    motore.stato(phase="loading", library=nome_lib, done=0, total=0)
+                    desc = Descrittore(nome_desc, motore.dir)
+                aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo)
+            if not os.path.exists(dest):
+                continue
+            annuncia_descrizioni(ia, dest, nome_desc)
+            n = len(carica_descrizioni(dest))
+            libs = carica_json(motore.stato_path, {}).get("libraries") or {}
+            if nome_lib in libs:
+                libs[nome_lib]["described"] = n
+                motore.stato(libraries=libs)
     if totale_nuove:
         motore.log(f"fatto: {totale_nuove} foto nuove")
         # per la notifica di Windows (la mostra l'icona di PresetCraftAppLicator, una volta sola)

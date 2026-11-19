@@ -13,10 +13,11 @@ class AiChoice(ttk.Frame):
     """Scelte: installare il motore o no, quale modello (quello consigliato per la GPU è il primo), in quale cartella.
     `allow_none`: c'è anche "Non installare" (installazione guidata)."""
 
-    def __init__(self, master, folder=None, model=None, allow_none=True, install=True, wrap=540):
+    def __init__(self, master, folder=None, model=None, allow_none=True, install=True, wrap=540, describe=None):
         super().__init__(master)
         self.gpu = ai.detect_gpu()
         self.recommended = ai.recommended_model(self.gpu)
+        self.describer_name = ai.recommended_describer(self.gpu)
         self.wrap = wrap
         gpu_text = t("ai_gpu", name=self.gpu[0], gb=f"{self.gpu[1] / 1024:.0f}") if self.gpu else t("ai_no_gpu")
         ttk.Label(self, text=gpu_text, style="Muted.TLabel", wraplength=wrap, justify="left").pack(anchor="w")
@@ -43,6 +44,16 @@ class AiChoice(ttk.Frame):
         self.folder = tk.StringVar(value=folder or ai.DEFAULT_DIR)
         ttk.Entry(row, textvariable=self.folder).pack(side="left", fill="x", expand=True, padx=(10, 8))
         ttk.Button(row, text=t("btn_browse"), command=self.browse).pack(side="left")
+        # descrizioni delle foto (facoltative): solo con una GPU NVIDIA abbastanza grande
+        self.describe = tk.BooleanVar(value=bool(self.describer_name) if describe is None else describe)
+        if self.describer_name:
+            ttk.Checkbutton(self.box, text=t("ai_desc_opt", gb=f"{ai.DESCRIBERS[self.describer_name]['download']:.0f}"),
+                            variable=self.describe, command=self.refresh).pack(anchor="w", pady=(10, 0))
+            ttk.Label(self.box, text=t("ai_desc_hint"), style="Muted.TLabel", wraplength=wrap, justify="left").pack(
+                anchor="w", padx=(24, 0))
+        else:
+            ttk.Label(self.box, text=t("ai_desc_none"), style="Muted.TLabel", wraplength=wrap, justify="left").pack(
+                anchor="w", pady=(10, 0))
         self.space = ttk.Label(self.box, style="Muted.TLabel", wraplength=wrap, justify="left")
         self.space.pack(anchor="w", pady=(6, 0))
         self.note = ttk.Label(self.box, text=t("ai_note"), style="Muted.TLabel", wraplength=wrap, justify="left")
@@ -67,8 +78,11 @@ class AiChoice(ttk.Frame):
                 path = os.path.join(path, "PresetCraftAppLicator IA")  # mai i file del motore sparsi in una cartella piena
             self.folder.set(path)
 
+    def describer(self):
+        return self.describer_name if self.describer_name and self.describe.get() else None
+
     def needed(self):
-        return ai.space_needed_gb(self.model(), self.gpu)
+        return ai.space_needed_gb(self.model(), self.gpu, self.describer())
 
     def enough_space(self):
         return ai.free_space_gb(self.folder.get()) >= self.needed()

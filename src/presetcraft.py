@@ -1093,6 +1093,14 @@ class AiDialog(tk.Toplevel):
             self.bits.bind("<<ComboboxSelected>>",
                            lambda e: self.save_cfg(phone_bits=8 if self.bits.current() == 0 else 4))
             self.bits.pack(side="left", padx=(10, 0))
+            # descrizioni delle foto (facoltative): scaricano il loro modello la prima volta
+            describer = self.cfg().get("describer") or ai.recommended_describer(ai.detect_gpu())
+            if describer:
+                self.desc_on = tk.BooleanVar(value=bool(self.cfg().get("descriptions")))
+                ttk.Checkbutton(f, text=t("ai_desc_enable"), variable=self.desc_on,
+                                command=lambda d=describer: self.toggle_descriptions(d)).pack(anchor="w", pady=(10, 0))
+                ttk.Label(f, text=t("ai_desc_hint"), style="Muted.TLabel", wraplength=640, justify="left").pack(
+                    anchor="w", padx=(24, 0))
             # quando lavorare: GPU libera, fascia oraria per le analisi grandi
             self.gpu_check = tk.BooleanVar(value=bool(self.cfg().get("gpu_check", True)))
             ttk.Checkbutton(f, text=t("ai_gpu_check"), variable=self.gpu_check,
@@ -1131,6 +1139,21 @@ class AiDialog(tk.Toplevel):
             ttk.Button(buttons, text=t("ai_log"), command=self.open_log).pack(side="left", padx=(8, 0))
         ttk.Button(buttons, text=t("w_close"), command=self.destroy).pack(side="right", padx=(0, 8))
         self.update_status()
+
+    def toggle_descriptions(self, describer):
+        on = bool(self.desc_on.get())
+        info = ai.installed_info(self.folder()) or {}
+        if on and describer not in (info.get("describers") or []):
+            gb = ai.DESCRIBERS[describer]["download"]
+            if Dialog.ask(self, t("ai_title"), t("ai_desc_q", gb=f"{gb:.0f}"), None, level="info",
+                          buttons=[("no", t("btn_cancel"), False), ("yes", t("ai_install"), True)]) != "yes":
+                self.desc_on.set(False)
+                return
+            self.install(self.folder(), self.cfg().get("model") or info.get("model"), describer)
+            return
+        self.save_cfg(descriptions=on, describer=describer)
+        if on:
+            ai.maybe_start(self.app.settings, log)
 
     def save_window(self):
         self.save_cfg(window={"enabled": bool(self.win_on.get()), "from": self.win_from.get(), "to": self.win_to.get()})
@@ -1172,6 +1195,10 @@ class AiDialog(tk.Toplevel):
                 text = t("ai_q_running", pct=st["done"] * 100 // max(1, st["total"]))
             elif state == "done":
                 text = t("ai_row_done", count=st["count"])
+                described = ((ai.worker_status(self.folder()).get("libraries") or {})
+                             .get(os.path.basename(os.path.normpath(lib))) or {}).get("described", 0)
+                if described:
+                    text += "  ·  " + t("ai_q_described", count=described)
             elif state in ("partial", "paused"):
                 text = t("ai_row_partial", count=st["count"], photos=st["photos"] or "?")
             elif state == "waiting":
@@ -1223,7 +1250,8 @@ class AiDialog(tk.Toplevel):
             lines.append(t("tray_ai_paused"))
         if not self.cfg().get("enabled"):
             lines = [t("ai_status_off")]
-        elif st.get("running") and phase in ("previews", "embeddings", "phone_model", "loading", "starting"):
+        elif st.get("running") and phase in ("previews", "embeddings", "descriptions", "phone_model", "loading",
+                                             "starting"):
             lines.append(t("ai_phase_" + phase, library=st.get("library") or "", done=st.get("done") or 0,
                            total=st.get("total") or 0))
         elif phase == "error":
@@ -1298,7 +1326,7 @@ class AiDialog(tk.Toplevel):
                 self.after(0, lambda: self.after_move(err, new_folder, model))
             threading.Thread(target=work, daemon=True).start()
             return
-        self.install(new_folder, model)
+        self.install(new_folder, model, c.describer())
 
     def after_move(self, err, new_folder, model):
         self.busy = False
@@ -1313,12 +1341,13 @@ class AiDialog(tk.Toplevel):
             self.mode = "ready"
             self.render()
         else:
-            self.install(new_folder, model)
+            self.install(new_folder, model, self.cfg().get("describer") if self.cfg().get("descriptions") else None)
 
-    def install(self, folder, model):
-        self.save_cfg(dir=folder, model=model, enabled=True, phone_bits=int(self.cfg().get("phone_bits") or 8))
+    def install(self, folder, model, describer=None):
+        self.save_cfg(dir=folder, model=model, enabled=True, phone_bits=int(self.cfg().get("phone_bits") or 8),
+                      descriptions=bool(describer), describer=describer)
         try:
-            ai.start_install_process(self.app_exe(), folder, model)
+            ai.start_install_process(self.app_exe(), folder, model, describer)
         except OSError as e:
             Dialog.ask(self, t("ai_title"), t("ai_status_install_error", error=str(e)), None, level="error")
             return
@@ -2464,7 +2493,7 @@ def main():
     if "--install-ai" in args:  # installazione del motore IA in un processo a sé: --install-ai <cartella> <modello>
         import ai
         i = args.index("--install-ai")
-        sys.exit(ai.install_main(args[i + 1], args[i + 2]))
+        sys.exit(ai.install_main(args[i + 1], args[i + 2], args[i + 3] if len(args) > i + 3 else None))
     if already_open():
         sys.exit(0)
     dpi_aware()
