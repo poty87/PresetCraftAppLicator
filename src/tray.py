@@ -115,9 +115,10 @@ def ai_text(settings):
         return t("tray_ai_paused")
     st = ai.worker_status(folder)
     phase = st.get("phase")
-    if st["running"] and phase in ("previews", "embeddings") and st.get("total"):
+    if st["running"] and phase in ("previews", "embeddings", "descriptions") and st.get("total"):
         pct = (st.get("done") or 0) * 100 // max(1, st["total"])
-        return t("tray_ai_running", library=st.get("library") or "", pct=pct)
+        key = "tray_ai_describing" if phase == "descriptions" else "tray_ai_running"
+        return t(key, library=st.get("library") or "", pct=pct)
     if st["running"]:
         return t("tray_ai_working")
     if phase == "gpu_busy":
@@ -125,6 +126,21 @@ def ai_text(settings):
     if phase == "waiting_window":
         return t("tray_ai_window")
     return ""
+
+
+def dark_menus():
+    """Menu scuri come l'app: Windows li disegna col tema scuro se il processo lo chiede (uxtheme, funzioni 135
+    SetPreferredAppMode e 136 FlushMenuThemes: senza nome, ma le stesse che usa Esplora file; da Windows 10 1903).
+    Se non ci sono, il menu resta chiaro."""
+    try:
+        import ctypes
+        ux = ctypes.WinDLL("uxtheme")
+        set_mode = ux[135]
+        set_mode.argtypes = [ctypes.c_int]
+        set_mode(2)  # ForceDark
+        ux[136]()
+    except Exception as e:  # noqa: BLE001
+        log(f"tray: dark menu not available ({e!r})")
 
 
 class TrayIcon(pystray.Icon):
@@ -165,8 +181,9 @@ class Tray:
         settings = load_json(SETTINGS)
         i18n.set_language(settings.get("language") or registry_value("Language"))
         self.images = {}
+        dark_menus()
         self.lock = threading.Lock()
-        self.status = Status(on_change=self.changed)
+        self.status = Status(on_change=self.changed, publish=True)
         self.watcher = Watcher(self.status)
         self.icon = TrayIcon("PresetCraftAppLicator-watch", self.image("idle"), APP_NAME, menu=self.menu(),
                              on_double_click=open_app)
@@ -188,11 +205,12 @@ class Tray:
             return lambda _item: bool(describe(self.status.get())[index])
 
         return pystray.Menu(
-            pystray.MenuItem(text(0), lambda: None, enabled=False),
-            pystray.MenuItem(text(1), lambda: None, enabled=False, visible=visible(1)),
-            pystray.MenuItem(text(2), lambda: None, enabled=False, visible=visible(2)),
-            pystray.MenuItem(lambda _i: self.ai_line or " ", lambda: None, enabled=False,
-                             visible=lambda _i: bool(self.ai_line)),
+            # righe di stato attive (scritte bianche, quelle disattivate sono grigie e si leggono male): un clic apre
+            # l'app
+            pystray.MenuItem(text(0), lambda: open_app()),
+            pystray.MenuItem(text(1), lambda: open_app(), visible=visible(1)),
+            pystray.MenuItem(text(2), lambda: open_app(), visible=visible(2)),
+            pystray.MenuItem(lambda _i: self.ai_line or " ", lambda: open_app(), visible=lambda _i: bool(self.ai_line)),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(t("tray_open"), lambda: open_app(), default=True),
             pystray.MenuItem(lambda _i: t("tray_ai_resume") if self.ai_paused() else t("tray_ai_pause"),
@@ -262,7 +280,9 @@ class Tray:
         if last and not ai.worker_status(folder)["running"]:
             ai.mark_notified(folder, last)
             libs = last.get("libraries") or {}
-            body = "\n".join(t("tray_ai_done_line", count=n, library=name) for name, n in libs.items())
+            body = "\n".join([t("tray_ai_done_line", count=n, library=name) for name, n in libs.items()] +
+                             [t("tray_ai_desc_line", count=n, library=name)
+                              for name, n in (last.get("described") or {}).items()])
             if body:
                 self.icon.notify(body, t("tray_ai_done_title"))
 

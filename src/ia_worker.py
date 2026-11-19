@@ -880,6 +880,7 @@ def lavoro(cfg):
     totale_nuove = 0
     controllo = Controllo(motore)
     nuove_per_lib = {}
+    descritte_per_lib = {}
     fatte_libs = []  # (libreria, foto, miniature, cartella ia) per il secondo giro: le descrizioni
     for lib in cfg["libraries"]:
         nome_lib = os.path.basename(os.path.normpath(lib))
@@ -973,7 +974,9 @@ def lavoro(cfg):
                     controllo.subito_gpu()
                     motore.stato(phase="loading", library=nome_lib, done=0, total=0)
                     desc = Descrittore(nome_desc, motore.dir)
-                aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo)
+                scritte = aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo)
+                if scritte:
+                    descritte_per_lib[nome_lib] = scritte
             if not os.path.exists(dest):
                 continue
             annuncia_descrizioni(ia, dest, nome_desc)
@@ -984,9 +987,10 @@ def lavoro(cfg):
                 motore.stato(libraries=libs)
     if totale_nuove:
         motore.log(f"fatto: {totale_nuove} foto nuove")
+    if totale_nuove or descritte_per_lib:
         # per la notifica di Windows (la mostra l'icona di PresetCraftAppLicator, una volta sola)
         motore.stato(last_run={"id": datetime.datetime.now().isoformat(timespec="seconds"),
-                               "libraries": nuove_per_lib})
+                               "libraries": nuove_per_lib, "described": descritte_per_lib})
     motore.stato(phase="idle", library="", done=0, total=0, error="")
 
 

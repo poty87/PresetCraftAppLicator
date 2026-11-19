@@ -1417,6 +1417,152 @@ class AiDialog(tk.Toplevel):
 
 # ---------------------------------------------------------------- finestra principale
 
+GREEN = "#22c55e"
+TRACK = "#3c4043"
+TRACK_BG = "#2b2b2b"  # come le schede
+
+
+class GreenBar(tk.Canvas):
+    """Barra di avanzamento verde, sottile, disegnata a mano (quella di ttk col tema scuro si vede poco).
+    `set(None)` = lavoro in corso senza una percentuale: un tratto verde che scorre."""
+
+    def __init__(self, master, height=6):
+        super().__init__(master, height=height, highlightthickness=0, bd=0, bg=TRACK)
+        self.value, self.offset = 0.0, 0
+        self.fill = self.create_rectangle(0, 0, 0, height, fill=GREEN, width=0)
+        self.bind("<Configure>", lambda e: self.draw())
+        self.after(60, self.animate)
+
+    def set(self, value):
+        self.value = value
+        self.draw()
+
+    def draw(self):
+        w, h = self.winfo_width(), self.winfo_height()
+        if self.value is None:  # senza percentuale: un quarto di barra che scorre
+            seg = max(40, w // 4)
+            x = self.offset % (w + seg) - seg
+            self.coords(self.fill, x, 0, x + seg, h)
+        else:
+            self.coords(self.fill, 0, 0, w * max(0.0, min(1.0, self.value)), h)
+
+    def animate(self):
+        if not self.winfo_exists():
+            return
+        if self.value is None and self.winfo_ismapped():
+            self.offset += 8
+            self.draw()
+        self.after(60, self.animate)
+
+
+def ai_progress(settings):
+    """Cosa sta facendo il motore IA, per la barra in fondo alla finestra: (testo, frazione 0..1, None = senza
+    percentuale, False = fermo) oppure None se non sta facendo niente. Vale per tutte le librerie, non solo per
+    quella scelta."""
+    folder = ai.engine_dir(settings)
+    if not folder:
+        return None
+    if ai.installing(folder):
+        p = ai.install_progress(folder)
+        gb = f"  ·  {p['got_gb']:.1f} / {p['total_gb']:.1f} GB" if p.get("got_gb") is not None else ""
+        frac = float(p.get("total") or 0)
+        return (t("footer_ai_installing", step=t("ai_step_" + str(p.get("step") or "uv"))) + gb +
+                f"  ·  {frac * 100:.0f}%", frac)
+    if not ai.installed_info(folder):
+        return None
+    st = ai.worker_status(folder)
+    phase = st.get("phase")
+    if ai.config(settings).get("paused") and phase not in (None, "idle"):
+        return f"{t('footer_ai')}  ·  {t('tray_ai_paused')}", False
+    if phase == "gpu_busy":
+        return t("tray_ai_gpu_busy"), False
+    if phase == "waiting_window":
+        return t("tray_ai_window"), False
+    if not st.get("running") or phase in (None, "idle"):
+        return None
+    done, total = st.get("done") or 0, st.get("total") or 0
+    if phase in ("previews", "embeddings", "descriptions", "phone_model", "loading", "starting"):
+        text = t("ai_phase_" + phase, library=st.get("library") or "", done=f"{done:,}".replace(",", "."),
+                 total=f"{total:,}".replace(",", "."))
+    else:
+        text = t("tray_ai_working")
+    if not text.startswith(t("footer_ai")):
+        text = f"{t('footer_ai')}  ·  {text}"
+    if total and phase in ("previews", "embeddings", "descriptions"):
+        return f"{text}  ·  {done * 100 // total}%", done / total
+    return text, None
+
+
+RED = "#f87171"
+BLUE = "#60a5fa"
+RECENT = 3600  # per un'ora l'ultima importazione / l'ultimo aggiornamento della ricerca IA sono una "notizia"
+
+
+def recent(iso):
+    try:
+        return (datetime.datetime.now() - datetime.datetime.fromisoformat(str(iso)[:19])).total_seconds() < RECENT
+    except ValueError:
+        return False
+
+
+def import_lines(settings):
+    """Righe dell'importazione automatica per la barra di stato: (tipo, testo, frazione, clic)."""
+    if not (settings.get("watch") or {}).get("enabled"):
+        return []
+    st = watcher.status() or {}
+    if not ai.pid_alive(st.get("pid")):
+        return [("wait", t("status_import_stopped"), False, "auto")]
+    try:
+        import tray  # stessi testi dell'icona nell'area di notifica
+        main, sub, last = tray.describe(st)
+    except Exception as e:  # noqa: BLE001
+        log(f"status: {e!r}")
+        return []
+    phase = st.get("phase", "idle")
+    lines = []
+    if phase in ("importing", "profiles"):
+        done, total = st.get("done") or 0, st.get("total") or 0
+        text = " · ".join(x for x in (main, st.get("library"), sub if sub != st.get("library") else "") if x)
+        lines.append(("work", f"{text}  ·  {done * 100 // max(1, total)}%", done / total if total else None, "auto"))
+    elif phase in ("incoming", "waiting", "metadata"):
+        lines.append(("work", " · ".join(x for x in (main, sub) if x), None, "auto"))
+    elif phase == "error":
+        lines.append(("error", " · ".join(x for x in (main, sub) if x), False, "auto"))
+    else:
+        lines.append(("info", " · ".join(x for x in (main, sub) if x), False, "auto"))
+    if last and recent((st.get("last") or {}).get("when")):
+        lines.append(("news", last, False, "auto"))
+    return lines
+
+
+def ai_lines(settings):
+    """Righe del motore IA per la barra di stato."""
+    p = ai_progress(settings)
+    if p is not None:
+        text, frac = p
+        return [("work" if frac is not False else "wait", text, frac, "ai")]
+    folder = ai.engine_dir(settings)
+    if not folder or not ai.installed_info(folder) or not ai.config(settings).get("enabled"):
+        return []
+    st = ai.worker_status(folder)
+    libs = st.get("libraries") or {}
+    count = sum(int(v.get("count") or 0) for v in libs.values())
+    lines = []
+    if st.get("phase") == "error":
+        lines.append(("error", f"{t('footer_ai')}  ·  {t('ai_status_error', error=st.get('error') or '')}", False,
+                      "ai"))
+    elif count:
+        lines.append(("info", t("status_ai_ready", count=f"{count:,}".replace(",", ".")), False, "ai"))
+    last = st.get("last_run") or {}
+    if last and recent(last.get("id")):
+        news = [t("tray_ai_done_line", count=n, library=k) for k, n in (last.get("libraries") or {}).items()]
+        news += [t("tray_ai_desc_line", count=n, library=k) for k, n in (last.get("described") or {}).items()]
+        if news:
+            lines.append(("news", f"{t('tray_ai_done_title')}: " + "; ".join(news) + f" ({last['id'][11:16]})",
+                          False, "ai"))
+    return lines
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -1517,8 +1663,28 @@ class App(tk.Tk):
             ttk.Label(box, textvariable=var, style="Stat.TLabel").pack(anchor="w")
             self.stat_vars[key] = var
 
+        # barra di stato, sempre in fondo: importazione automatica e motore IA (anche quando lavorano con l'app
+        # chiusa), notizie recenti e avanzamenti con la barra verde. Un clic su una riga apre la sua finestra.
+        self.status_zone = tk.Frame(outer, bg=TRACK_BG)
+        self.status_zone.pack(side="bottom", fill="x", pady=(12, 0))
+        rows = tk.Frame(self.status_zone, bg=TRACK_BG)
+        rows.pack(fill="x", padx=12, pady=(6, 5))
+        self.status_rows = []
+        for i in range(4):
+            line = tk.Frame(rows, bg=TRACK_BG, cursor="hand2")
+            dot = tk.Label(line, text="●", bg=TRACK_BG, font=self.f_body, cursor="hand2")
+            dot.pack(side="left")
+            text = tk.Label(line, anchor="w", bg=TRACK_BG, font=self.f_body, cursor="hand2")
+            text.pack(side="left", padx=(6, 0), fill="x", expand=True)
+            self.status_rows.append((line, dot, text))
+            for wdg in (line, dot, text):
+                wdg.bind("<Button-1>", lambda e, row=i: self.status_click(row))
+        self.status_click_kind = [None] * 4
+        self.status_bar = GreenBar(self.status_zone, height=4)
+        self.status_bar.pack(fill="x", side="bottom")
         foot = ttk.Frame(outer)
         foot.pack(side="bottom", fill="x", pady=(14, 0))
+        self.after(800, self.update_status_zone)
         ttk.Button(foot, text=t("open_log"), command=self.open_log).pack(side="left")
         ttk.Button(foot, text=t("backups_btn"), command=self.open_backups).pack(side="left", padx=(8, 0))
         auto_on = (self.settings.get("watch") or {}).get("enabled")
@@ -1702,6 +1868,44 @@ class App(tk.Tk):
             self.update_ai_row()
         else:
             self.open_ai()
+
+    def update_status_zone(self):
+        """Barra di stato: prima chi sta lavorando, poi errori e attese, le notizie dell'ultima ora e lo stato a
+        riposo. La barra verde segue il primo lavoro con una percentuale (o scorre se non ce l'ha)."""
+        try:
+            lines = import_lines(self.settings) + ai_lines(self.settings)
+            order = {"work": 0, "error": 1, "wait": 2, "news": 3, "info": 4}
+            lines.sort(key=lambda x: order[x[0]])
+            if not lines:
+                lines = [("info", t("status_ready"), False, None)]
+            colors = {"work": (GREEN, TEXT), "error": (RED, TEXT), "wait": (MUTED, MUTED), "news": (BLUE, TEXT),
+                      "info": (MUTED, MUTED)}
+            for i, (line, dot, text) in enumerate(self.status_rows):
+                if i < len(lines):
+                    kind, msg, _frac, click = lines[i]
+                    dot.configure(fg=colors[kind][0])
+                    text.configure(text=msg, fg=colors[kind][1])
+                    self.status_click_kind[i] = click
+                    if not line.winfo_ismapped():
+                        line.pack(fill="x", pady=1)
+                elif line.winfo_ismapped():
+                    line.pack_forget()
+            work = [x for x in lines if x[0] == "work"]
+            if work:
+                frac = next((x[2] for x in work if isinstance(x[2], float)), None)
+                self.status_bar.set(frac)
+            else:
+                self.status_bar.set(0.0)
+        except Exception as e:  # noqa: BLE001 — la barra di stato non deve mai bloccare la finestra
+            log(f"status zone: {e!r}")
+        self.after(2000, self.update_status_zone)
+
+    def status_click(self, row):
+        kind = self.status_click_kind[row]
+        if kind == "ai":
+            self.open_ai()
+        elif kind == "auto":
+            self.open_auto_import()
 
     def open_ai(self):
         d = AiDialog(self, self)

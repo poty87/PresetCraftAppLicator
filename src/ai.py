@@ -172,6 +172,26 @@ def model_dir(folder, model):
     return os.path.join(folder, "modelli", model)
 
 
+def remove_old_cache(folder):
+    """Le installazioni 1.16.0 tenevano i modelli nella cache di Hugging Face (modelli\\hub); dalla 1.16.1 stanno in
+    cartelle normali. Quando ogni modello della cache vecchia ha anche la sua cartella nuova completa, la cache è solo
+    spazio doppio (un modello giant sono 14 GB) e si toglie. I file dei modelli nella cache sono in comune (blobs), quindi
+    si toglie tutta o niente. Ritorna True se l'ha tolta."""
+    hub = os.path.join(folder, "modelli", "hub")
+    if not os.path.isdir(hub):
+        return False
+    per_hf = {v["hf"]: k for k, v in list(MODELS.items()) + list(DESCRIBERS.items())}
+    for name in os.listdir(hub):
+        if not name.startswith("models--"):
+            continue
+        key = per_hf.get(name[len("models--"):].replace("--", "/", 1))
+        if not key or not os.path.isfile(os.path.join(model_dir(folder, key), "config.json")):
+            return False  # un modello che c'è solo nella cache vecchia: la si lascia
+    shutil.rmtree(hub, ignore_errors=True)
+    shutil.rmtree(os.path.join(folder, "modelli", "xet"), ignore_errors=True)
+    return not os.path.exists(hub)
+
+
 def venv_python(folder):
     return os.path.join(folder, "venv", "Scripts", "python.exe")
 
@@ -323,6 +343,8 @@ class Installer:
                              "describer", extra_env={"HF_HUB_DISABLE_XET": "1"}, tick=dtick)
                 shutil.rmtree(os.path.join(dtarget, ".cache"), ignore_errors=True)
             shutil.rmtree(os.path.join(self.folder, "uv-cache"), ignore_errors=True)  # solo spazio occupato
+            if remove_old_cache(self.folder):
+                self.log("removed the old model cache (modelli\\hub): the models are now in their own folders")
             prima = load_json(os.path.join(self.folder, "motore.json"), {})
             modelli = sorted(set(prima.get("models") or []) | {self.model})
             descrittori = sorted(set(prima.get("describers") or []) | ({self.describer} if self.describer else set()))
@@ -548,7 +570,7 @@ def in_window(window, now=None):
 
 
 def pending_notification(folder):
-    """L'ultimo giro con foto nuove non ancora notificato: {"id", "libraries": {nome: quante}} o None."""
+    """L'ultimo giro con foto nuove (o descrizioni) non ancora notificato: {"id", "libraries", "described"} o None."""
     last = load_json(os.path.join(folder, "stato.json"), {}).get("last_run")
     seen = load_json(os.path.join(folder, "notificato.json"), {}).get("id")
     return last if last and last.get("id") != seen else None
@@ -583,6 +605,8 @@ def maybe_start(settings, log=None):
     status = worker_status(folder)
     if status["running"] or installing(folder):
         return False
+    if remove_old_cache(folder) and log:  # motore fermo: la cache vecchia dei modelli, se doppia, si può togliere
+        log("AI engine: removed the old model cache (models already in their own folders)")
     window = cfg.get("window") or {}
     window = {"from": window.get("from") or "22:00", "to": window.get("to") or "07:00"} if window.get("enabled") \
         else None

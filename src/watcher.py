@@ -32,6 +32,7 @@ from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, backup_library, bac
 SETTINGS = os.path.join(DATA_DIR, "settings.json")
 STATE_DIR = os.path.join(DATA_DIR, "watch")
 STATUS = os.path.join(STATE_DIR, "status.json")  # stato del processo in background, per la finestra dell'app
+LIVE_KEYS = ("phase", "count", "done", "total", "last", "library", "eta", "next_check", "quiet_left", "error")
 MUTEX = "Local\\PresetCraftAppLicator-watch"  # stessi nomi in autostart.py (usati dall'installazione)
 STOP_EVENT = "Local\\PresetCraftAppLicator-watch-stop"
 DEFAULT_INTERVAL = 2  # minuti tra un controllo e l'altro quando non arriva niente
@@ -510,20 +511,36 @@ def create_rule_state(rule, import_existing):
 class Status:
     """Cosa sta facendo il processo in background, letto dall'icona nell'area di notifica (da un altro thread)."""
 
-    def __init__(self, on_change=None):
+    def __init__(self, on_change=None, publish=False):
         self.lock = threading.Lock()
         self.on_change = on_change
+        self.publish = publish  # True nel processo in background: lo stato va anche nel file per la finestra
         self.data = {"phase": "idle"}
+        self.saved = 0.0
 
     def set(self, **values):
         with self.lock:
-            if values.get("phase") and values["phase"] != self.data.get("phase"):
+            changed = values.get("phase") and values["phase"] != self.data.get("phase")
+            if changed:
                 keep = {k: self.data[k] for k in ("last", "next_check") if k in self.data}
                 self.data = keep
             self.data.update(values)
             data = dict(self.data)
         if self.on_change:
             self.on_change(data)
+        # anche per la finestra dell'app (barra in basso): a ogni cambio di fase e al massimo una volta al secondo
+        if self.publish and (changed or time.time() - self.saved >= 1):
+            self.saved = time.time()
+            try:
+                old = load_json(STATUS) or {}
+                old.update({k: v for k, v in data.items() if k in LIVE_KEYS}, pid=os.getpid(),
+                           updated=datetime.datetime.now().isoformat(timespec="seconds"))
+                for k in LIVE_KEYS:
+                    if k not in data:
+                        old.pop(k, None)
+                save_json(STATUS, old)
+            except Exception:  # noqa: BLE001 — lo stato per la finestra non deve mai fermare l'importazione
+                pass
 
     def get(self):
         with self.lock:
@@ -1066,7 +1083,7 @@ class Watcher:
                 self.status.set(next_check=next_check)
                 save_json(STATUS, {"pid": os.getpid(), "checked": datetime.datetime.now().isoformat(timespec="seconds"),
                                    "interval": interval, **{k: v for k, v in self.status.get().items()
-                                                            if k in ("phase", "count", "done", "total", "last")}})
+                                                            if k in LIVE_KEYS}})
                 if once:
                     return 0
                 if self.wait(pause):
@@ -1089,7 +1106,7 @@ def run(once=False, tray=True):
             log(f"watch: no tray icon ({e!r})")
         else:
             return tray_ui.run()
-    return Watcher(Status()).run(once)
+    return Watcher(Status(publish=True)).run(once)
 
 
 def status():
