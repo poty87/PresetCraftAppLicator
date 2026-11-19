@@ -163,6 +163,37 @@ Photos can also be **grouped into a stack** (stacks they are already in are merg
 (*Recently Deleted*): the files stay on the NAS, so at the PC you can still check them in LightCraft or delete them for
 good with [CleanCraftNas](https://github.com/poty87/CleanCraftNas).
 
+### Search by subject on the phone (optional AI engine)
+
+ViewerCraftStar can find library photos by what is in them — *cats*, *vintage car*, *sunset at the beach*, in Italian or
+any other language. The catalog is built on this PC by an **optional AI engine** (the
+[MetaCLIP 2](https://github.com/facebookresearch/MetaCLIP) model, licensed **CC BY-NC 4.0: non-commercial use only**);
+the phone only receives the result and searches offline.
+
+- **Install it** from the setup wizard (*AI search* page) or later from **Automatic import… › AI engine…**. You choose
+  the model — the recommended one depends on the graphics card (*giant* for NVIDIA cards with 16 GB, *huge* for 8 GB,
+  *small* without a suitable GPU, on the processor) — and **the folder**, since it takes about 10–22 GB (programs,
+  model and thumbnails). The installer stays small: the engine (a separate Python environment with PyTorch, made with
+  [uv](https://github.com/astral-sh/uv)) and the model are downloaded in the background after installation; the window
+  shows the progress and the download resumes where it stopped.
+- **First analysis**: in the main window, under the chosen library, click **Analyze for AI search**. It shows the
+  number of photos and an estimate of the time (for example about 30 minutes for 18,000 photos with *giant* on an
+  RTX 3090), adds the library to the phone libraries if needed and puts it in the queue; several libraries are analyzed
+  one at a time, in the order shown in *AI engine…*. **Pause/Resume** stops and resumes where it left off (also from
+  the notification area icon, which shows the progress).
+- **Then it's automatic**: when automatic import has added new photos and the library index is updated, the background
+  process analyzes only the new photos of the libraries already analyzed, at low priority, and a Windows notification
+  says how many were cataloged. Options: **stop when another program uses the graphics card** (games, renders) and
+  resume later; **time window** for large analyses (for example 22:00–07:00 — new photos after an import are done
+  right away anyway).
+- **What it writes**: the engine reads the previews embedded in the files (photos and catalogs are never modified) and writes in the
+  phone folder, next to each library's index, `<library name>/ia/`: `visivo.bin` (one fingerprint per photo, about 2.5 KB
+  each), `manifest.json`, and in `telefono/` the text part of the model reduced to Italian and English and compressed to
+  8 bits (about 830 MB, or 4 bits) with its tokenizer, which ViewerCraftStar downloads once. If Windows resets the graphics
+  driver during a long job (TDR), the engine resumes where it stopped.
+- **Updates** of PresetCraftAppLicator do not touch the engine; the *AI engine* window lets you change model or folder
+  (the engine is moved, not downloaded again), reorder or remove libraries, turn it off, or remove it.
+
 ### Notification area icon
 
 While automatic import is on, an icon sits in the notification area. Its dot shows the state: **green** = on and
@@ -180,12 +211,14 @@ The icon uses [pystray](https://github.com/moses-palmer/pystray) (LGPLv3).
 
 Uninstall from **Settings › Apps › Installed apps** (or run the setup again). PresetCraftAppLicator's own uninstall
 wizard opens. It removes the program, its shortcuts and the automatic import (background process, icon and scheduled
-task), and can delete your settings and log too. Your photos, your LightCraft libraries and the catalog backups next to
-them are never touched.
+task), and can delete your settings and log too. If the AI engine is installed it asks whether to remove it as well
+(programs, models and thumbnails, wherever you put it) and, separately, its search files in the phone folder. Your photos,
+your LightCraft libraries and the catalog backups next to them are never touched.
 
 The cleanup is done by the installer package itself, so it also happens with `msiexec /x` or a silent uninstall
-(`PresetCraftAppLicator-Setup-x.y.z.exe --silent --uninstall [--remove-data]`). Updates stop the background process and
-start it again once the new version is installed.
+(`PresetCraftAppLicator-Setup-x.y.z.exe --silent --uninstall [--remove-data] [--remove-ai] [--remove-ai-nas]`). A silent
+install can add the engine with `--ai-model metaclip2-giant|metaclip2-huge|metaclip2-b16 [--ai-dir D]`. Updates stop the
+background process and start it again once the new version is installed.
 
 ### Measured profiles (Ricoh GR IV)
 
@@ -394,6 +427,30 @@ Dal telefono si possono anche **raggruppare foto in una pila** (le pile in cui s
 cestino di LightCraft** (*Eliminate di recente*): i file restano sul NAS, così al PC puoi ancora ricontrollarle in
 LightCraft o cancellarle definitivamente con [CleanCraftNas](https://github.com/poty87/CleanCraftNas).
 
+**Ricerca per soggetti sul telefono (motore IA facoltativo).** ViewerCraftStar può trovare le foto delle librerie per
+quello che c'è dentro — *gatti*, *auto d'epoca*, *tramonto al mare*. Il catalogo lo fa questo PC con un **motore IA
+facoltativo** (il modello [MetaCLIP 2](https://github.com/facebookresearch/MetaCLIP), licenza **CC BY-NC 4.0: solo uso
+non commerciale**); il telefono riceve solo il risultato e cerca anche senza rete. Si installa dall'installazione guidata
+(pagina *Ricerca IA*) o dopo da **Importazione automatica… › Motore IA…**: scegli il modello (quello consigliato dipende
+dalla scheda video: *giant* con NVIDIA da 16 GB, *huge* da 8 GB, *piccolo* senza GPU adatta) e **la cartella**, perché
+occupa circa 10–22 GB. L'installer resta piccolo: motore (ambiente Python separato con PyTorch, creato con
+[uv](https://github.com/astral-sh/uv)) e modello si scaricano in background dopo l'installazione. La **prima analisi** di
+una libreria la decidi tu: nella finestra principale, sotto la libreria scelta, **Analizza per la ricerca IA** mostra
+numero di foto e tempo stimato (per esempio circa 30 minuti per 18.000 foto con *giant* su una RTX 3090), la aggiunge se
+serve alle librerie del telefono e la mette in coda; più librerie vanno una alla volta, nell'ordine di *Motore IA…*.
+**Pausa/Riprendi** ferma e riprende da dove era arrivata (anche dall'icona nell'area di notifica, che mostra
+l'avanzamento). **Dopo è automatico**: quando l'importazione automatica ha inserito foto nuove e l'indice della libreria
+si aggiorna, il processo in background analizza solo le foto nuove delle librerie già analizzate e una notifica di
+Windows dice quante ne ha catalogate. Opzioni: **fermarsi se un altro programma usa la scheda video** (giochi, render) e
+riprendere dopo; **fascia oraria** per le analisi grandi (per esempio 22–7; le foto nuove di un'importazione si fanno
+comunque subito). Il motore legge le
+anteprime incorporate nei file (foto e cataloghi non vengono mai modificati) e scrive nella cartella del telefono
+`<nome libreria>/ia/` — `visivo.bin` (un'impronta per foto, circa 2,5 KB l'una), `manifest.json` e in `telefono/` la parte
+"testo" del modello ridotta a italiano e inglese e compressa a 8 bit (circa 830 MB, o a 4 bit), che ViewerCraftStar
+scarica una volta. Se Windows riavvia il driver della scheda video durante un lavoro lungo (TDR), il motore riprende da
+dove era arrivato. Gli aggiornamenti dell'app non toccano il motore; dalla sua finestra si cambia modello o cartella (il
+motore viene spostato, non riscaricato), lo si spegne o lo si rimuove.
+
 **Icona nell'area di notifica.** Mentre l'importazione automatica è attiva c'è un'icona vicino all'orologio. Il pallino
 dice lo stato: **verde** = attiva e in attesa, **blu** = foto in arrivo o importazione in corso, **giallo** = aspetta
 la chiusura di LightCraft, **rosso** = errore. **Doppio clic** apre l'app; **tasto destro** mostra cosa sta facendo
@@ -403,8 +460,9 @@ registro* e *Chiudi*. A importazione finita arriva una notifica di Windows. L'ic
 
 **Disinstallazione.** Da **Impostazioni › App › App installate** si apre la disinstallazione guidata di
 PresetCraftAppLicator: toglie programma, collegamenti e importazione automatica (processo in background, icona e attività
-pianificata) e, se vuoi, anche impostazioni e registro. Foto, librerie LightCraft e backup dei cataloghi non vengono mai
-toccati. La pulizia la fa il pacchetto di installazione stesso, quindi avviene anche con `msiexec /x` o con la
+pianificata) e, se vuoi, anche impostazioni e registro. Se il motore IA è installato chiede se togliere anche quello
+(programmi, modelli e miniature, ovunque l'hai messo) e, a parte, i suoi file di ricerca nella cartella del telefono. Foto,
+librerie LightCraft e backup dei cataloghi non vengono mai toccati. La pulizia la fa il pacchetto di installazione stesso, quindi avviene anche con `msiexec /x` o con la
 disinstallazione silenziosa. Gli aggiornamenti fermano il processo in background e lo fanno ripartire alla fine.
 
 Per la GR IV ci sono anche profili **misurati**: LUT ricavate confrontando la resa di LightCraft con l'anteprima salvata

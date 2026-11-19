@@ -1057,6 +1057,11 @@ class Watcher:
                         pause = min(pause, wanted)
                     write_heartbeat(rule, interval, self.status.get().get("phase"))
                 publish_phone_libraries(settings)
+                try:  # ricerca IA: impronte delle foto nuove (processo a parte, a bassa priorità)
+                    import ai
+                    ai.maybe_start(settings, log)
+                except Exception as e:  # noqa: BLE001 — il motore IA non deve fermare l'importazione
+                    log(f"watch ERROR ai: {e!r}")
                 next_check = time.time() + pause
                 self.status.set(next_check=next_check)
                 save_json(STATUS, {"pid": os.getpid(), "checked": datetime.datetime.now().isoformat(timespec="seconds"),

@@ -158,7 +158,9 @@ setup(
             "includes": ["queue"],
             # profiles: le LUT misurate (tools/measure_styles.py), una cartella per fotocamera
             "include_files": [(ICON, "assets/icon.ico"), (str(ROOT / "assets" / "icon.png"), "assets/icon.png"),
-                              (str(ROOT / "assets" / "profiles"), "assets/profiles")],
+                              (str(ROOT / "assets" / "profiles"), "assets/profiles"),
+                              # il lavoratore del motore IA: gira nell'ambiente Python del motore, non nell'app
+                              (str(ROOT / "src" / "ia_worker.py"), "ia_worker.py")],
             # http ed email servono a urllib per il controllo degli aggiornamenti
             "excludes": ["unittest", "pydoc", "xmlrpc"],
             # nei .pyc resta il percorso dei sorgenti: si toglie, così nel pacchetto non finiscono le cartelle del PC

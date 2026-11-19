@@ -5,9 +5,13 @@ Windows Installer (msi.dll) senza mostrarne l'interfaccia, e disegna avanzamento
 
     PresetCraftAppLicator-Setup-x.y.z.exe              installazione guidata
     PresetCraftAppLicator-Setup-x.y.z.exe --update     avviata dall'app per aggiornarsi
-    PresetCraftAppLicator-Setup-x.y.z.exe --silent [--dir D] [--lang it] [--no-desktop]
+    PresetCraftAppLicator-Setup-x.y.z.exe --silent [--dir D] [--lang it] [--no-desktop] [--ai-model M [--ai-dir D]]
     PresetCraftAppLicator-Setup-x.y.z.exe --uninstall    disinstallazione guidata (la apre Impostazioni › App)
-    PresetCraftAppLicator-Setup-x.y.z.exe --silent --uninstall [--remove-data]
+    PresetCraftAppLicator-Setup-x.y.z.exe --silent --uninstall [--remove-data] [--remove-ai] [--remove-ai-nas]
+
+Motore IA (facoltativo, vedi ai.py): nelle installazioni nuove una pagina chiede se installarlo, con quale modello e
+dove; l'MSI non lo contiene, lo scarica l'app in background dopo l'installazione. Gli aggiornamenti non lo toccano.
+Nella disinstallazione si sceglie se togliere anche il motore (programmi e modelli) e i file della ricerca IA sul NAS.
 """
 
 import argparse
@@ -24,8 +28,10 @@ import tkinter as tk
 from ctypes import wintypes
 from tkinter import filedialog, ttk
 
+import ai
 import autostart
 import i18n
+from ai_panel import AiChoice
 from i18n import registry_value, t
 from translations import LANGUAGES
 from ui_theme import ACCENT, MUTED, TEXT, Dialog, dark_title_bar, dpi_aware, resource, set_icon, setup_theme
@@ -39,6 +45,45 @@ SETUP_CACHE = os.path.join(DATA_DIR, "Setup", f"{APP_NAME}-Setup.exe")
 LOG = os.path.join(tempfile.gettempdir(), f"{APP_NAME}-setup.log")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 SIDEBAR = "#202020"
+SETTINGS = os.path.join(DATA_DIR, "settings.json")
+
+
+def load_settings():
+    return ai.load_json(SETTINGS, {})
+
+
+def set_ai_settings(values):
+    """Aggiunge (o toglie, con None) la configurazione del motore IA in settings.json, senza toccare il resto."""
+    s = load_settings()
+    if values is None:
+        s.pop("ai", None)
+    else:
+        s["ai"] = {**(s.get("ai") or {}), **values}
+    ai.save_json(SETTINGS, s)
+
+
+def start_ai_install(app_folder, ai_folder, model):
+    """Dopo l'installazione: il motore lo scarica l'app in un processo a sé (può durare a lungo)."""
+    set_ai_settings({"enabled": True, "dir": ai_folder, "model": model, "phone_bits": 8})
+    exe = os.path.join(app_folder, EXE)
+    if os.path.isfile(exe):
+        ai.start_install_process(exe, ai_folder, model)
+        return True
+    return False
+
+
+def remove_ai(remove_engine, remove_nas):
+    """Disinstallazione: motore IA (cartella scelta, anche fuori dai dati dell'app) e/o i file della ricerca sul NAS."""
+    settings = load_settings()
+    if remove_nas:
+        try:
+            ai.remove_nas_outputs(settings)
+        except Exception:  # noqa: BLE001 — NAS non raggiungibile: si va avanti
+            pass
+    if remove_engine:
+        ai.remove_engine(ai.engine_dir(settings))
+        if os.path.isfile(SETTINGS):
+            set_ai_settings(None)
 
 # ---------------------------------------------------------------- Windows Installer (msi.dll)
 
@@ -188,9 +233,10 @@ def cache_setup():
         pass  # senza copia la voce di Impostazioni › App usa Windows Installer: la pulizia la fa comunque l'MSI
 
 
-def remove_leftovers(remove_data):
+def remove_leftovers(remove_data, keep=None):
     """Dopo una disinstallazione: toglie la copia del setup e, se richiesto, impostazioni, registro e stato
-    dell'importazione automatica. I backup delle librerie (accanto alle librerie) non si toccano mai."""
+    dell'importazione automatica. I backup delle librerie (accanto alle librerie) non si toccano mai.
+    `keep`: cartella da non togliere (il motore IA, se sta nei dati dell'app e l'utente lo tiene)."""
     import shutil
     setup_dir = os.path.dirname(SETUP_CACHE)
     if remove_data and os.path.isdir(DATA_DIR):
@@ -198,6 +244,8 @@ def remove_leftovers(remove_data):
             path = os.path.join(DATA_DIR, name)
             if os.path.normcase(path) == os.path.normcase(setup_dir) and running_from_cache():
                 continue  # è il programma in esecuzione: si toglie dopo la chiusura
+            if keep and os.path.normcase(path) == os.path.normcase(keep):
+                continue
             if os.path.isdir(path):
                 shutil.rmtree(path, ignore_errors=True)
             else:
@@ -214,7 +262,9 @@ def remove_leftovers(remove_data):
                 pass
         return
     # il setup in esecuzione è proprio la copia: la cancella un comando che parte quando questo processo è chiuso
-    target = DATA_DIR if remove_data else setup_dir
+    keep_inside = keep and os.path.normcase(os.path.dirname(keep)) == os.path.normcase(DATA_DIR) and \
+        os.path.isdir(keep)
+    target = DATA_DIR if remove_data and not keep_inside else setup_dir
     subprocess.Popen(f'cmd /c ping 127.0.0.1 -n 5 >nul & rmdir /s /q "{target}"', creationflags=NO_WINDOW | 0x8,
                      close_fds=True)  # 0x8 = DETACHED_PROCESS
 
@@ -226,6 +276,10 @@ class Wizard(tk.Tk):
         super().__init__()
         self.uninstall_mode = uninstall_mode
         self.remove_data = None  # BooleanVar della pagina di disinstallazione
+        self.remove_engine = None
+        self.remove_nas = None
+        self.ai_choice = None  # (installare?, cartella, modello) dalla pagina del motore IA
+        self.ai_started = False
         self.withdraw()
         self.resizable(False, False)
         set_icon(self)
@@ -269,7 +323,7 @@ class Wizard(tk.Tk):
 
     def steps(self):
         if self.mode == "install":
-            return ["welcome", "license", "folder", "progress", "finish"]
+            return ["welcome", "license", "folder", "ai", "progress", "finish"]
         return ["welcome", "progress", "finish"]
 
     def render(self):
@@ -288,7 +342,7 @@ class Wizard(tk.Tk):
         tk.Label(side, text=APP_NAME, bg=SIDEBAR, fg=TEXT, font=self.f_strong).pack(anchor="w", padx=24)
         tk.Label(side, text=t("about", version=self.version), bg=SIDEBAR, fg=MUTED, font=self.f_small).pack(
             anchor="w", padx=24)
-        names = {"welcome": "w_s_welcome", "license": "w_s_license", "folder": "w_s_folder",
+        names = {"welcome": "w_s_welcome", "license": "w_s_license", "folder": "w_s_folder", "ai": "w_s_ai",
                  "progress": "w_uninstall" if self.mode in ("remove", "absent") else "w_s_install",
                  "finish": "w_s_done"}
         current = self.steps().index(self.page if self.page != "ready" else "progress")
@@ -384,9 +438,25 @@ class Wizard(tk.Tk):
         self.heading(t("w_remove_head", version=version), t("w_remove_body"))
         if self.remove_data is None:
             self.remove_data = tk.BooleanVar(value=True)
+            self.remove_engine = tk.BooleanVar(value=False)
+            self.remove_nas = tk.BooleanVar(value=False)
         ttk.Checkbutton(self.body, text=t("w_remove_data"), variable=self.remove_data).pack(anchor="w", pady=(28, 0))
         ttk.Label(self.body, text=t("w_remove_note"), style="Muted.TLabel", wraplength=540, justify="left").pack(
             anchor="w", pady=(6, 0))
+        settings = load_settings()
+        engine = ai.engine_dir(settings)
+        if os.path.isdir(engine):
+            ttk.Checkbutton(self.body, text=t("w_remove_ai", gb=f"{ai.folder_size_gb(engine):.0f}"),
+                            variable=self.remove_engine).pack(anchor="w", pady=(18, 0))
+            ttk.Label(self.body, text=engine, style="Muted.TLabel", wraplength=540, justify="left").pack(
+                anchor="w", padx=(24, 0))
+        try:
+            nas = ai.nas_outputs(settings)
+        except Exception:  # noqa: BLE001 — NAS non raggiungibile
+            nas = []
+        if nas:
+            ttk.Checkbutton(self.body, text=t("w_remove_ai_nas", count=len(nas)), variable=self.remove_nas).pack(
+                anchor="w", pady=(10, 0))
         self.buttons((t("w_uninstall"), self.start_uninstall, True, True))
 
     def page_license(self):
@@ -417,7 +487,38 @@ class Wizard(tk.Tk):
             anchor="w", pady=(6, 0))
         ttk.Checkbutton(self.body, text=t("w_desktop"), variable=self.desktop).pack(anchor="w", pady=(24, 0))
         self.buttons((t("w_back"), lambda: self.go("license"), False, True),
-                     (t("w_install"), self.start_install, True, True))
+                     (t("w_next"), lambda: self.go("ai"), True, True))
+
+    def page_ai(self):
+        """Motore IA per la ricerca per soggetti sul telefono: facoltativo, scaricato dopo l'installazione."""
+        self.heading(t("w_ai_head"), t("w_ai_body"))
+        prev = self.ai_choice
+        self.ai_panel = AiChoice(self.body, folder=prev[1] if prev else None, model=prev[2] if prev else None,
+                                 allow_none=True, install=prev[0] if prev else False)
+        self.ai_panel.pack(fill="x", pady=(16, 0))
+
+        def keep():
+            p = self.ai_panel
+            self.ai_choice = (bool(p.install.get()), p.folder.get().strip(), p.model())
+
+        def back():
+            keep()
+            self.go("folder")
+
+        def install():
+            keep()
+            p = self.ai_panel
+            if self.ai_choice[0]:
+                if not p.valid_folder():
+                    Dialog.ask(self, t("w_title"), t("w_folder_bad"), None, level="warn")
+                    return
+                if not p.enough_space():
+                    answer = Dialog.ask(self, t("w_title"), t("ai_space_low"), self.ai_choice[1], level="warn",
+                                        buttons=[("back", t("w_back"), True), ("go", t("w_install"), False)])
+                    if answer != "go":
+                        return
+            self.start_install()
+        self.buttons((t("w_back"), back, False, True), (t("w_install"), install, True, True))
 
     def page_progress(self):
         title = t("w_uninstalling") if self.result_kind == "uninstall" else t("w_installing")
@@ -443,6 +544,9 @@ class Wizard(tk.Tk):
         else:
             head = t("w_updated_head", version=self.version) if self.mode == "upgrade" else t("w_done_head")
             self.heading(head, t("w_done_body"))
+            if self.ai_started:
+                ttk.Label(self.body, text=t("w_ai_started"), style="Body.TLabel", wraplength=540,
+                          justify="left").pack(anchor="w", pady=(14, 0))
             ttk.Checkbutton(self.body, text=t("w_launch"), variable=self.launch).pack(anchor="w", pady=(28, 0))
         self.buttons((t("w_finish"), self.finish, True, True))
 
@@ -491,6 +595,11 @@ class Wizard(tk.Tk):
         self.runner = MsiRunner(lambda value: self.events.put(("progress", value)))
 
         remove_data = bool(self.remove_data and self.remove_data.get())
+        remove_engine = bool(self.remove_engine and self.remove_engine.get())
+        remove_nas = bool(self.remove_nas and self.remove_nas.get())
+        engine = ai.engine_dir(load_settings())
+        choice = self.ai_choice if self.mode == "install" else None
+        app_folder = self.folder.get().strip()
 
         def work():
             try:
@@ -500,8 +609,14 @@ class Wizard(tk.Tk):
             if code in (ERROR_SUCCESS, ERROR_SUCCESS_REBOOT_REQUIRED):
                 if kind == "install":
                     cache_setup()
+                    if choice and choice[0]:
+                        try:
+                            self.ai_started = start_ai_install(app_folder, choice[1], choice[2])
+                        except Exception:  # noqa: BLE001 — l'app è installata: il motore si può installare dopo
+                            self.ai_started = False
                 else:
-                    remove_leftovers(remove_data)
+                    remove_ai(remove_engine, remove_nas)
+                    remove_leftovers(remove_data, keep=None if remove_engine else engine)
             self.events.put(("done", code))
         threading.Thread(target=work, daemon=True).start()
         self.after(50, self.poll)
@@ -559,13 +674,15 @@ def silent(args):
     installed = installed_product()
     was_running = autostart.stop_running()
     if args.uninstall:
+        engine = ai.engine_dir(load_settings())
         code = runner.uninstall(installed[0]) if installed else 0
         if code in (0, 3010):
             try:
                 autostart.disable()
             except Exception:  # noqa: BLE001
                 pass
-            remove_leftovers(args.remove_data)
+            remove_ai(args.remove_ai, args.remove_ai_nas)
+            remove_leftovers(args.remove_data, keep=None if args.remove_ai else engine)
         return code
     try:
         if installed and parse_version(installed[1]) > parse_version(msi_property(package, "ProductVersion")):
@@ -577,6 +694,8 @@ def silent(args):
         code = runner.install(package, install_properties(folder, lang, desktop, reinstall))
         if code in (0, 3010):
             cache_setup()
+            if args.ai_model and not installed:
+                start_ai_install(folder, args.ai_dir or ai.DEFAULT_DIR, args.ai_model)
         return code
     finally:
         if was_running:
@@ -592,6 +711,10 @@ def main():
     parser.add_argument("--lang", choices=["auto", *LANGUAGES])
     parser.add_argument("--no-desktop", action="store_true")
     parser.add_argument("--remove-data", action="store_true")  # con --silent --uninstall
+    parser.add_argument("--remove-ai", action="store_true")  # con --silent --uninstall: anche il motore IA
+    parser.add_argument("--remove-ai-nas", action="store_true")  # e i file della ricerca IA sul NAS
+    parser.add_argument("--ai-model", choices=list(ai.MODELS))  # con --silent: installa anche il motore IA
+    parser.add_argument("--ai-dir")
     args, _ = parser.parse_known_args()
     if args.silent:
         sys.exit(silent(args))

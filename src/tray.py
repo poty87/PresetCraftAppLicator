@@ -4,6 +4,8 @@
   corso, giallo = aspetta che LightCraft venga chiuso, rosso = errore.
 - Il doppio clic apre PresetCraftAppLicator.
 - Il tasto destro mostra cosa sta facendo e quanto manca, più i comandi.
+- Ricerca IA (motore facoltativo): una riga con l'analisi in corso, il comando di pausa/ripresa e una notifica di
+  Windows quando un giro ha catalogato foto nuove.
 """
 
 import datetime
@@ -17,13 +19,14 @@ import pystray
 from PIL import Image, ImageDraw
 from pystray._util import win32
 
+import ai
 import i18n
 from i18n import registry_value, t
 from lightcraft import DATA_DIR, log
 from translations import DATE_FORMATS
 from ui_theme import resource
 from version import APP_NAME
-from watcher import SETTINGS, Status, Watcher, load_json
+from watcher import SETTINGS, Status, Watcher, load_json, save_json
 
 LOG = os.path.join(DATA_DIR, "presetcraft.log")
 WM_LBUTTONDBLCLK = 0x0203
@@ -102,6 +105,28 @@ def last_text(last):
     return t("tray_last_metadata", count=last.get("metadata", 0), when=when_text(last.get("when")))
 
 
+def ai_text(settings):
+    """La riga della ricerca IA nel menu (vuota se il motore non c'è o non ha niente da dire)."""
+    cfg = ai.config(settings)
+    folder = ai.engine_dir(settings)
+    if not cfg.get("enabled") or not ai.queue(settings) or not ai.installed_info(folder):
+        return ""
+    if cfg.get("paused"):
+        return t("tray_ai_paused")
+    st = ai.worker_status(folder)
+    phase = st.get("phase")
+    if st["running"] and phase in ("previews", "embeddings") and st.get("total"):
+        pct = (st.get("done") or 0) * 100 // max(1, st["total"])
+        return t("tray_ai_running", library=st.get("library") or "", pct=pct)
+    if st["running"]:
+        return t("tray_ai_working")
+    if phase == "gpu_busy":
+        return t("tray_ai_gpu_busy")
+    if phase == "waiting_window":
+        return t("tray_ai_window")
+    return ""
+
+
 class TrayIcon(pystray.Icon):
     """pystray con il doppio clic (pystray conosce solo il clic singolo, che qui non fa niente)."""
 
@@ -146,6 +171,8 @@ class Tray:
         self.icon = TrayIcon("PresetCraftAppLicator-watch", self.image("idle"), APP_NAME, menu=self.menu(),
                              on_double_click=open_app)
         self.shown_phase = None
+        self.ai_line = ""
+        self.ai_queue = False
 
     def image(self, phase):
         color = DOTS.get(phase, DOTS["idle"])
@@ -164,8 +191,12 @@ class Tray:
             pystray.MenuItem(text(0), lambda: None, enabled=False),
             pystray.MenuItem(text(1), lambda: None, enabled=False, visible=visible(1)),
             pystray.MenuItem(text(2), lambda: None, enabled=False, visible=visible(2)),
+            pystray.MenuItem(lambda _i: self.ai_line or " ", lambda: None, enabled=False,
+                             visible=lambda _i: bool(self.ai_line)),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem(t("tray_open"), lambda: open_app(), default=True),
+            pystray.MenuItem(lambda _i: t("tray_ai_resume") if self.ai_paused() else t("tray_ai_pause"),
+                             lambda: self.toggle_ai_pause(), visible=lambda _i: self.ai_queue),
             pystray.MenuItem(t("tray_check_now"), lambda: self.watcher.wake()),
             pystray.MenuItem(t("open_log"), lambda: open_log()),
             pystray.Menu.SEPARATOR,
@@ -207,14 +238,49 @@ class Tray:
             finally:
                 icon.stop()
 
+    def ai_paused(self):
+        return bool(ai.config(load_json(SETTINGS)).get("paused"))
+
+    def toggle_ai_pause(self):
+        settings = load_json(SETTINGS)
+        ai.set_paused(settings, not ai.config(settings).get("paused"))
+        save_json(SETTINGS, settings)
+        if not ai.config(settings).get("paused"):
+            self.watcher.wake()  # riparte subito, senza aspettare il prossimo giro
+        self.ai_tick(force=True)
+
+    def ai_tick(self, force=False):
+        """Riga della ricerca IA nel menu e notifica quando un giro ha catalogato foto nuove."""
+        settings = load_json(SETTINGS)
+        line = ai_text(settings)
+        queued = bool(ai.queue(settings)) and bool(ai.installed_info(ai.engine_dir(settings)))
+        if force or line != self.ai_line or queued != self.ai_queue:
+            self.ai_line, self.ai_queue = line, queued
+            self.icon.update_menu()
+        folder = ai.engine_dir(settings)
+        last = ai.pending_notification(folder)
+        if last and not ai.worker_status(folder)["running"]:
+            ai.mark_notified(folder, last)
+            libs = last.get("libraries") or {}
+            body = "\n".join(t("tray_ai_done_line", count=n, library=name) for name, n in libs.items())
+            if body:
+                self.icon.notify(body, t("tray_ai_done_title"))
+
     def tick(self):
+        n = 0
         while True:
             time.sleep(2)
+            n += 1
             if self.status.get().get("phase") in ("incoming", "importing", "profiles", "metadata"):
                 try:
                     self.icon.update_menu()
                 except Exception:  # noqa: BLE001
                     pass
+            if n % 3 == 0:  # ogni ~6 secondi: stato della ricerca IA
+                try:
+                    self.ai_tick()
+                except Exception as e:  # noqa: BLE001 — l'icona non deve mai fermarsi per il motore IA
+                    log(f"tray ai: {e!r}")
 
     def run(self):
         self.code = 0

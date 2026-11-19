@@ -848,3 +848,445 @@ NEW = {
               "telemóvel, por exemplo Y:\\ViewerCraftStar.",
     },
 }
+
+
+# ---------------------------------------------------------------- motore IA (ricerca per soggetti sul telefono)
+
+def _t(it, en, de, es, fr, pt):
+    return {"it": it, "en": en, "de": de, "es": es, "fr": fr, "pt": pt}
+
+
+NEW.update({
+    "ai_gpu": _t("Scheda video: {name} ({gb} GB).", "Graphics card: {name} ({gb} GB).",
+                 "Grafikkarte: {name} ({gb} GB).", "Tarjeta gráfica: {name} ({gb} GB).",
+                 "Carte graphique : {name} ({gb} Go).", "Placa gráfica: {name} ({gb} GB)."),
+    "ai_no_gpu": _t("Nessuna scheda video NVIDIA: il motore userà il processore (più lento, va bene il modello piccolo).",
+                    "No NVIDIA graphics card: the engine will use the processor (slower; the small model is fine).",
+                    "Keine NVIDIA-Grafikkarte: Die Engine nutzt den Prozessor (langsamer; das kleine Modell genügt).",
+                    "Sin tarjeta gráfica NVIDIA: el motor usará el procesador (más lento; basta el modelo pequeño).",
+                    "Pas de carte graphique NVIDIA : le moteur utilisera le processeur (plus lent ; le petit modèle suffit).",
+                    "Sem placa gráfica NVIDIA: o motor usará o processador (mais lento; o modelo pequeno chega)."),
+    "ai_opt_none": _t("Non installare il motore IA (si può aggiungere dopo dall'app)",
+                      "Don't install the AI engine (you can add it later from the app)",
+                      "KI-Engine nicht installieren (kann später in der App hinzugefügt werden)",
+                      "No instalar el motor de IA (se puede añadir después desde la app)",
+                      "Ne pas installer le moteur IA (vous pourrez l'ajouter plus tard depuis l'app)",
+                      "Não instalar o motor de IA (pode ser adicionado depois na app)"),
+    "ai_opt_install": _t("Installa il motore IA", "Install the AI engine", "KI-Engine installieren",
+                         "Instalar el motor de IA", "Installer le moteur IA", "Instalar o motor de IA"),
+    "ai_model": _t("Modello:", "Model:", "Modell:", "Modelo:", "Modèle :", "Modelo:"),
+    "ai_folder": _t("Cartella:", "Folder:", "Ordner:", "Carpeta:", "Dossier :", "Pasta:"),
+    "ai_note": _t("Il motore (programmi e modello) si scarica da internet dopo l'installazione e può richiedere da qualche "
+                  "minuto a un'ora. Le foto restano dove sono: il motore le legge soltanto. Il modello MetaCLIP 2 è "
+                  "concesso solo per uso non commerciale (CC BY-NC 4.0).",
+                  "The engine (programs and model) is downloaded after installation and can take from a few minutes to "
+                  "an hour. Your photos stay where they are: the engine only reads them. The MetaCLIP 2 model is "
+                  "licensed for non-commercial use only (CC BY-NC 4.0).",
+                  "Die Engine (Programme und Modell) wird nach der Installation heruntergeladen; das kann einige Minuten "
+                  "bis eine Stunde dauern. Die Fotos bleiben, wo sie sind: Die Engine liest sie nur. Das Modell "
+                  "MetaCLIP 2 ist nur für nichtkommerzielle Nutzung lizenziert (CC BY-NC 4.0).",
+                  "El motor (programas y modelo) se descarga tras la instalación y puede tardar de unos minutos a una "
+                  "hora. Las fotos se quedan donde están: el motor solo las lee. El modelo MetaCLIP 2 se licencia solo "
+                  "para uso no comercial (CC BY-NC 4.0).",
+                  "Le moteur (programmes et modèle) est téléchargé après l'installation, de quelques minutes à une "
+                  "heure. Vos photos restent où elles sont : le moteur se contente de les lire. Le modèle MetaCLIP 2 est "
+                  "sous licence d'usage non commercial uniquement (CC BY-NC 4.0).",
+                  "O motor (programas e modelo) é transferido depois da instalação e pode demorar de alguns minutos a "
+                  "uma hora. As fotos ficam onde estão: o motor só as lê. O modelo MetaCLIP 2 tem licença só para uso "
+                  "não comercial (CC BY-NC 4.0)."),
+    "ai_m_giant": _t("MetaCLIP 2 giant – il più accurato (GPU da 16 GB)", "MetaCLIP 2 giant – most accurate (16 GB GPU)",
+                     "MetaCLIP 2 giant – am genauesten (16-GB-GPU)", "MetaCLIP 2 giant – el más preciso (GPU de 16 GB)",
+                     "MetaCLIP 2 giant – le plus précis (GPU 16 Go)", "MetaCLIP 2 giant – o mais preciso (GPU de 16 GB)"),
+    "ai_m_huge": _t("MetaCLIP 2 huge – molto buono (GPU da 8 GB)", "MetaCLIP 2 huge – very good (8 GB GPU)",
+                    "MetaCLIP 2 huge – sehr gut (8-GB-GPU)", "MetaCLIP 2 huge – muy bueno (GPU de 8 GB)",
+                    "MetaCLIP 2 huge – très bon (GPU 8 Go)", "MetaCLIP 2 huge – muito bom (GPU de 8 GB)"),
+    "ai_m_small": _t("MetaCLIP 2 piccolo – leggero, anche senza GPU", "MetaCLIP 2 small – light, works without a GPU",
+                     "MetaCLIP 2 klein – leicht, auch ohne GPU", "MetaCLIP 2 pequeño – ligero, también sin GPU",
+                     "MetaCLIP 2 petit – léger, même sans GPU", "MetaCLIP 2 pequeno – leve, também sem GPU"),
+    "ai_recommended": _t("consigliato", "recommended", "empfohlen", "recomendado", "recommandé", "recomendado"),
+    "ai_space": _t("Spazio richiesto: circa {need} GB · libero su quel disco: {free} GB",
+                   "Space needed: about {need} GB · free on that drive: {free} GB",
+                   "Benötigter Platz: etwa {need} GB · frei auf diesem Laufwerk: {free} GB",
+                   "Espacio necesario: unos {need} GB · libre en esa unidad: {free} GB",
+                   "Espace nécessaire : environ {need} Go · libre sur ce disque : {free} Go",
+                   "Espaço necessário: cerca de {need} GB · livre nessa unidade: {free} GB"),
+    "ai_space_low": _t("Lo spazio libero non basta: scegli un'altra cartella o un modello più piccolo.",
+                       "There isn't enough free space: choose another folder or a smaller model.",
+                       "Nicht genug freier Platz: Wähle einen anderen Ordner oder ein kleineres Modell.",
+                       "No hay espacio suficiente: elige otra carpeta o un modelo más pequeño.",
+                       "Espace libre insuffisant : choisissez un autre dossier ou un modèle plus petit.",
+                       "Não há espaço livre suficiente: escolha outra pasta ou um modelo mais pequeno."),
+    "w_s_ai": _t("Ricerca IA", "AI search", "KI-Suche", "Búsqueda IA", "Recherche IA", "Pesquisa IA"),
+    "w_ai_head": _t("Ricerca per soggetti sul telefono", "Search by subject on the phone", "Motivsuche auf dem Handy",
+                    "Búsqueda por temas en el teléfono", "Recherche par sujet sur le téléphone",
+                    "Pesquisa por assunto no telemóvel"),
+    "w_ai_body": _t("Facoltativo. Con il motore IA, ViewerCraftStar trova le foto delle librerie scrivendo cosa c'è: "
+                    "«gatti», «auto d'epoca», «tramonto al mare». Il motore gira su questo PC e cataloga le foto nuove "
+                    "man mano; il telefono riceve solo il risultato.",
+                    "Optional. With the AI engine, ViewerCraftStar finds library photos by what's in them: “cats”, "
+                    "“vintage car”, “sunset at the beach”. The engine runs on this PC and catalogs new photos as they "
+                    "arrive; the phone only receives the result.",
+                    "Optional. Mit der KI-Engine findet ViewerCraftStar Fotos der Bibliotheken nach ihrem Inhalt: "
+                    "„Katzen“, „Oldtimer“, „Sonnenuntergang am Meer“. Die Engine läuft auf diesem PC und katalogisiert "
+                    "neue Fotos laufend; das Handy erhält nur das Ergebnis.",
+                    "Opcional. Con el motor de IA, ViewerCraftStar encuentra las fotos de las bibliotecas escribiendo lo "
+                    "que hay en ellas: «gatos», «coche clásico», «atardecer en el mar». El motor funciona en este PC y "
+                    "cataloga las fotos nuevas; el teléfono solo recibe el resultado.",
+                    "Facultatif. Avec le moteur IA, ViewerCraftStar retrouve les photos des bibliothèques d'après leur "
+                    "contenu : « chats », « voiture ancienne », « coucher de soleil sur la mer ». Le moteur tourne sur ce "
+                    "PC et catalogue les nouvelles photos ; le téléphone ne reçoit que le résultat.",
+                    "Opcional. Com o motor de IA, o ViewerCraftStar encontra as fotos das bibliotecas escrevendo o que "
+                    "têm: «gatos», «carro clássico», «pôr do sol no mar». O motor corre neste PC e cataloga as fotos "
+                    "novas; o telemóvel só recebe o resultado."),
+    "w_ai_started": _t("Il motore IA si sta scaricando in background: puoi seguirlo da PresetCraftAppLicator › "
+                       "Importazione automatica › Motore IA.",
+                       "The AI engine is downloading in the background: you can follow it in PresetCraftAppLicator › "
+                       "Automatic import › AI engine.",
+                       "Die KI-Engine wird im Hintergrund heruntergeladen: Verfolge es in PresetCraftAppLicator › "
+                       "Automatischer Import › KI-Engine.",
+                       "El motor de IA se está descargando en segundo plano: puedes seguirlo en PresetCraftAppLicator › "
+                       "Importación automática › Motor de IA.",
+                       "Le moteur IA se télécharge en arrière-plan : suivez-le dans PresetCraftAppLicator › Import "
+                       "automatique › Moteur IA.",
+                       "O motor de IA está a ser transferido em segundo plano: pode acompanhá-lo em "
+                       "PresetCraftAppLicator › Importação automática › Motor de IA."),
+    "w_remove_ai": _t("Rimuovi anche il motore IA (programmi, modelli e miniature: {gb} GB)",
+                      "Also remove the AI engine (programs, models and thumbnails: {gb} GB)",
+                      "Auch die KI-Engine entfernen (Programme, Modelle und Miniaturen: {gb} GB)",
+                      "Quitar también el motor de IA (programas, modelos y miniaturas: {gb} GB)",
+                      "Supprimer aussi le moteur IA (programmes, modèles et miniatures : {gb} Go)",
+                      "Remover também o motor de IA (programas, modelos e miniaturas: {gb} GB)"),
+    "w_remove_ai_nas": _t("Rimuovi anche i file della ricerca IA dalla cartella del telefono (librerie: {count})",
+                          "Also remove the AI search files from the phone folder (libraries: {count})",
+                          "Auch die KI-Suchdateien aus dem Handy-Ordner entfernen (Bibliotheken: {count})",
+                          "Quitar también los archivos de búsqueda IA de la carpeta del teléfono (bibliotecas: {count})",
+                          "Supprimer aussi les fichiers de recherche IA du dossier du téléphone (bibliothèques : {count})",
+                          "Remover também os ficheiros da pesquisa IA da pasta do telemóvel (bibliotecas: {count})"),
+    "ai_title": _t("Motore IA", "AI engine", "KI-Engine", "Motor de IA", "Moteur IA", "Motor de IA"),
+    "ai_intro": _t("Cataloga le foto delle librerie che scegli con «Analizza per la ricerca IA», così ViewerCraftStar le trova per "
+                   "soggetto («gatti», «auto d'epoca»). Lavora in background a bassa priorità e solo sulle foto nuove.",
+                   "Catalogs the photos of the libraries you choose with “Analyze for AI search”, so ViewerCraftStar can find them by "
+                   "subject (“cats”, “vintage car”). It works in the background at low priority, only on new photos.",
+                   "Katalogisiert die Fotos der Bibliotheken, die du mit „Für die KI-Suche analysieren“ wählst, damit ViewerCraftStar sie nach "
+                   "Motiv findet („Katzen“, „Oldtimer“). Läuft im Hintergrund mit niedriger Priorität, nur für neue "
+                   "Fotos.",
+                   "Cataloga las fotos de las bibliotecas que elijas con «Analizar para la búsqueda IA», para que ViewerCraftStar las "
+                   "encuentre por tema («gatos», «coche clásico»). Trabaja en segundo plano con baja prioridad y solo "
+                   "con las fotos nuevas.",
+                   "Catalogue les photos des bibliothèques choisies avec « Analyser pour la recherche IA », pour que ViewerCraftStar les "
+                   "retrouve par sujet (« chats », « voiture ancienne »). Travaille en arrière-plan en basse priorité, "
+                   "uniquement sur les nouvelles photos.",
+                   "Cataloga as fotos das bibliotecas que escolher com «Analisar para a pesquisa IA», para que o ViewerCraftStar as encontre "
+                   "por assunto («gatos», «carro clássico»). Trabalha em segundo plano com baixa prioridade e só nas "
+                   "fotos novas."),
+    "ai_install": _t("Installa", "Install", "Installieren", "Instalar", "Installer", "Instalar"),
+    "ai_apply": _t("Applica", "Apply", "Übernehmen", "Aplicar", "Appliquer", "Aplicar"),
+    "ai_stop_install": _t("Interrompi l'installazione", "Stop the installation", "Installation abbrechen",
+                          "Detener la instalación", "Arrêter l'installation", "Parar a instalação"),
+    "ai_enable": _t("Cataloga le foto per la ricerca per soggetti", "Catalog photos for search by subject",
+                    "Fotos für die Motivsuche katalogisieren", "Catalogar las fotos para la búsqueda por temas",
+                    "Cataloguer les photos pour la recherche par sujet", "Catalogar as fotos para a pesquisa por assunto"),
+    "ai_bits": _t("Modello per il telefono:", "Model for the phone:", "Modell fürs Handy:", "Modelo para el teléfono:",
+                  "Modèle pour le téléphone :", "Modelo para o telemóvel:"),
+    "ai_bits_8": _t("8 bit – risultati identici all'originale", "8-bit – same results as the original",
+                    "8 Bit – gleiche Ergebnisse wie das Original", "8 bits – mismos resultados que el original",
+                    "8 bits – mêmes résultats que l'original", "8 bits – mesmos resultados do original"),
+    "ai_bits_4": _t("4 bit – più piccolo, risultati quasi uguali", "4-bit – smaller, nearly the same results",
+                    "4 Bit – kleiner, fast gleiche Ergebnisse", "4 bits – más pequeño, resultados casi iguales",
+                    "4 bits – plus petit, résultats presque identiques", "4 bits – mais pequeno, resultados quase iguais"),
+    "ai_change": _t("Cambia modello o cartella…", "Change model or folder…", "Modell oder Ordner ändern…",
+                    "Cambiar modelo o carpeta…", "Changer de modèle ou de dossier…", "Mudar modelo ou pasta…"),
+    "ai_remove": _t("Rimuovi il motore", "Remove the engine", "Engine entfernen", "Quitar el motor",
+                    "Supprimer le moteur", "Remover o motor"),
+    "ai_log": _t("Registro", "Log", "Protokoll", "Registro", "Journal", "Registo"),
+    "ai_status_not_installed": _t("Il motore IA non è installato.", "The AI engine is not installed.",
+                                  "Die KI-Engine ist nicht installiert.", "El motor de IA no está instalado.",
+                                  "Le moteur IA n'est pas installé.", "O motor de IA não está instalado."),
+    "ai_status_change": _t("Scegli il nuovo modello o la nuova cartella.", "Choose the new model or folder.",
+                           "Wähle das neue Modell oder den neuen Ordner.", "Elige el nuevo modelo o la nueva carpeta.",
+                           "Choisissez le nouveau modèle ou dossier.", "Escolha o novo modelo ou a nova pasta."),
+    "ai_status_install_error": _t("L'installazione non è riuscita: {error}", "The installation failed: {error}",
+                                  "Die Installation ist fehlgeschlagen: {error}", "La instalación ha fallado: {error}",
+                                  "L'installation a échoué : {error}", "A instalação falhou: {error}"),
+    "ai_status_installing": _t("Installazione del motore IA ({model})…", "Installing the AI engine ({model})…",
+                               "KI-Engine wird installiert ({model})…", "Instalando el motor de IA ({model})…",
+                               "Installation du moteur IA ({model})…", "A instalar o motor de IA ({model})…"),
+    "ai_step_uv": _t("Preparazione", "Preparing", "Vorbereitung", "Preparación", "Préparation", "Preparação"),
+    "ai_step_python": _t("Python", "Python", "Python", "Python", "Python", "Python"),
+    "ai_step_torch": _t("PyTorch (il pacchetto più grande)", "PyTorch (the largest package)",
+                        "PyTorch (das größte Paket)", "PyTorch (el paquete más grande)", "PyTorch (le plus gros paquet)",
+                        "PyTorch (o pacote maior)"),
+    "ai_step_packages": _t("Altri componenti", "Other components", "Weitere Komponenten", "Otros componentes",
+                           "Autres composants", "Outros componentes"),
+    "ai_step_words": _t("Vocabolario", "Vocabulary", "Wortschatz", "Vocabulario", "Vocabulaire", "Vocabulário"),
+    "ai_step_model": _t("Modello", "Model", "Modell", "Modelo", "Modèle", "Modelo"),
+    "ai_step_error": _t("Errore", "Error", "Fehler", "Error", "Erreur", "Erro"),
+    "ai_step_cancelled": _t("Interrotta", "Stopped", "Abgebrochen", "Detenida", "Arrêtée", "Parada"),
+    "ai_status_ready": _t("Motore IA installato: {model} su {device}.", "AI engine installed: {model} on {device}.",
+                          "KI-Engine installiert: {model} auf {device}.", "Motor de IA instalado: {model} en {device}.",
+                          "Moteur IA installé : {model} sur {device}.", "Motor de IA instalado: {model} em {device}."),
+    "ai_status_off": _t("Motore IA installato ma spento.", "AI engine installed but turned off.",
+                        "KI-Engine installiert, aber ausgeschaltet.", "Motor de IA instalado pero apagado.",
+                        "Moteur IA installé mais désactivé.", "Motor de IA instalado mas desligado."),
+    "ai_phase_starting": _t("Avvio…", "Starting…", "Start…", "Iniciando…", "Démarrage…", "A iniciar…"),
+    "ai_phase_loading": _t("Carico il modello…", "Loading the model…", "Modell wird geladen…", "Cargando el modelo…",
+                           "Chargement du modèle…", "A carregar o modelo…"),
+    "ai_phase_previews": _t("{library}: leggo le anteprime {done} di {total}",
+                            "{library}: reading previews {done} of {total}",
+                            "{library}: Vorschauen werden gelesen, {done} von {total}",
+                            "{library}: leyendo vistas previas {done} de {total}",
+                            "{library} : lecture des aperçus {done} sur {total}",
+                            "{library}: a ler pré-visualizações {done} de {total}"),
+    "ai_phase_embeddings": _t("{library}: catalogo le foto {done} di {total}",
+                              "{library}: cataloging photos {done} of {total}",
+                              "{library}: Fotos werden katalogisiert, {done} von {total}",
+                              "{library}: catalogando fotos {done} de {total}",
+                              "{library} : catalogage des photos {done} sur {total}",
+                              "{library}: a catalogar fotos {done} de {total}"),
+    "ai_phase_phone_model": _t("Preparo il modello per il telefono ({done} di {total})…",
+                               "Preparing the model for the phone ({done} of {total})…",
+                               "Modell fürs Handy wird vorbereitet ({done} von {total})…",
+                               "Preparando el modelo para el teléfono ({done} de {total})…",
+                               "Préparation du modèle pour le téléphone ({done} sur {total})…",
+                               "A preparar o modelo para o telemóvel ({done} de {total})…"),
+    "ai_status_error": _t("L'ultimo giro si è fermato: {error}", "The last run stopped: {error}",
+                          "Der letzte Durchlauf wurde angehalten: {error}", "La última pasada se detuvo: {error}",
+                          "Le dernier passage s'est arrêté : {error}", "A última passagem parou: {error}"),
+    "ai_lib_line": _t("{library}: {count} di {photos} foto catalogate · {when}",
+                      "{library}: {count} of {photos} photos cataloged · {when}",
+                      "{library}: {count} von {photos} Fotos katalogisiert · {when}",
+                      "{library}: {count} de {photos} fotos catalogadas · {when}",
+                      "{library} : {count} sur {photos} photos cataloguées · {when}",
+                      "{library}: {count} de {photos} fotos catalogadas · {when}"),
+    "ai_where": _t("Cartella del motore: {folder} ({gb} GB)", "Engine folder: {folder} ({gb} GB)",
+                   "Engine-Ordner: {folder} ({gb} GB)", "Carpeta del motor: {folder} ({gb} GB)",
+                   "Dossier du moteur : {folder} ({gb} Go)", "Pasta do motor: {folder} ({gb} GB)"),
+    "ai_move_not_empty": _t("La cartella scelta non è vuota.", "The chosen folder is not empty.",
+                            "Der gewählte Ordner ist nicht leer.", "La carpeta elegida no está vacía.",
+                            "Le dossier choisi n'est pas vide.", "A pasta escolhida não está vazia."),
+    "ai_move_q": _t("Spostare il motore IA nella nuova cartella?", "Move the AI engine to the new folder?",
+                    "KI-Engine in den neuen Ordner verschieben?", "¿Mover el motor de IA a la nueva carpeta?",
+                    "Déplacer le moteur IA dans le nouveau dossier ?", "Mover o motor de IA para a nova pasta?"),
+    "ai_moving": _t("Sposto il motore IA…", "Moving the AI engine…", "KI-Engine wird verschoben…",
+                    "Moviendo el motor de IA…", "Déplacement du moteur IA…", "A mover o motor de IA…"),
+    "ai_move_error": _t("Lo spostamento non è riuscito.", "The move failed.", "Das Verschieben ist fehlgeschlagen.",
+                        "No se pudo mover.", "Le déplacement a échoué.", "Não foi possível mover."),
+    "ai_remove_q": _t("Rimuovere il motore IA ({gb} GB)? Le foto e le librerie non vengono toccate.",
+                      "Remove the AI engine ({gb} GB)? Photos and libraries are not touched.",
+                      "KI-Engine entfernen ({gb} GB)? Fotos und Bibliotheken bleiben unberührt.",
+                      "¿Quitar el motor de IA ({gb} GB)? Las fotos y bibliotecas no se tocan.",
+                      "Supprimer le moteur IA ({gb} Go) ? Les photos et bibliothèques ne sont pas touchées.",
+                      "Remover o motor de IA ({gb} GB)? As fotos e bibliotecas não são tocadas."),
+    "ai_remove_nas_q": _t("Togliere anche i file della ricerca IA dalla cartella del telefono (librerie: {count})? "
+                          "Senza, il telefono non potrà più cercare per soggetto.",
+                          "Also remove the AI search files from the phone folder (libraries: {count})? Without them the "
+                          "phone can no longer search by subject.",
+                          "Auch die KI-Suchdateien aus dem Handy-Ordner entfernen (Bibliotheken: {count})? Ohne sie kann "
+                          "das Handy nicht mehr nach Motiv suchen.",
+                          "¿Quitar también los archivos de búsqueda IA de la carpeta del teléfono (bibliotecas: {count})? Sin ellos el teléfono ya no podrá buscar por temas.",
+                          "Supprimer aussi les fichiers de recherche IA du dossier du téléphone "
+                          "(bibliothèques : {count}) ? Sans eux, le téléphone ne pourra plus chercher par sujet.",
+                          "Remover também os ficheiros da pesquisa IA da pasta do telemóvel (bibliotecas: {count})? "
+                          "Sem eles o telemóvel deixa de pesquisar por assunto."),
+    "ai_removing": _t("Rimuovo il motore IA…", "Removing the AI engine…", "KI-Engine wird entfernt…",
+                      "Quitando el motor de IA…", "Suppression du moteur IA…", "A remover o motor de IA…"),
+    "ai_remove_partial": _t("Alcuni file non si sono potuti togliere (forse in uso): riprova più tardi.",
+                            "Some files could not be removed (maybe in use): try again later.",
+                            "Einige Dateien konnten nicht entfernt werden (vielleicht in Gebrauch): später erneut "
+                            "versuchen.",
+                            "Algunos archivos no se pudieron quitar (quizá en uso): inténtalo más tarde.",
+                            "Certains fichiers n'ont pas pu être supprimés (peut-être en cours d'utilisation) : "
+                            "réessayez plus tard.",
+                            "Alguns ficheiros não puderam ser removidos (talvez em uso): tente mais tarde."),
+    "ai_button": _t("Motore IA…", "AI engine…", "KI-Engine…", "Motor de IA…", "Moteur IA…", "Motor de IA…"),
+    "ai_short_none": _t("Ricerca per soggetti: motore IA non installato.", "Search by subject: AI engine not installed.",
+                        "Motivsuche: KI-Engine nicht installiert.", "Búsqueda por temas: motor de IA no instalado.",
+                        "Recherche par sujet : moteur IA non installé.", "Pesquisa por assunto: motor de IA não instalado."),
+    "ai_short_installing": _t("Ricerca per soggetti: motore IA in installazione…",
+                              "Search by subject: AI engine installing…", "Motivsuche: KI-Engine wird installiert…",
+                              "Búsqueda por temas: instalando el motor de IA…",
+                              "Recherche par sujet : installation du moteur IA…",
+                              "Pesquisa por assunto: a instalar o motor de IA…"),
+    "ai_short_off": _t("Ricerca per soggetti: motore IA spento.", "Search by subject: AI engine off.",
+                       "Motivsuche: KI-Engine aus.", "Búsqueda por temas: motor de IA apagado.",
+                       "Recherche par sujet : moteur IA désactivé.", "Pesquisa por assunto: motor de IA desligado."),
+    "ai_short_on": _t("Ricerca per soggetti: motore IA attivo.",
+                      "Search by subject: AI engine on.",
+                      "Motivsuche: KI-Engine aktiv.",
+                      "Búsqueda por temas: motor de IA activo.",
+                      "Recherche par sujet : moteur IA actif.",
+                      "Pesquisa por assunto: motor de IA ativo."),
+})
+
+
+NEW.update({
+    "tray_ai_paused": _t("Ricerca IA in pausa", "AI search paused", "KI-Suche pausiert", "Búsqueda IA en pausa",
+                         "Recherche IA en pause", "Pesquisa IA em pausa"),
+    "tray_ai_running": _t("Ricerca IA: {library} {pct}%", "AI search: {library} {pct}%", "KI-Suche: {library} {pct} %",
+                          "Búsqueda IA: {library} {pct} %", "Recherche IA : {library} {pct} %",
+                          "Pesquisa IA: {library} {pct}%"),
+    "tray_ai_working": _t("Ricerca IA al lavoro…", "AI search working…", "KI-Suche arbeitet…",
+                          "Búsqueda IA trabajando…", "Recherche IA en cours…", "Pesquisa IA a trabalhar…"),
+    "tray_ai_gpu_busy": _t("Ricerca IA: aspetta che la GPU si liberi", "AI search: waiting for the GPU to be free",
+                           "KI-Suche: wartet, bis die GPU frei ist", "Búsqueda IA: espera a que la GPU quede libre",
+                           "Recherche IA : attend que le GPU soit libre", "Pesquisa IA: à espera que a GPU fique livre"),
+    "tray_ai_window": _t("Ricerca IA: aspetta la fascia oraria", "AI search: waiting for its time window",
+                         "KI-Suche: wartet auf das Zeitfenster", "Búsqueda IA: espera su franja horaria",
+                         "Recherche IA : attend sa plage horaire", "Pesquisa IA: à espera do horário"),
+    "tray_ai_pause": _t("Metti in pausa la ricerca IA", "Pause AI search", "KI-Suche pausieren",
+                        "Pausar la búsqueda IA", "Mettre la recherche IA en pause", "Pausar a pesquisa IA"),
+    "tray_ai_resume": _t("Riprendi la ricerca IA", "Resume AI search", "KI-Suche fortsetzen",
+                         "Reanudar la búsqueda IA", "Reprendre la recherche IA", "Retomar a pesquisa IA"),
+    "tray_ai_done_title": _t("Ricerca IA aggiornata", "AI search updated", "KI-Suche aktualisiert",
+                             "Búsqueda IA actualizada", "Recherche IA mise à jour", "Pesquisa IA atualizada"),
+    "tray_ai_done_line": _t("{count} foto nuove catalogate in {library}", "{count} new photos cataloged in {library}",
+                            "{count} neue Fotos in {library} katalogisiert", "{count} fotos nuevas catalogadas en {library}",
+                            "{count} nouvelles photos cataloguées dans {library}",
+                            "{count} fotos novas catalogadas em {library}"),
+    "ai_row_none": _t("Ricerca IA: motore non installato", "AI search: engine not installed",
+                      "KI-Suche: Engine nicht installiert", "Búsqueda IA: motor no instalado",
+                      "Recherche IA : moteur non installé", "Pesquisa IA: motor não instalado"),
+    "ai_row_not_analyzed": _t("Ricerca IA: libreria non ancora analizzata", "AI search: library not analyzed yet",
+                              "KI-Suche: Bibliothek noch nicht analysiert", "Búsqueda IA: biblioteca aún sin analizar",
+                              "Recherche IA : bibliothèque pas encore analysée",
+                              "Pesquisa IA: biblioteca ainda não analisada"),
+    "ai_row_previews": _t("Ricerca IA: leggo le anteprime {pct}% ({done} di {total})",
+                          "AI search: reading previews {pct}% ({done} of {total})",
+                          "KI-Suche: Vorschauen werden gelesen, {pct} % ({done} von {total})",
+                          "Búsqueda IA: leyendo vistas previas {pct} % ({done} de {total})",
+                          "Recherche IA : lecture des aperçus {pct} % ({done} sur {total})",
+                          "Pesquisa IA: a ler pré-visualizações {pct}% ({done} de {total})"),
+    "ai_row_running": _t("Ricerca IA: analisi in corso {pct}% ({done} di {total})",
+                         "AI search: analyzing {pct}% ({done} of {total})",
+                         "KI-Suche: Analyse läuft, {pct} % ({done} von {total})",
+                         "Búsqueda IA: analizando {pct} % ({done} de {total})",
+                         "Recherche IA : analyse en cours {pct} % ({done} sur {total})",
+                         "Pesquisa IA: a analisar {pct}% ({done} de {total})"),
+    "ai_row_paused": _t("Ricerca IA: in pausa ({count} di {photos} foto)", "AI search: paused ({count} of {photos} photos)",
+                        "KI-Suche: pausiert ({count} von {photos} Fotos)",
+                        "Búsqueda IA: en pausa ({count} de {photos} fotos)",
+                        "Recherche IA : en pause ({count} sur {photos} photos)",
+                        "Pesquisa IA: em pausa ({count} de {photos} fotos)"),
+    "ai_row_gpu_busy": _t("aspetta che la GPU si liberi", "waiting for the GPU to be free", "wartet auf freie GPU",
+                          "espera a que la GPU quede libre", "attend que le GPU soit libre",
+                          "à espera que a GPU fique livre"),
+    "ai_row_window": _t("aspetta la fascia oraria", "waiting for its time window", "wartet auf das Zeitfenster",
+                        "espera su franja horaria", "attend sa plage horaire", "à espera do horário"),
+    "ai_row_done": _t("{count} foto catalogate", "{count} photos cataloged", "{count} Fotos katalogisiert",
+                      "{count} fotos catalogadas", "{count} photos cataloguées", "{count} fotos catalogadas"),
+    "ai_row_partial": _t("{count} di {photos} foto catalogate", "{count} of {photos} photos cataloged",
+                         "{count} von {photos} Fotos katalogisiert", "{count} de {photos} fotos catalogadas",
+                         "{count} sur {photos} photos cataloguées", "{count} de {photos} fotos catalogadas"),
+    "ai_row_queued": _t("in coda", "queued", "in der Warteschlange", "en cola", "en file d'attente", "na fila"),
+    "ai_analyze": _t("Analizza per la ricerca IA", "Analyze for AI search", "Für die KI-Suche analysieren",
+                     "Analizar para la búsqueda IA", "Analyser pour la recherche IA", "Analisar para a pesquisa IA"),
+    "ai_pause": _t("Pausa", "Pause", "Pause", "Pausa", "Pause", "Pausa"),
+    "ai_resume": _t("Riprendi", "Resume", "Fortsetzen", "Reanudar", "Reprendre", "Retomar"),
+    "ai_need_phone": _t("Prima scegli la cartella del telefono sul NAS (Importazione automatica › Librerie da consultare "
+                        "sul telefono): è lì che il motore scrive il catalogo per ViewerCraftStar.",
+                        "First choose the phone folder on the NAS (Automatic import › Libraries to browse on the "
+                        "phone): that's where the engine writes the catalog for ViewerCraftStar.",
+                        "Wähle zuerst den Handy-Ordner auf dem NAS (Automatischer Import › Bibliotheken fürs Handy): "
+                        "Dort schreibt die Engine den Katalog für ViewerCraftStar.",
+                        "Primero elige la carpeta del teléfono en el NAS (Importación automática › Bibliotecas para "
+                        "el teléfono): ahí el motor escribe el catálogo para ViewerCraftStar.",
+                        "Choisissez d'abord le dossier du téléphone sur le NAS (Import automatique › Bibliothèques "
+                        "pour le téléphone) : c'est là que le moteur écrit le catalogue pour ViewerCraftStar.",
+                        "Primeiro escolha a pasta do telemóvel no NAS (Importação automática › Bibliotecas para o "
+                        "telemóvel): é aí que o motor escreve o catálogo para o ViewerCraftStar."),
+    "ai_add_phone_q": _t("«{library}» non è ancora tra le librerie consultabili sul telefono: la aggiungo, così "
+                         "ViewerCraftStar può cercarci per soggetto?",
+                         "“{library}” is not yet among the libraries browsable on the phone: add it, so ViewerCraftStar "
+                         "can search it by subject?",
+                         "„{library}“ ist noch nicht unter den Bibliotheken fürs Handy: hinzufügen, damit "
+                         "ViewerCraftStar darin nach Motiv suchen kann?",
+                         "«{library}» aún no está entre las bibliotecas del teléfono: ¿la añado para que ViewerCraftStar "
+                         "pueda buscar en ella por temas?",
+                         "« {library} » ne fait pas encore partie des bibliothèques du téléphone : l'ajouter pour que "
+                         "ViewerCraftStar puisse y chercher par sujet ?",
+                         "«{library}» ainda não está entre as bibliotecas do telemóvel: adiciono-a para o "
+                         "ViewerCraftStar pesquisar nela por assunto?"),
+    "ai_eta_m": _t("circa {m} minuti", "about {m} minutes", "etwa {m} Minuten", "unos {m} minutos", "environ {m} minutes",
+                   "cerca de {m} minutos"),
+    "ai_eta_h": _t("circa {h} ore", "about {h} hours", "etwa {h} Stunden", "unas {h} horas", "environ {h} heures",
+                   "cerca de {h} horas"),
+    "ai_analyze_q": _t("Analizzare «{library}» per la ricerca IA?", "Analyze “{library}” for AI search?",
+                       "„{library}“ für die KI-Suche analysieren?", "¿Analizar «{library}» para la búsqueda IA?",
+                       "Analyser « {library} » pour la recherche IA ?", "Analisar «{library}» para a pesquisa IA?"),
+    "ai_analyze_body": _t("{photos} foto: la prima analisi richiede {time} su questo PC (anteprime lette dal NAS, poi "
+                          "l'analisi). Lavora in background a bassa priorità; puoi metterla in pausa quando vuoi e "
+                          "riprende da dove era arrivata. Dopo, le foto nuove si analizzano da sole a ogni importazione.",
+                          "{photos} photos: the first analysis takes {time} on this PC (previews read from the NAS, "
+                          "then the analysis). It works in the background at low priority; you can pause it at any time "
+                          "and it resumes where it stopped. Afterwards new photos are analyzed by themselves at every "
+                          "import.",
+                          "{photos} Fotos: Die erste Analyse dauert auf diesem PC {time} (Vorschauen vom NAS, dann die "
+                          "Analyse). Sie läuft im Hintergrund mit niedriger Priorität, lässt sich jederzeit pausieren und "
+                          "setzt dort fort, wo sie war. Danach werden neue Fotos bei jedem Import von selbst analysiert.",
+                          "{photos} fotos: el primer análisis tarda {time} en este PC (vistas previas leídas del NAS y "
+                          "luego el análisis). Trabaja en segundo plano con baja prioridad; puedes pausarlo cuando "
+                          "quieras y sigue donde lo dejó. Después las fotos nuevas se analizan solas en cada importación.",
+                          "{photos} photos : la première analyse prend {time} sur ce PC (aperçus lus sur le NAS, puis "
+                          "l'analyse). Elle tourne en arrière-plan en basse priorité ; vous pouvez la mettre en pause à "
+                          "tout moment et elle reprend où elle en était. Ensuite les nouvelles photos sont analysées "
+                          "toutes seules à chaque import.",
+                          "{photos} fotos: a primeira análise demora {time} neste PC (pré-visualizações lidas do NAS e "
+                          "depois a análise). Trabalha em segundo plano com baixa prioridade; pode pausá-la quando quiser "
+                          "e retoma onde parou. Depois as fotos novas são analisadas sozinhas a cada importação."),
+    "ai_analyze_later": _t("È attiva la fascia oraria: l'analisi comincerà alle {start}.",
+                           "The time window is on: the analysis will start at {start}.",
+                           "Das Zeitfenster ist aktiv: Die Analyse beginnt um {start}.",
+                           "La franja horaria está activa: el análisis empezará a las {start}.",
+                           "La plage horaire est active : l'analyse commencera à {start}.",
+                           "O horário está ativo: a análise começa às {start}."),
+    "ai_gpu_check": _t("Fermati se un altro programma usa la scheda video (giochi, render) e riprendi dopo",
+                       "Stop when another program uses the graphics card (games, renders) and resume later",
+                       "Anhalten, wenn ein anderes Programm die Grafikkarte nutzt (Spiele, Renderings), und später "
+                       "fortsetzen",
+                       "Detenerse si otro programa usa la tarjeta gráfica (juegos, renders) y seguir después",
+                       "S'arrêter quand un autre programme utilise la carte graphique (jeux, rendus) et reprendre ensuite",
+                       "Parar se outro programa usar a placa gráfica (jogos, renders) e retomar depois"),
+    "ai_window": _t("Analisi grandi solo dalle", "Large analyses only from", "Große Analysen nur von",
+                    "Análisis grandes solo de", "Grandes analyses seulement de", "Análises grandes só das"),
+    "ai_window_to": _t("alle", "to", "bis", "a", "à", "às"),
+    "ai_window_hint": _t("Vale per le prime analisi (oltre 1.000 foto): le foto nuove di un'importazione si analizzano "
+                         "comunque subito.",
+                         "Applies to first analyses (over 1,000 photos): new photos from an import are analyzed right "
+                         "away anyway.",
+                         "Gilt für erste Analysen (über 1.000 Fotos): Neue Fotos eines Imports werden trotzdem sofort "
+                         "analysiert.",
+                         "Vale para los primeros análisis (más de 1.000 fotos): las fotos nuevas de una importación se "
+                         "analizan enseguida igualmente.",
+                         "S'applique aux premières analyses (plus de 1 000 photos) : les nouvelles photos d'un import "
+                         "sont analysées tout de suite quand même.",
+                         "Vale para as primeiras análises (mais de 1.000 fotos): as fotos novas de uma importação são "
+                         "analisadas logo na mesma."),
+    "ai_queue": _t("Librerie per la ricerca IA", "Libraries for AI search", "Bibliotheken für die KI-Suche",
+                   "Bibliotecas para la búsqueda IA", "Bibliothèques pour la recherche IA",
+                   "Bibliotecas para a pesquisa IA"),
+    "ai_queue_empty": _t("Nessuna. Scegli una libreria nella finestra principale e premi «Analizza per la ricerca IA».",
+                         "None. Choose a library in the main window and click “Analyze for AI search”.",
+                         "Keine. Wähle im Hauptfenster eine Bibliothek und klicke auf „Für die KI-Suche analysieren“.",
+                         "Ninguna. Elige una biblioteca en la ventana principal y pulsa «Analizar para la búsqueda IA».",
+                         "Aucune. Choisissez une bibliothèque dans la fenêtre principale et cliquez sur « Analyser pour "
+                         "la recherche IA ».",
+                         "Nenhuma. Escolha uma biblioteca na janela principal e clique em «Analisar para a pesquisa IA»."),
+    "ai_q_running": _t("in corso {pct}%", "running {pct}%", "läuft {pct} %", "en curso {pct} %", "en cours {pct} %",
+                       "em curso {pct}%"),
+    "ai_unqueue": _t("Togli", "Remove", "Entfernen", "Quitar", "Retirer", "Remover"),
+    "ai_unqueue_q": _t("Togliere «{library}» dalla ricerca IA?", "Remove “{library}” from AI search?",
+                       "„{library}“ aus der KI-Suche entfernen?", "¿Quitar «{library}» de la búsqueda IA?",
+                       "Retirer « {library} » de la recherche IA ?", "Remover «{library}» da pesquisa IA?"),
+    "ai_unqueue_body": _t("Le foto nuove non verranno più analizzate. Il catalogo già fatto resta sul NAS (e il telefono "
+                          "lo usa) finché non rimuovi il motore.",
+                          "New photos will no longer be analyzed. The catalog already made stays on the NAS (and the "
+                          "phone uses it) until you remove the engine.",
+                          "Neue Fotos werden nicht mehr analysiert. Der vorhandene Katalog bleibt auf dem NAS (und das "
+                          "Handy nutzt ihn), bis du die Engine entfernst.",
+                          "Las fotos nuevas ya no se analizarán. El catálogo ya hecho se queda en el NAS (y el teléfono "
+                          "lo usa) hasta que quites el motor.",
+                          "Les nouvelles photos ne seront plus analysées. Le catalogue déjà créé reste sur le NAS (et le "
+                          "téléphone l'utilise) jusqu'à la suppression du moteur.",
+                          "As fotos novas deixam de ser analisadas. O catálogo já feito fica no NAS (e o telemóvel "
+                          "usa-o) até remover o motor."),
+})

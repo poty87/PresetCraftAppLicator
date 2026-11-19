@@ -17,6 +17,7 @@ from tkinter import filedialog, ttk
 
 from PIL import Image, ImageOps, ImageTk
 
+import ai
 import autostart
 import camera_styles as cs
 import i18n
@@ -26,6 +27,7 @@ import watcher
 from i18n import registry_value, t
 from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, LOCAL, backup_root, delete_backups, in_scope, is_cli,
                         is_library, library_open_reason, list_backups, local_time, log, utc_text)
+from ai_panel import AiChoice
 from translations import DATE_FORMATS, LANGUAGES, TEXTS
 from ui_theme import (LEVELS, MUTED, TEXT, DateField, Dialog, TimeField, attach_scrollbars, center_on, dark_title_bar,
                       dpi_aware, set_icon, setup_theme)
@@ -799,6 +801,13 @@ class AutoImportDialog(tk.Toplevel):
             ttk.Checkbutton(libs_box, text=self.lib_name(lib), variable=var).grid(row=r, column=0, sticky="w")
             ttk.Label(libs_box, text=lib, style="Muted.TLabel").grid(row=r, column=1, sticky="w", padx=(12, 0))
             self.phone_vars.append((lib, var))
+        # ricerca per soggetti sul telefono: il motore IA (facoltativo) lavora sulle librerie spuntate qui sopra
+        row = ttk.Frame(frame)
+        row.pack(fill="x", pady=(10, 0))
+        self.ai_label = ttk.Label(row, style="Body.TLabel", wraplength=560, justify="left")
+        self.ai_label.pack(side="left")
+        ttk.Button(row, text=t("ai_button"), command=self.open_ai).pack(side="right")
+        self.show_ai()
 
         ttk.Label(frame, text=t("auto_options").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
         self.enabled = tk.BooleanVar(value=bool(w.get("enabled")))
@@ -836,6 +845,25 @@ class AutoImportDialog(tk.Toplevel):
 
     def lib_name(self, lib):
         return os.path.basename(lib) or lib
+
+    def show_ai(self):
+        s = self.app.settings
+        folder = ai.engine_dir(s)
+        if ai.installing(folder):
+            text = t("ai_short_installing")
+        elif not ai.installed_info(folder):
+            text = t("ai_short_none")
+        elif not (s.get("ai") or {}).get("enabled"):
+            text = t("ai_short_off")
+        else:
+            text = t("ai_short_on")
+        self.ai_label.configure(text=text)
+
+    def open_ai(self):
+        d = AiDialog(self, self.app)
+        self.wait_window(d)
+        self.grab_set()
+        self.show_ai()
 
     def fill(self):
         self.tree.delete(*self.tree.get_children())
@@ -976,6 +1004,387 @@ class AutoImportDialog(tk.Toplevel):
         self.destroy()
 
 
+class AiDialog(tk.Toplevel):
+    """Motore IA per la ricerca per soggetti sul telefono: installazione (in un processo a sé), stato del lavoro,
+    attivazione, modello e cartella, rimozione."""
+
+    def __init__(self, master, app):
+        super().__init__(master)
+        self.withdraw()
+        self.app = app
+        self.title(t("ai_title"))
+        self.resizable(False, False)
+        self.transient(master)
+        set_icon(self)
+        self.frame = ttk.Frame(self, padding=(24, 22, 24, 18))
+        self.frame.pack(fill="both", expand=True)
+        self.mode = None  # quello che la finestra mostra adesso: "install", "installing", "ready", "change"
+        self.busy = False
+        self.bind("<Escape>", lambda e: self.destroy())
+        self.render()
+        center_on(self, master)
+        dark_title_bar(self)
+        self.deiconify()
+        self.grab_set()
+        self.after(1000, self.poll)
+
+    # ---- dati
+
+    def cfg(self):
+        return self.app.settings.get("ai") or {}
+
+    def folder(self):
+        return ai.engine_dir(self.app.settings)
+
+    def save_cfg(self, **values):
+        self.app.settings["ai"] = {**self.cfg(), **values}
+        save_settings(self.app.settings)
+
+    def wanted_mode(self):
+        folder = self.folder()
+        if ai.installing(folder):
+            return "installing"
+        info = ai.installed_info(folder)
+        if info and self.mode == "change":
+            return "change"
+        return "ready" if info else "install"
+
+    # ---- disegno
+
+    def render(self):
+        for w in self.frame.winfo_children():
+            w.destroy()
+        self.mode = self.wanted_mode() if self.mode != "change" else "change"
+        f = self.frame
+        ttk.Label(f, text=t("ai_title"), style="Title.TLabel").pack(anchor="w")
+        ttk.Label(f, text=t("ai_intro"), style="Body.TLabel", wraplength=640, justify="left").pack(anchor="w",
+                                                                                                 pady=(6, 0))
+        self.status = ttk.Label(f, style="Strong.TLabel", wraplength=640, justify="left")
+        self.status.pack(anchor="w", pady=(16, 0))
+        self.bar = ttk.Progressbar(f, mode="determinate", maximum=1000)
+        self.detail = ttk.Label(f, style="Muted.TLabel", wraplength=640, justify="left")
+        buttons = ttk.Frame(f)
+        if self.mode in ("install", "change"):
+            info = ai.installed_info(self.folder()) or {}
+            self.choice = AiChoice(f, folder=self.folder(), model=self.cfg().get("model") or info.get("model"),
+                                   allow_none=False, wrap=640)
+            self.choice.pack(fill="x", pady=(14, 0))
+            self.detail.pack(anchor="w", pady=(8, 0))
+            buttons.pack(fill="x", pady=(18, 0))
+            ttk.Button(buttons, text=t("ai_install") if self.mode == "install" else t("ai_apply"),
+                       style="Accent.TButton", command=self.apply).pack(side="right")
+            if self.mode == "change":
+                ttk.Button(buttons, text=t("btn_cancel"), command=self.cancel_change).pack(side="right", padx=(0, 8))
+        elif self.mode == "installing":
+            self.bar.pack(fill="x", pady=(14, 0))
+            self.detail.pack(anchor="w", pady=(6, 0))
+            buttons.pack(fill="x", pady=(18, 0))
+            ttk.Button(buttons, text=t("ai_stop_install"), command=self.stop_install).pack(side="right")
+        else:
+            self.enabled = tk.BooleanVar(value=bool(self.cfg().get("enabled")))
+            ttk.Checkbutton(f, text=t("ai_enable"), variable=self.enabled,
+                            command=lambda: self.save_cfg(enabled=bool(self.enabled.get()))).pack(anchor="w",
+                                                                                                  pady=(14, 0))
+            row = ttk.Frame(f)
+            row.pack(fill="x", pady=(8, 0))
+            ttk.Label(row, text=t("ai_bits"), style="Body.TLabel").pack(side="left")
+            self.bits = ttk.Combobox(row, state="readonly", width=40, values=[t("ai_bits_8"), t("ai_bits_4")])
+            self.bits.current(0 if int(self.cfg().get("phone_bits") or 8) == 8 else 1)
+            self.bits.bind("<<ComboboxSelected>>",
+                           lambda e: self.save_cfg(phone_bits=8 if self.bits.current() == 0 else 4))
+            self.bits.pack(side="left", padx=(10, 0))
+            # quando lavorare: GPU libera, fascia oraria per le analisi grandi
+            self.gpu_check = tk.BooleanVar(value=bool(self.cfg().get("gpu_check", True)))
+            ttk.Checkbutton(f, text=t("ai_gpu_check"), variable=self.gpu_check,
+                            command=lambda: self.save_cfg(gpu_check=bool(self.gpu_check.get()))).pack(anchor="w",
+                                                                                                    pady=(10, 0))
+            win = self.cfg().get("window") or {}
+            row = ttk.Frame(f)
+            row.pack(anchor="w", pady=(6, 0))
+            self.win_on = tk.BooleanVar(value=bool(win.get("enabled")))
+            ttk.Checkbutton(row, text=t("ai_window"), variable=self.win_on, command=self.save_window).pack(side="left")
+            hours = [f"{h:02d}:00" for h in range(24)]
+            self.win_from = ttk.Combobox(row, values=hours, width=6, state="readonly")
+            self.win_from.set(win.get("from") or "22:00")
+            self.win_from.pack(side="left", padx=(8, 0))
+            ttk.Label(row, text=t("ai_window_to"), style="Body.TLabel").pack(side="left", padx=(6, 6))
+            self.win_to = ttk.Combobox(row, values=hours, width=6, state="readonly")
+            self.win_to.set(win.get("to") or "07:00")
+            self.win_to.pack(side="left")
+            for c in (self.win_from, self.win_to):
+                c.bind("<<ComboboxSelected>>", lambda e: self.save_window())
+            ttk.Label(f, text=t("ai_window_hint"), style="Muted.TLabel", wraplength=640, justify="left").pack(
+                anchor="w", pady=(2, 0))
+            # librerie da analizzare, nell'ordine della coda
+            ttk.Label(f, text=t("ai_queue").upper(), style="Muted.TLabel").pack(anchor="w", pady=(16, 4))
+            self.queue_box = ttk.Frame(f)
+            self.queue_box.pack(fill="x")
+            self.fill_queue()
+            self.bar.pack(fill="x", pady=(14, 0))
+            self.detail.pack(anchor="w", pady=(6, 0))
+            buttons.pack(fill="x", pady=(18, 0))
+            paused = bool(self.cfg().get("paused"))
+            ttk.Button(buttons, text=t("ai_resume") if paused else t("ai_pause"),
+                       command=lambda: self.set_pause(not paused)).pack(side="left", padx=(0, 8))
+            ttk.Button(buttons, text=t("ai_change"), command=self.start_change).pack(side="left")
+            ttk.Button(buttons, text=t("ai_remove"), command=self.remove).pack(side="left", padx=(8, 0))
+            ttk.Button(buttons, text=t("ai_log"), command=self.open_log).pack(side="left", padx=(8, 0))
+        ttk.Button(buttons, text=t("w_close"), command=self.destroy).pack(side="right", padx=(0, 8))
+        self.update_status()
+
+    def save_window(self):
+        self.save_cfg(window={"enabled": bool(self.win_on.get()), "from": self.win_from.get(), "to": self.win_to.get()})
+
+    def set_pause(self, paused):
+        ai.set_paused(self.app.settings, paused)
+        save_settings(self.app.settings)
+        if not paused:
+            ai.maybe_start(self.app.settings, log)
+        self.render()
+
+    def fill_queue(self):
+        for w in self.queue_box.winfo_children():
+            w.destroy()
+        self.queue_labels = {}
+        libs = ai.queue(self.app.settings)
+        if not libs:
+            ttk.Label(self.queue_box, text=t("ai_queue_empty"), style="Muted.TLabel", wraplength=640,
+                      justify="left").pack(anchor="w")
+            return
+        for i, lib in enumerate(libs):
+            row = ttk.Frame(self.queue_box)
+            row.pack(fill="x", pady=2)
+            ttk.Label(row, text=f"{i + 1}.  {os.path.basename(os.path.normpath(lib))}", style="Body.TLabel").pack(
+                side="left")
+            lbl = ttk.Label(row, style="Muted.TLabel")
+            lbl.pack(side="left", padx=(10, 0))
+            self.queue_labels[lib] = lbl
+            ttk.Button(row, text="✕", width=3, command=lambda x=lib: self.unqueue(x)).pack(side="right")
+            ttk.Button(row, text="↓", width=3, command=lambda x=lib: self.move(x, 1)).pack(side="right", padx=(0, 4))
+            ttk.Button(row, text="↑", width=3, command=lambda x=lib: self.move(x, -1)).pack(side="right", padx=(0, 4))
+        self.update_queue()
+
+    def update_queue(self):
+        for lib, lbl in (getattr(self, "queue_labels", None) or {}).items():
+            st = ai.library_state(self.app.settings, lib)
+            state = st["state"]
+            if state == "running":
+                text = t("ai_q_running", pct=st["done"] * 100 // max(1, st["total"]))
+            elif state == "done":
+                text = t("ai_row_done", count=st["count"])
+            elif state in ("partial", "paused"):
+                text = t("ai_row_partial", count=st["count"], photos=st["photos"] or "?")
+            elif state == "waiting":
+                text = t("ai_row_gpu_busy") if st["phase"] == "gpu_busy" else t("ai_row_window")
+            else:
+                text = t("ai_row_queued")
+            try:
+                lbl.configure(text=text)
+            except tk.TclError:
+                pass
+
+    def move(self, lib, delta):
+        ai.move_in_queue(self.app.settings, lib, delta)
+        save_settings(self.app.settings)
+        self.fill_queue()
+
+    def unqueue(self, lib):
+        name = os.path.basename(os.path.normpath(lib))
+        if Dialog.ask(self, t("ai_title"), t("ai_unqueue_q", library=name), t("ai_unqueue_body"), level="warn",
+                      buttons=[("no", t("btn_cancel"), True), ("yes", t("ai_unqueue"), False)], default="no") != "yes":
+            return
+        ai.remove_from_queue(self.app.settings, lib)
+        save_settings(self.app.settings)
+        self.fill_queue()
+
+    def update_status(self):
+        folder = self.folder()
+        if self.mode in ("install", "change"):
+            p = ai.install_progress(folder)
+            text = t("ai_status_not_installed") if self.mode == "install" else t("ai_status_change")
+            if p.get("error") and p.get("error") != "cancelled":
+                text = t("ai_status_install_error", error=p["error"])
+            self.status.configure(text=text)
+            return
+        if self.mode == "installing":
+            p = ai.install_progress(folder)
+            self.status.configure(text=t("ai_status_installing", model=self.model_name(p.get("model"))))
+            self.bar["value"] = float(p.get("total") or 0) * 1000
+            self.detail.configure(text=t("ai_step_" + str(p.get("step") or "uv")) +
+                                  f"  ·  {float(p.get('total') or 0) * 100:.0f}%")
+            return
+        info = ai.installed_info(folder) or {}
+        model = self.cfg().get("model") or info.get("model")
+        lines = [t("ai_status_ready", model=self.model_name(model), device=info.get("gpu") or "CPU")]
+        st = ai.worker_status(folder)
+        phase = st.get("phase")
+        if self.cfg().get("paused"):
+            lines.append(t("tray_ai_paused"))
+        if not self.cfg().get("enabled"):
+            lines = [t("ai_status_off")]
+        elif st.get("running") and phase in ("previews", "embeddings", "phone_model", "loading", "starting"):
+            lines.append(t("ai_phase_" + phase, library=st.get("library") or "", done=st.get("done") or 0,
+                           total=st.get("total") or 0))
+        elif phase == "error":
+            lines.append(t("ai_status_error", error=st.get("error") or ""))
+        self.status.configure(text=lines[0])
+        total = st.get("total") or 0
+        working = bool(st.get("running") and total)
+        self.bar["value"] = (st.get("done") or 0) / total * 1000 if working else 0
+        if working and not self.bar.winfo_ismapped():
+            self.bar.pack(fill="x", pady=(14, 0), before=self.detail)
+        elif not working and self.bar.winfo_ismapped():
+            self.bar.pack_forget()
+        if not hasattr(self, "size_gb") or self.busy:
+            self.size_gb = ai.folder_size_gb(folder) if not self.busy else 0  # una volta: con molte miniature è lento
+        self.update_queue()
+        # le righe per libreria stanno nell'elenco della coda
+        self.detail.configure(text="\n".join(lines[1:] + [t("ai_where", folder=folder, gb=f"{self.size_gb:.0f}")]))
+
+    def model_name(self, m):
+        name = {"metaclip2-giant": t("ai_m_giant"), "metaclip2-huge": t("ai_m_huge"),
+                "metaclip2-b16": t("ai_m_small")}.get(m, m or "")
+        return name.split(" – ")[0]  # solo il nome, senza la descrizione
+
+    def poll(self):
+        if not self.winfo_exists():
+            return
+        wanted = self.wanted_mode()
+        if not self.busy and wanted != self.mode and not (self.mode == "change" and wanted == "ready"):
+            self.mode = wanted
+            self.render()
+        elif not self.busy:
+            self.update_status()
+        self.after(1500, self.poll)
+
+    # ---- azioni
+
+    def app_exe(self):
+        return sys.executable
+
+    def apply(self):
+        c = self.choice
+        if not c.valid_folder():
+            Dialog.ask(self, t("ai_title"), t("w_folder_bad"), None, level="warn")
+            return
+        new_folder, model = os.path.normpath(c.folder.get().strip()), c.model()
+        old_folder = os.path.normpath(self.folder())
+        moving = self.mode == "change" and os.path.normcase(new_folder) != os.path.normcase(old_folder)
+        if not moving and not c.enough_space():
+            if Dialog.ask(self, t("ai_title"), t("ai_space_low"), new_folder, level="warn",
+                          buttons=[("back", t("w_back"), True), ("go", t("ai_install"), False)]) != "go":
+                return
+        if moving:
+            if os.path.exists(new_folder) and os.listdir(new_folder):
+                Dialog.ask(self, t("ai_title"), t("ai_move_not_empty"), new_folder, level="warn")
+                return
+            if Dialog.ask(self, t("ai_title"), t("ai_move_q"), f"{old_folder}  →  {new_folder}", level="info",
+                          buttons=[("no", t("w_no"), False), ("yes", t("w_yes"), True)]) != "yes":
+                return
+            self.busy = True
+            self.status.configure(text=t("ai_moving"))
+            self.configure(cursor="watch")
+
+            def work():
+                err = None
+                try:
+                    ai.stop_worker(old_folder)
+                    import shutil
+                    os.makedirs(os.path.dirname(new_folder), exist_ok=True)
+                    shutil.move(old_folder, new_folder)
+                except Exception as e:  # noqa: BLE001
+                    err = str(e)
+                self.after(0, lambda: self.after_move(err, new_folder, model))
+            threading.Thread(target=work, daemon=True).start()
+            return
+        self.install(new_folder, model)
+
+    def after_move(self, err, new_folder, model):
+        self.busy = False
+        self.configure(cursor="")
+        if err:
+            Dialog.ask(self, t("ai_title"), t("ai_move_error"), err, level="error")
+            return
+        self.save_cfg(dir=new_folder)
+        info = ai.installed_info(new_folder) or {}
+        if model in (info.get("models") or [info.get("model")]):
+            self.save_cfg(model=model)
+            self.mode = "ready"
+            self.render()
+        else:
+            self.install(new_folder, model)
+
+    def install(self, folder, model):
+        self.save_cfg(dir=folder, model=model, enabled=True, phone_bits=int(self.cfg().get("phone_bits") or 8))
+        try:
+            ai.start_install_process(self.app_exe(), folder, model)
+        except OSError as e:
+            Dialog.ask(self, t("ai_title"), t("ai_status_install_error", error=str(e)), None, level="error")
+            return
+        log(f"ai: install started ({model}) in {folder}")
+        self.mode = "installing"
+        self.after(800, self.render)
+
+    def stop_install(self):
+        p = ai.install_progress(self.folder())
+        if ai.pid_alive(p.get("pid")):
+            subprocess.run(["taskkill", "/PID", str(p["pid"]), "/T", "/F"], capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        ai.save_json(os.path.join(self.folder(), "installazione.json"), {**p, "error": "cancelled"})
+        self.mode = None
+        self.render()
+
+    def start_change(self):
+        self.mode = "change"
+        self.render()
+
+    def cancel_change(self):
+        self.mode = None
+        self.render()
+
+    def remove(self):
+        folder = self.folder()
+        size = ai.folder_size_gb(folder)
+        if Dialog.ask(self, t("ai_title"), t("ai_remove_q", gb=f"{size:.0f}"), folder, level="warn",
+                      buttons=[("no", t("w_no"), True), ("yes", t("ai_remove"), False)], default="no") != "yes":
+            return
+        try:
+            nas = ai.nas_outputs(self.app.settings)
+        except Exception:  # noqa: BLE001
+            nas = []
+        remove_nas = bool(nas) and Dialog.ask(
+            self, t("ai_title"), t("ai_remove_nas_q", count=len(nas)), "\n".join(nas), level="info",
+            buttons=[("no", t("w_no"), True), ("yes", t("w_yes"), False)], default="no") == "yes"
+        self.busy = True
+        self.configure(cursor="watch")
+        self.status.configure(text=t("ai_removing"))
+
+        def work():
+            if remove_nas:
+                ai.remove_nas_outputs(self.app.settings)
+            ok = ai.remove_engine(folder)
+            self.after(0, lambda: self.after_remove(ok, folder))
+        threading.Thread(target=work, daemon=True).start()
+
+    def after_remove(self, ok, folder):
+        self.busy = False
+        self.configure(cursor="")
+        self.app.settings["ai"] = {"enabled": False}
+        save_settings(self.app.settings)
+        log(f"ai: engine removed from {folder}")
+        if not ok:
+            Dialog.ask(self, t("ai_title"), t("ai_remove_partial"), folder, level="warn")
+        self.mode = None
+        self.render()
+
+    def open_log(self):
+        path = os.path.join(self.folder(), "ia.log")
+        if os.path.isfile(path):
+            os.startfile(path)
+        else:
+            Dialog.ask(self, t("ai_title"), t("log_empty"), None, level="info")
+
+
 # ---------------------------------------------------------------- finestra principale
 
 class App(tk.Tk):
@@ -1032,6 +1441,14 @@ class App(tk.Tk):
         self.lib_combo.bind("<<ComboboxSelected>>", self.on_library_selected)
         self.lib_path = ttk.Label(info, style="Muted.TLabel")
         self.lib_path.pack(anchor="w")
+        # ricerca per soggetti sul telefono (motore IA facoltativo): stato della libreria scelta e pulsante
+        ai_row = ttk.Frame(info)
+        ai_row.pack(anchor="w", pady=(6, 0))
+        self.ai_state = ttk.Label(ai_row, style="Muted.TLabel")
+        self.ai_state.pack(side="left")
+        self.btn_ai = ttk.Button(ai_row, command=self.ai_action)
+        self.btn_ai.pack(side="left", padx=(10, 0))
+        self.ai_action_kind = None
         # quali foto esaminare: una riga a parte, così i pulsanti della libreria hanno sempre spazio
         scope = ttk.Frame(card)
         scope.pack(fill="x", pady=(10, 0))
@@ -1047,6 +1464,7 @@ class App(tk.Tk):
         ttk.Button(scope, text=t("adv_button"), command=self.open_advanced).pack(side="left", padx=(10, 0))
         self.fill_scope(None)
         self.update_library_label()
+        self.after(4000, lambda: self.update_ai_row(again=True))
 
         self.banner = tk.Frame(outer, highlightthickness=0, bd=0)
         self.banner.pack(fill="x", pady=(12, 0))
@@ -1191,6 +1609,133 @@ class App(tk.Tk):
             self.lib_combo.set(t("no_library"))
         self.lib_path.configure(text=lib or t("no_library_hint"))
         self.btn_remove.state(["!disabled"] if lib in libs else ["disabled"])
+        self.update_ai_row()
+
+    # ---- ricerca IA della libreria scelta
+
+    def update_ai_row(self, again=False):
+        """Stato della ricerca IA per la libreria scelta e il pulsante giusto (si aggiorna ogni pochi secondi)."""
+        try:
+            lib = self.settings.get("library")
+            folder = ai.engine_dir(self.settings)
+            if not lib:
+                text, kind = "", None
+            elif ai.installing(folder):
+                text, kind = t("ai_short_installing"), "dialog"
+            elif not ai.installed_info(folder):
+                text, kind = t("ai_row_none"), "dialog"
+            else:
+                st = ai.library_state(self.settings, lib)
+                state = st["state"]
+                if state == "none":
+                    text, kind = t("ai_row_not_analyzed"), "analyze"
+                elif state == "running":
+                    pct = st["done"] * 100 // max(1, st["total"])
+                    key = "ai_row_previews" if st["phase"] == "previews" else "ai_row_running"
+                    text, kind = t(key, pct=pct, done=st["done"], total=st["total"]), "pause"
+                elif state == "paused":
+                    text, kind = t("ai_row_paused", count=st["count"], photos=st["photos"] or "?"), "resume"
+                elif state == "waiting":
+                    text = t("ai_row_gpu_busy") if st["phase"] == "gpu_busy" else t("ai_row_window")
+                    kind = "dialog"
+                elif state == "done":
+                    text, kind = t("ai_row_done", count=st["count"]), "dialog"
+                elif state == "partial":
+                    text, kind = t("ai_row_partial", count=st["count"], photos=st["photos"]), "dialog"
+                else:
+                    text, kind = t("ai_row_queued"), "dialog"
+                if not ai.config(self.settings).get("enabled") and state != "none":
+                    text, kind = t("ai_short_off"), "dialog"
+            self.ai_state.configure(text=text)
+            if kind is None:
+                self.btn_ai.pack_forget()
+            else:
+                self.btn_ai.configure(text={"analyze": t("ai_analyze"), "pause": t("ai_pause"),
+                                            "resume": t("ai_resume"), "dialog": t("ai_button")}[kind])
+                if not self.btn_ai.winfo_ismapped():
+                    self.btn_ai.pack(side="left", padx=(10, 0))
+            self.ai_action_kind = kind
+        except Exception as e:  # noqa: BLE001 — la riga della ricerca IA non deve mai bloccare la finestra
+            log(f"ai row: {e!r}")
+        if again:
+            self.after(4000, lambda: self.update_ai_row(again=True))
+
+    def ai_action(self):
+        kind = self.ai_action_kind
+        if kind == "analyze":
+            self.analyze_ai()
+        elif kind in ("pause", "resume"):
+            ai.set_paused(self.settings, kind == "pause")
+            save_settings(self.settings)
+            if kind == "resume":
+                ai.maybe_start(self.settings, log)
+            self.update_ai_row()
+        else:
+            self.open_ai()
+
+    def open_ai(self):
+        d = AiDialog(self, self)
+        self.wait_window(d)
+        self.update_ai_row()
+
+    def analyze_ai(self):
+        """Prima analisi della libreria scelta: la decide l'utente (è lunga); dopo, le foto nuove vanno da sole."""
+        s = self.settings
+        lib = s.get("library")
+        if not lib:
+            return
+        if not ai.installed_info(ai.engine_dir(s)):
+            self.open_ai()
+            return
+        ph = s.get("phone") or {}
+        if not (ph.get("folder") or "").strip():
+            Dialog.ask(self, t("ai_title"), t("ai_need_phone"), None, level="info")
+            self.open_auto_import()
+            return
+        name = os.path.basename(os.path.normpath(lib))
+        if not any(ai.same(lib, x) for x in ph.get("libraries") or []):
+            if Dialog.ask(self, t("ai_title"), t("ai_add_phone_q", library=name), None, level="info",
+                          buttons=[("no", t("btn_cancel"), False), ("yes", t("ai_analyze"), True)]) != "yes":
+                return
+        self.config(cursor="watch")
+        self.update_idletasks()
+        photos = ai.library_photo_count(lib)
+        self.config(cursor="")
+        if photos is None:
+            Dialog.ask(self, t("ai_title"), t("st_read_error"), lib, level="error")
+            return
+        minutes = ai.estimate_minutes(s, photos, ai.detect_gpu())
+        time_text = t("ai_eta_h", h=f"{minutes / 60:.1f}".replace(".", ",")) if minutes >= 90 else \
+            t("ai_eta_m", m=max(1, round(minutes)))
+        window = ai.config(s).get("window") or {}
+        later = window.get("enabled") and not ai.in_window({"from": window.get("from") or "22:00",
+                                                             "to": window.get("to") or "07:00"})
+        body = t("ai_analyze_body", photos=f"{photos:,}".replace(",", "."), time=time_text)
+        if later:
+            body += "\n\n" + t("ai_analyze_later", start=window.get("from") or "22:00")
+        if Dialog.ask(self, t("ai_title"), t("ai_analyze_q", library=name), body, level="info",
+                      buttons=[("no", t("btn_cancel"), False), ("yes", t("ai_analyze"), True)]) != "yes":
+            return
+        libs = ph.get("libraries") or []
+        if not any(ai.same(lib, x) for x in libs):
+            s["phone"] = {**ph, "libraries": [*libs, lib]}
+        ai.add_to_queue(s, lib)
+        s["ai"] = {**ai.config(s), "enabled": True}
+        if ai.config(s).get("paused"):
+            ai.set_paused(s, False)
+        w = s.get("watch") or {}
+        if not w.get("enabled"):  # le foto nuove si analizzano dal processo in background: va acceso
+            s["watch"] = {**w, "enabled": True}
+            save_settings(s)
+            try:
+                autostart.enable()
+            except Exception as e:  # noqa: BLE001
+                log(f"ERROR automatic import: {e}")
+        save_settings(s)
+        self.btn_auto.configure(text=("● " if (s.get("watch") or {}).get("enabled") else "") + t("auto_btn"))
+        log(f"ai: analysis of {lib} queued ({photos} photos)")
+        ai.maybe_start(s, log)
+        self.after(1500, self.update_ai_row)
 
     def add_library(self):
         current = self.settings.get("library")
@@ -1915,6 +2460,10 @@ def main():
         sys.exit(0)
     if "--uninstall" in args:
         sys.exit(launch_uninstaller())
+    if "--install-ai" in args:  # installazione del motore IA in un processo a sé: --install-ai <cartella> <modello>
+        import ai
+        i = args.index("--install-ai")
+        sys.exit(ai.install_main(args[i + 1], args[i + 2]))
     if already_open():
         sys.exit(0)
     dpi_aware()
