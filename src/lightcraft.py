@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from ctypes import wintypes
 
 from version import APP_NAME
@@ -36,12 +37,45 @@ def log(text):
 
 
 # lightcraft-cli avviati da PresetCraftAppLicator senza libreria (anteprime sviluppate): non toccano le librerie, quindi
-# non contano come "LightCraft aperto"
+# non contano come "LightCraft aperto". Tenuti anche in un file, perché la finestra dell'app (un altro processo) li
+# riconosca (elenco dei pid)
+OWN_FILE = os.path.join(DATA_DIR, "watch", "own-cli.json")
 OWN_PIDS = set()
+_own_lock = threading.Lock()
+
+
+def _save_own():
+    try:
+        os.makedirs(os.path.dirname(OWN_FILE), exist_ok=True)
+        tmp = OWN_FILE + f".{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(sorted(OWN_PIDS), f)
+        os.replace(tmp, OWN_FILE)
+    except OSError:
+        pass
+
+
+def own_cli(pid, running):
+    """Segna (o toglie) un lightcraft-cli avviato da noi senza libreria."""
+    with _own_lock:
+        if running:
+            OWN_PIDS.add(pid)
+        else:
+            OWN_PIDS.discard(pid)
+        _save_own()
+
+
+def own_pids():
+    try:
+        with open(OWN_FILE, encoding="utf-8") as f:
+            return OWN_PIDS | {int(x) for x in json.load(f)}
+    except (OSError, ValueError, TypeError):
+        return set(OWN_PIDS)
 
 
 def lightcraft_running():
-    """Nomi dei processi LightCraft in esecuzione (app o riga di comando), esclusi quelli in OWN_PIDS."""
+    """Nomi dei processi LightCraft in esecuzione (app o riga di comando), esclusi i nostri senza libreria."""
+    own = own_pids()
     out = subprocess.run(["tasklist", "/fo", "csv", "/nh"], capture_output=True, text=True,
                          creationflags=NO_WINDOW).stdout
     names = set()
@@ -54,7 +88,7 @@ def lightcraft_running():
             pid = int(parts[1])
         except ValueError:
             pid = None
-        if name in ("lightcraft.exe", "lightcraft-cli.exe") and pid not in OWN_PIDS:
+        if name in ("lightcraft.exe", "lightcraft-cli.exe") and pid not in own:
             names.add(name)
     return sorted(names)
 

@@ -20,7 +20,7 @@ import tempfile
 import threading
 import time
 
-from lightcraft import (DATA_DIR, DEFAULT_CLI, NO_WINDOW, OWN_PIDS, is_cli, library_open_reason, log, read_catalog,
+from lightcraft import (DATA_DIR, DEFAULT_CLI, NO_WINDOW, is_cli, library_open_reason, log, own_cli, read_catalog,
                         read_prefs)
 
 PREVIEWS_DIR = "previews"
@@ -35,6 +35,9 @@ STATE = os.path.join(DATA_DIR, "watch", "previews-state.json")  # per libreria: 
 STATUS = os.path.join(DATA_DIR, "watch", "previews-status.json")  # per la finestra dell'app
 DEFAULTS = os.path.join(DATA_DIR, "watch", "develop-defaults.json")
 IGNORED = ("version", "process")  # numeri di versione delle impostazioni: non cambiano l'aspetto
+# nitidezza e riduzione del rumore: in un'anteprima a 2048 pixel non si vedono. Da sole non bastano per svilupparla
+# (le foto arrivate da Lightroom le hanno quasi tutte); se c'è altro, l'anteprima le comprende
+INVISIBLE = ("detail",)
 
 
 class _Result:
@@ -43,18 +46,18 @@ class _Result:
 
 
 def run_cli(args, timeout):
-    """lightcraft-cli senza libreria, a priorità minima; il suo pid sta in OWN_PIDS mentre gira, così il processo in
+    """lightcraft-cli senza libreria, a priorità minima; il suo pid è segnato come nostro mentre gira, così il processo in
     background non lo scambia per LightCraft aperto."""
     p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
                          creationflags=NO_WINDOW | IDLE)
-    OWN_PIDS.add(p.pid)
+    own_cli(p.pid, True)
     try:
         out, err = p.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
         p.kill()
         out, err = p.communicate()
     finally:
-        OWN_PIDS.discard(p.pid)
+        own_cli(p.pid, False)
     return _Result(p.returncode, out, err)
 
 
@@ -102,7 +105,7 @@ def differs(a, b):
 
 def normalized(dev):
     """Lo sviluppo senza profilo e numeri di versione; il bilanciamento "come scattato" vale qualunque numero."""
-    d = {k: v for k, v in (dev or {}).items() if k not in IGNORED and k != "profile"}
+    d = {k: v for k, v in (dev or {}).items() if k not in IGNORED and k not in INVISIBLE and k != "profile"}
     wb = d.get("wb") or {}
     if wb.get("mode") == "asShot":
         d["wb"] = {"mode": "asShot"}
@@ -344,6 +347,7 @@ def _library(settings, libdir, lib, name, cli):
         failed.pop(pid)  # foto cambiata o non più da fare: si riparte da zero
     jobs = [(pid, p, s) for pid, (p, s) in want.items()
             if photos.get(pid) != s and failed.get(pid, [s, 0])[1] < MAX_TRIES]
+    jobs.sort(key=lambda j: j[1].get("captured") or "", reverse=True)  # prima le foto più recenti
     lock = threading.Lock()
     state = {"done": 0, "saved": time.time(), "errors": 0}
 

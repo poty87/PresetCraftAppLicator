@@ -21,6 +21,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import threading
 import time
 
@@ -184,7 +185,7 @@ _NS = {"x": "adobe:ns:meta/", "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns
        "dc": "http://purl.org/dc/elements/1.1/", "xmp": "http://ns.adobe.com/xap/1.0/",
        "lr": "http://ns.adobe.com/lightroom/1.0/", "lc": "http://ns.lightcraft.app/lc/1.0/",
        "vcs": "http://ns.poty87.github.io/viewercraftstar/1.0/"}
-CATALOG_DIR = ".viewercraftstar"  # cartella nascosta, nella cartella osservata sul NAS, letta dall'app
+CATALOG_DIR = ".viewercraftstar"  # dove stavano (fino alla 1.19.2) i file per il telefono: vedi migrate_old_catalog
 LABELS = ("red", "yellow", "green", "blue", "purple")
 
 
@@ -264,12 +265,56 @@ def library_presets(lib):
         return []
 
 
-def export_presets(rule, state):
-    """Scrive nella cartella osservata (sul NAS) l'elenco dei preset della libreria, per ViewerCraftStar: lo rifà solo
-    quando presets.json della libreria cambia."""
+def phone_dir(rule, settings):
+    """La cartella della libreria della regola nella cartella di servizio (preset, resoconto delle foto spedite, battito
+    del PC, preset caricati dal telefono), oppure None se la libreria non è condivisa col telefono."""
+    folder, libs = phone_settings(settings)
+    if not folder or not any(key(x) == key(rule["library"]) for x in libs):
+        return None
+    return library_dir(folder, rule["library"])
+
+
+def share_path(folder):
+    """(condivisione, cartella dentro la condivisione) di una cartella sul NAS ("Y:\\Foto\\A" → ("Photos", "Foto\\A")),
+    oppure (None, None) se non è una cartella di rete."""
+    p = os.path.normpath(folder)
+    drive = os.path.splitdrive(p)[0]
+    if len(drive) == 2:
+        unc = drive_share(drive)
+        if not unc:
+            return None, None
+        p = unc + p[2:]
+    parts = [x for x in p.split("\\") if x]
+    if not p.startswith("\\\\") or len(parts) < 2:
+        return None, None
+    return parts[1], "\\".join(parts[2:])
+
+
+def migrate_old_catalog(rule, pdir):
+    """Le versioni fino alla 1.19.2 tenevano i file per il telefono in .viewercraftstar dentro la cartella delle foto:
+    i preset caricati dal telefono e non ancora importati passano nella cartella di servizio, il resto si toglie."""
+    old = os.path.join(rule["folder"], CATALOG_DIR)
+    if not pdir or not os.path.isdir(old):
+        return
+    src = os.path.join(old, "import")
+    if os.path.isdir(src):
+        dest = os.path.join(pdir, "import")
+        os.makedirs(dest, exist_ok=True)
+        for n in os.listdir(src):
+            if os.path.isfile(os.path.join(src, n)) and not os.path.exists(os.path.join(dest, n)):
+                os.replace(os.path.join(src, n), os.path.join(dest, n))
+    shutil.rmtree(old, ignore_errors=True)
+    log(f"watch: {XMP_TOOL} files moved from {old} to {pdir}")
+
+
+def export_presets(rule, state, pdir):
+    """Scrive nella cartella di servizio l'elenco dei preset della libreria, per ViewerCraftStar: lo rifà solo quando
+    presets.json della libreria cambia."""
+    if not pdir:
+        return
     lib = rule["library"]
     src = os.path.join(lib, "presets.json")
-    target = os.path.join(rule["folder"], CATALOG_DIR, "presets.json")
+    target = os.path.join(pdir, "presets.json")
     try:
         st = os.stat(src)
     except OSError:
@@ -297,9 +342,11 @@ PRESET_EXTS = (".xmp", ".lrtemplate", ".lcpreset", ".zip", ".lmp", ".mplumpack")
 IMPORT_GROUP = "ViewerCraftStar"
 
 
-def preset_uploads(rule):
-    """File di preset caricati da ViewerCraftStar in .viewercraftstar/import, in attesa di essere importati."""
-    folder = os.path.join(rule["folder"], CATALOG_DIR, "import")
+def preset_uploads(pdir):
+    """File di preset caricati da ViewerCraftStar in <cartella di servizio>/libraries/<libreria>/import, da importare."""
+    if not pdir:
+        return []
+    folder = os.path.join(pdir, "import")
     try:
         names = os.listdir(folder)
     except OSError:
@@ -308,7 +355,7 @@ def preset_uploads(rule):
             if not n.startswith(".") and n.lower().endswith(PRESET_EXTS) and os.path.isfile(os.path.join(folder, n))]
 
 
-def import_uploads(cli, rule, state, uploads, summary):
+def import_uploads(cli, rule, state, uploads, summary, pdir):
     """Importa i preset caricati dal telefono (preset.import) e li sposta in import/done; ripubblica l'elenco."""
     lib = rule["library"]
     reply = run_cli(cli, lib, [("preset.import", {"paths": uploads, "group": IMPORT_GROUP})], check=False)[0]
@@ -330,25 +377,43 @@ def import_uploads(cli, rule, state, uploads, summary):
     summary["presets_imported"] = summary.get("presets_imported", 0) + len(imported)
     log(f"watch: {len(imported)} presets imported from {IMPORT_GROUP}: " + ", ".join(i.get("name", "?") for i in imported))
     state.pop("presets_sig", None)  # l'elenco per il telefono si ripubblica subito
-    export_presets(rule, state)
+    export_presets(rule, state, pdir)
     return len(imported)
 
 
-def publish_status(rule, state, names):
-    """Scrive per ViewerCraftStar quali foto della cartella sono in libreria e quale versione dei metadati del
-    telefono è stata applicata ({nome senza estensione: {id, rev}}): l'app considera "al sicuro a casa" (e quindi
-    cancellabili dal telefono) solo le foto confermate qui. Si riscrive solo quando qualcosa cambia."""
-    applied = state.get("applied_rev") or {}
-    data = {"version": 1, "library": os.path.basename(rule["library"]),
-            "photos": {stem: {"id": pid, "rev": applied.get(stem, "")} for stem, pid in sorted(names.items())}}
-    digest = hashlib.sha1(json.dumps(data, sort_keys=True).encode("utf-8")).hexdigest()
-    target = os.path.join(rule["folder"], CATALOG_DIR, "status.json")
-    if state.get("status_digest") == digest and os.path.exists(target):
+UPLOADS = "uploads.json"
+
+
+def publish_status(rule, state, names, pdir):
+    """Scrive per ViewerCraftStar, nella cartella della libreria:
+      uploads.json        dove arrivano le foto di questa libreria (una voce per cartella osservata: condivisione e
+                          cartella, così il telefono riconosce la libreria che riceve le sue foto) e il nome del file
+                          col resoconto della cartella;
+      status-<…>.json     quali foto della cartella sono in libreria e quale versione dei metadati del telefono è stata
+                          applicata ({nome senza estensione: {id, rev}}): l'app considera "al sicuro a casa" (e quindi
+                          cancellabili dal telefono) solo le foto confermate qui.
+    Ogni file si riscrive solo quando cambia."""
+    if not pdir:
         return
-    data["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
+    applied = state.get("applied_rev") or {}
+    status_name = "status-" + hashlib.sha1(key(rule["folder"]).encode("utf-8")).hexdigest()[:8] + ".json"
+    photos = {stem: {"id": pid, "rev": applied.get(stem, "")} for stem, pid in sorted(names.items())}
+    digest = hashlib.sha1(json.dumps(photos, sort_keys=True).encode("utf-8")).hexdigest()
+    target = os.path.join(pdir, status_name)
     try:
-        save_json(target, data)
-        state["status_digest"] = digest
+        if state.get("status_digest") != digest or not os.path.exists(target):
+            save_json(target, {"version": 1, "library": os.path.basename(rule["library"]), "folder": rule["folder"],
+                               "photos": photos, "updated": datetime.datetime.now().isoformat(timespec="seconds")})
+            state["status_digest"] = digest
+        share, sub = share_path(rule["folder"])
+        entry = {"folder": rule["folder"], "share": share or "", "dir": sub or "",
+                 "subfolders": bool(rule.get("subfolders")), "status": status_name}
+        path = os.path.join(pdir, UPLOADS)
+        data = load_json(path)
+        old = data.get("folders") or []
+        if entry not in old:
+            folders = [f for f in old if key(f.get("folder") or "") != key(rule["folder"])] + [entry]
+            save_json(path, {"version": 1, "library": os.path.basename(rule["library"]), "folders": folders})
     except OSError as e:
         log(f"watch: status for {XMP_TOOL} not written ({e})")
 
@@ -356,19 +421,21 @@ def publish_status(rule, state, names):
 _beats = {}  # cartella -> (ultimo battito scritto, fase)
 
 
-def write_heartbeat(rule, interval, phase):
-    """Battito per ViewerCraftStar (.viewercraftstar/heartbeat.json): dice al telefono che il PC di casa è acceso e
-    controlla la cartella. Se il battito è vecchio, il telefono sa che il PC è spento e che le foto entreranno in
-    LightCraft alla sua accensione. Scritto al massimo una volta al minuto, o subito se cambia la fase."""
-    folder = rule["folder"]
+def write_heartbeat(pdir, interval, phase):
+    """Battito per ViewerCraftStar (heartbeat.json nella cartella della libreria): dice al telefono che il PC di casa è
+    acceso e controlla le cartelle. Se il battito è vecchio, il telefono sa che il PC è spento e che le foto entreranno
+    in LightCraft alla sua accensione. Scritto al massimo una volta al minuto, o subito se cambia la fase."""
+    if not pdir:
+        return
+    folder = pdir
     last = _beats.get(folder)
     now = time.time()
     if last and now - last[0] < 60 and last[1] == phase:
         return
-    target = os.path.join(folder, CATALOG_DIR, "heartbeat.json")
+    target = os.path.join(pdir, "heartbeat.json")
     try:
-        if not os.path.isdir(os.path.dirname(target)):
-            return  # la cartella del telefono non c'è ancora: nessuno lo leggerebbe
+        if not os.path.isdir(pdir):
+            return  # la libreria non è ancora nella cartella di servizio: nessuno lo leggerebbe
         save_json(target, {"version": 1, "ts": int(now), "interval": interval, "phase": phase or "idle",
                            "checked": datetime.datetime.now().isoformat(timespec="seconds")})
         _beats[folder] = (now, phase)
@@ -581,7 +648,12 @@ def cycle(rule, settings, finder, status=None, now=None):
         return None
     handled = set(state["handled"])
     profile_ids = set(state.get("profile_ids") or [])
-    export_presets(rule, state)
+    pdir = phone_dir(rule, settings)
+    try:
+        migrate_old_catalog(rule, pdir)
+    except OSError as e:
+        log(f"watch: {CATALOG_DIR} in {folder} not moved yet ({e!r})")
+    export_presets(rule, state, pdir)
     phone = state.setdefault("phone_presets", {})  # id della foto -> preset scelto sul telefono ("" = nessuno)
 
     # file arrivati nella libreria per un'altra strada (trascinati, o importati da LightCraft stesso)
@@ -597,7 +669,7 @@ def cycle(rule, settings, finder, status=None, now=None):
     # resoconto per il telefono: foto in libreria (nome senza estensione -> id)
     names = {os.path.splitext(os.path.basename(path))[0].lower(): in_library[key(path)]
              for path in files if key(path) in in_library}
-    publish_status(rule, state, names)
+    publish_status(rule, state, names, pdir)
     # file nuovi: finché qualcosa arriva o cambia, il trasferimento non è finito
     pending = {key(p): [size, mtime] for p, (size, mtime) in files.items()
                if key(p) not in in_library and key(p) not in handled}
@@ -635,7 +707,7 @@ def cycle(rule, settings, finder, status=None, now=None):
             xmp_todo[path] = (pid, meta, sig)
     preset_todo = {pid: meta["preset"] for _p, (pid, meta, _s) in xmp_todo.items()
                    if meta["preset"] is not None and phone.get(str(pid), "") != meta["preset"]}
-    uploads = preset_uploads(rule)
+    uploads = preset_uploads(pdir)
 
     def save():
         state["handled"] = sorted(handled)
@@ -720,7 +792,7 @@ def cycle(rule, settings, finder, status=None, now=None):
                 (f", not imported: {summary['failed']}" if summary["failed"] else ""))
         # preset caricati dal telefono: prima di tutto, così sono già in libreria se una foto li sceglie
         if uploads and not library_open_reason(lib):
-            import_uploads(cli, rule, state, uploads, summary)
+            import_uploads(cli, rule, state, uploads, summary, pdir)
         # le foto con un preset scelto sul telefono non ricevono il profilo automatico
         profile_ids -= {int(p) for p, preset in phone.items() if preset}
         if profile_ids and not library_open_reason(lib):
@@ -753,7 +825,7 @@ def cycle(rule, settings, finder, status=None, now=None):
             for path, (_pid, meta, sig) in xmp_todo.items():
                 if seen_xmp.get(key(path)) == sig and meta.get("revision"):
                     applied[os.path.splitext(os.path.basename(path))[0].lower()] = meta["revision"]
-            publish_status(rule, state, names)
+            publish_status(rule, state, names, pdir)
     finally:
         if saved_view is not None:  # LightCraft si riapre sulla vista di prima
             with open(view, "wb") as f:
@@ -1191,7 +1263,7 @@ class Watcher:
                         wanted = None
                     if wanted:
                         pause = min(pause, wanted)
-                    write_heartbeat(rule, interval, self.status.get().get("phase"))
+                    write_heartbeat(phone_dir(rule, settings), interval, self.status.get().get("phase"))
                 publish_phone_libraries(settings)
                 try:
                     save_settings_copy(settings)
