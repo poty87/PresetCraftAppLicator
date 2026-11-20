@@ -1771,6 +1771,59 @@ NEW.update({
                       "PresetCraftAppLicator está trabajando en la biblioteca en segundo plano: enseguida queda libre.",
                       "PresetCraftAppLicator travaille sur la bibliothèque en arrière-plan : elle sera libre sous peu.",
                       "O PresetCraftAppLicator está a trabalhar na biblioteca em segundo plano: daqui a pouco fica livre."),
+    "faces_title": _t("Volti", "Faces", "Gesichter", "Caras", "Visages", "Rostos"),
+    "faces_auto": _t("Dai il nome da solo quando la somiglianza è almeno", "Name faces by itself when the similarity is at least",
+                     "Gesichter selbst benennen, wenn die Ähnlichkeit mindestens", "Poner el nombre solo cuando el parecido es al menos",
+                     "Nommer seul quand la ressemblance est d'au moins", "Dar o nome sozinho quando a semelhança é pelo menos"),
+    "faces_hint": _t(
+        "Con il riconoscimento dei volti di LightCraft: solo per le persone a cui hai già dato il nome tu ad almeno 5 "
+        "volti, e solo se nessun'altra persona somiglia quasi altrettanto. I nomi dati così sul telefono hanno il bordo "
+        "tratteggiato: un tocco per confermarli o cambiarli. «Annulla i nomi automatici» toglie quelli mai confermati.",
+        "With LightCraft's face recognition: only for people you have already named on at least 5 faces, and only if no "
+        "other person looks almost as similar. On the phone these names have a dashed border: a tap to confirm or change "
+        "them. «Undo automatic names» removes those never confirmed.",
+        "Mit der Gesichtserkennung von LightCraft: nur für Personen, die du schon bei mindestens 5 Gesichtern benannt "
+        "hast, und nur, wenn keine andere Person fast genauso ähnlich ist. Auf dem Telefon haben diese Namen einen "
+        "gestrichelten Rahmen: ein Tipp zum Bestätigen oder Ändern. „Automatische Namen rückgängig“ entfernt die nie "
+        "bestätigten.",
+        "Con el reconocimiento de caras de LightCraft: solo para las personas a las que ya pusiste nombre en al menos 5 "
+        "caras, y solo si ninguna otra persona se parece casi lo mismo. En el teléfono estos nombres tienen el borde "
+        "discontinuo: un toque para confirmarlos o cambiarlos. «Deshacer nombres automáticos» quita los nunca confirmados.",
+        "Avec la reconnaissance des visages de LightCraft : seulement pour les personnes que vous avez déjà nommées sur au "
+        "moins 5 visages, et seulement si aucune autre personne ne ressemble presque autant. Sur le téléphone, ces noms "
+        "ont un bord en pointillés : un toucher pour les confirmer ou les changer. « Annuler les noms automatiques » "
+        "retire ceux jamais confirmés.",
+        "Com o reconhecimento de rostos do LightCraft: só para as pessoas a que já deu o nome em pelo menos 5 rostos, e "
+        "só se nenhuma outra pessoa se parecer quase tanto. No telemóvel estes nomes têm o contorno tracejado: um toque "
+        "para os confirmar ou mudar. «Anular nomes automáticos» retira os nunca confirmados."),
+    "faces_undo": _t("Annulla i nomi automatici", "Undo automatic names", "Automatische Namen rückgängig",
+                     "Deshacer nombres automáticos", "Annuler les noms automatiques", "Anular nomes automáticos"),
+    "faces_undo_head": _t("Togliere i nomi dati da soli?", "Remove the names given automatically?",
+                          "Automatisch vergebene Namen entfernen?", "¿Quitar los nombres puestos automáticamente?",
+                          "Retirer les noms donnés automatiquement ?", "Retirar os nomes dados automaticamente?"),
+    "faces_undo_body": _t(
+        "Si tolgono i nomi dati da PresetCraftAppLicator e mai confermati o cambiati da te (prima un backup delle "
+        "librerie). I nomi dati da te restano.",
+        "The names given by PresetCraftAppLicator and never confirmed or changed by you are removed (a backup of the "
+        "libraries first). The names you gave stay.",
+        "Die von PresetCraftAppLicator vergebenen und nie von dir bestätigten oder geänderten Namen werden entfernt "
+        "(vorher ein Backup der Bibliotheken). Deine eigenen Namen bleiben.",
+        "Se quitan los nombres puestos por PresetCraftAppLicator y nunca confirmados o cambiados por ti (antes, una "
+        "copia de las bibliotecas). Los nombres que pusiste tú se quedan.",
+        "Les noms donnés par PresetCraftAppLicator et jamais confirmés ou changés par vous sont retirés (une sauvegarde "
+        "des bibliothèques d'abord). Les noms que vous avez donnés restent.",
+        "Retiram-se os nomes dados pelo PresetCraftAppLicator e nunca confirmados ou mudados por si (antes, uma cópia "
+        "das bibliotecas). Os nomes que deu ficam."),
+    "faces_undo_done": _t("Nomi automatici tolti: {count}.", "Automatic names removed: {count}.",
+                          "Automatische Namen entfernt: {count}.", "Nombres automáticos quitados: {count}.",
+                          "Noms automatiques retirés : {count}.", "Nomes automáticos retirados: {count}."),
+    "faces_undo_open": _t("Chiudi LightCraft e riprova.", "Close LightCraft and try again.",
+                          "Schließe LightCraft und versuche es erneut.", "Cierra LightCraft y vuelve a intentarlo.",
+                          "Fermez LightCraft et réessayez.", "Feche o LightCraft e tente de novo."),
+    "faces_undo_failed": _t("Non sono riuscito a togliere i nomi automatici.", "Could not remove the automatic names.",
+                            "Die automatischen Namen konnten nicht entfernt werden.",
+                            "No se pudieron quitar los nombres automáticos.",
+                            "Impossible de retirer les noms automatiques.", "Não foi possível retirar os nomes automáticos."),
     "dng_title": _t("Raw in DNG", "Raw to DNG", "Raw in DNG", "Raw a DNG", "Raw en DNG", "Raw em DNG"),
     "dng_convert": _t("Converti in DNG i raw proprietari (CR2, NEF, ORF, ARW…) prima di importarli",
                       "Convert proprietary raws (CR2, NEF, ORF, ARW…) to DNG before importing them",

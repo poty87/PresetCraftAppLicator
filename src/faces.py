@@ -137,7 +137,8 @@ def maybe_start(settings):
         except OSError:
             continue
         st = state.get(lib) or {}
-        if st.get("snap") == sig:
+        # si rifà anche quando cambiano le impostazioni dei nomi dati da soli (attivati, soglia)
+        if st.get("snap") == sig and st.get("auto") == list(auto_config(settings)):
             continue  # nessuna novità dall'ultima volta
         todo.append(lib)
     if not todo or not detector_ready(cli):
@@ -224,9 +225,161 @@ def _library(settings, cli, lib):
         if not replies or not replies[-1].get("ok") or not res.get("pendingPhotos"):
             break
         _status(running=True, library=name, done=done, total=total, started=started)
+    try:  # nomi dati da soli ai volti molto somiglianti (se chiesto)
+        auto_name(settings, cli, lib)
+    except Exception as e:  # noqa: BLE001
+        log(f"faces ERROR {name}: automatic names: {e!r}")
     if done == total:  # tutto fatto: fino alla prossima modifica del catalogo non si ricontrolla
         try:
             st["snap"] = catalog_signature(lib)
+            st["auto"] = list(auto_config(settings))
         except OSError:
             pass
     save_json(STATE, state)
+
+
+# ---------------------------------------------------------------- nomi dati da soli
+
+AUTO_MARGIN = 0.20  # la seconda persona più somigliante deve stare almeno così sotto (fratelli, genitori e figli)
+AUTO_MIN_KNOWN = 5  # volti a cui hai dato il nome tu, prima di dare quel nome da solo
+AUTO_FILE = "faces-auto.json"
+
+
+def auto_config(settings):
+    """(attivo, somiglianza minima 0..1) dei nomi dati da soli (settings["faces"]: "auto", "auto_min")."""
+    f = settings.get("faces") or {}
+    return bool(f.get("auto")), min(0.99, max(0.5, float(f.get("auto_min") or 0.85)))
+
+
+def auto_path(settings, lib):
+    """Il registro dei nomi dati da soli: nella cartella della libreria (cartella di servizio), altrimenti sul PC."""
+    import hashlib
+    import watcher
+    folder, _libs = watcher.phone_settings(settings)
+    if folder:
+        return os.path.join(watcher.library_dir(folder, lib), AUTO_FILE)
+    digest = hashlib.sha1(os.path.normcase(os.path.normpath(lib)).encode()).hexdigest()[:8]
+    return os.path.join(DATA_DIR, "watch", f"faces-auto-{digest}.json")
+
+
+def rect_of(region):
+    r = region.get("rect") or {}
+    return [round(float(r.get(k, 0)), 4) for k in ("x0", "y0", "x1", "y1")]
+
+
+def same_rect(a, b):
+    return max(abs(float(x) - float(y)) for x, y in zip(a, b)) < 0.003
+
+
+def load_auto(settings, lib):
+    """[{id, rect, name, score, at}] dei nomi dati da soli e non ancora confermati o cambiati."""
+    return [e for e in load_json(auto_path(settings, lib), {}).get("faces") or [] if isinstance(e, dict)]
+
+
+def save_auto(settings, lib, entries):
+    path = auto_path(settings, lib)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    save_json(path, {"version": 1, "library": os.path.basename(os.path.normpath(lib)), "faces": entries})
+
+
+def current_auto(settings, lib, photos):
+    """I nomi dati da soli che sono ancora come li ha lasciati PresetCraftAppLicator (non cambiati da te):
+    {(id della foto, posizione del volto)}."""
+    out = set()
+    for e in load_auto(settings, lib):
+        regions = ((photos.get(str(e.get("id"))) or {}).get("meta") or {}).get("regions") or []
+        for i, r in enumerate(regions):
+            if isinstance(r, dict) and same_rect(rect_of(r), e.get("rect") or [9, 9, 9, 9]) \
+                    and (r.get("name") or "") == e.get("name"):
+                out.add((int(e["id"]), i))
+    return out
+
+
+def forget_auto(settings, lib, faces):
+    """Toglie dal registro i volti [(id, riquadro)] a cui hai dato (o confermato) il nome tu."""
+    entries = load_auto(settings, lib)
+    keep = [e for e in entries if not any(int(e.get("id", -1)) == pid and same_rect(e.get("rect") or [9] * 4, rect)
+                                          for pid, rect in faces)]
+    if len(keep) != len(entries):
+        save_auto(settings, lib, keep)
+
+
+def auto_name(settings, cli, lib):
+    """Dà da solo il nome ai volti che somigliano molto a una persona già conosciuta (somiglianza almeno quella scelta,
+    nessun dubbio con una seconda persona, almeno AUTO_MIN_KNOWN volti con quel nome dati da te). Con LightCraft chiuso,
+    dopo un backup (uno al giorno). Ogni nome finisce nel registro, per riconoscerlo e per poterlo annullare."""
+    on, minimum = auto_config(settings)
+    if not on or library_open_reason(lib) or not detector_ready(cli):
+        return 0
+    photos = read_catalog(lib)["photos"]
+    auto = current_auto(settings, lib, photos)
+    known = {}
+    for p in photos.values():
+        if p.get("deleted"):
+            continue
+        for i, r in enumerate((p.get("meta") or {}).get("regions") or []):
+            if isinstance(r, dict) and r.get("name") and (int(p["id"]), i) not in auto:
+                known[r["name"]] = known.get(r["name"], 0) + 1
+    ids = [int(p["id"]) for p in photos.values() if not p.get("deleted")
+           and any(isinstance(r, dict) and not r.get("name") for r in (p.get("meta") or {}).get("regions") or [])]
+    if not ids or not any(n >= AUTO_MIN_KNOWN for n in known.values()):
+        return 0
+    replies = run_cli(cli, lib, [("faces.suggest", {"ids": ids, "threshold": minimum, "budgetMs": 60000})],
+                      check=False)
+    commands, new = [], []
+    now = datetime.datetime.now().isoformat(timespec="seconds")
+    for p in ((replies[-1].get("result") or {}).get("photos") or []) if replies else []:
+        regions = ((photos.get(str(p["id"])) or {}).get("meta") or {}).get("regions") or []
+        for f in p.get("faces") or []:
+            s = f.get("suggestion") or {}
+            score, name = float(s.get("score") or 0), s.get("name")
+            runner = float((s.get("runnerUp") or {}).get("score") or 0)
+            i = int(f.get("index", -1))
+            if not name or score < minimum or runner > score - AUTO_MARGIN or known.get(name, 0) < AUTO_MIN_KNOWN:
+                continue
+            if not 0 <= i < len(regions) or regions[i].get("name"):
+                continue
+            commands.append(("faces.setName", {"id": int(p["id"]), "index": i, "name": name}))
+            new.append({"id": int(p["id"]), "rect": rect_of(regions[i]), "name": name, "score": round(score, 3),
+                        "at": now})
+    if not commands:
+        return 0
+    state = load_json(STATE)
+    st = state.setdefault(lib, {})
+    today = datetime.date.today().isoformat()
+    if st.get("backup") != today:
+        backup_library(lib, backup_root(lib, settings), settings.get("backups_kept", BACKUPS_KEPT))
+        st["backup"] = today
+        save_json(STATE, state)
+    view = os.path.join(lib, "view.json")
+    try:
+        with open(view, "rb") as fh:
+            saved_view = fh.read()
+    except OSError:
+        saved_view = None
+    try:
+        replies = run_cli(cli, lib, commands, check=False)
+    finally:
+        if saved_view is not None:
+            with open(view, "wb") as fh:
+                fh.write(saved_view)
+    done = [e for e, r in zip(new, replies) if r.get("ok")]
+    save_auto(settings, lib, load_auto(settings, lib) + done)
+    log(f"faces: {os.path.basename(os.path.normpath(lib))}: {len(done)} faces named automatically "
+        f"(similarity >= {minimum:.2f})")
+    return len(done)
+
+
+def undo_auto(settings, cli, lib):
+    """Toglie i nomi dati da soli e mai confermati o cambiati da te. Restituisce quanti; None se LightCraft è aperto."""
+    if library_open_reason(lib):
+        return None
+    photos = read_catalog(lib)["photos"]
+    auto = current_auto(settings, lib, photos)
+    commands = [("faces.setName", {"id": pid, "index": i, "name": ""}) for pid, i in sorted(auto)]
+    if commands:
+        backup_library(lib, backup_root(lib, settings), settings.get("backups_kept", BACKUPS_KEPT))
+        run_cli(cli, lib, commands, check=False)
+        log(f"faces: {os.path.basename(os.path.normpath(lib))}: {len(commands)} automatic names removed")
+    save_auto(settings, lib, [])
+    return len(commands)

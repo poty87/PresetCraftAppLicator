@@ -968,7 +968,7 @@ def library_folder_name(lib):
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(" .") or "library"
 
 
-def build_library_index(lib, suggestions=None):
+def build_library_index(lib, suggestions=None, auto=None):
     """L'indice compatto di una libreria per il telefono: foto (senza le eliminate e i video), metadati, pile e la
     corrispondenza tra unità del PC e cartelle condivise. Chiavi corte: l'indice di 18.000 foto pesa poco."""
     cat = read_catalog(lib)
@@ -1007,6 +1007,8 @@ def build_library_index(lib, suggestions=None):
             guess = (suggestions or {}).get((int(p["id"]), i))
             if guess and not face[4]:
                 face += [guess[0], round(float(guess[1]), 3)]
+            elif face[4] and (int(p["id"]), i) in (auto or set()):
+                face += ["", 0, 1]  # nome dato da solo da PresetCraftAppLicator, da confermare
             faces.append(face)
         if faces:
             d["fr"] = faces
@@ -1036,13 +1038,14 @@ def publish_library_index(lib, folder, state, settings=None):
         return False
     if library_open_reason(lib):
         return False
-    suggestions = {}
+    suggestions, auto = {}, set()
     try:  # chi potrebbero essere i volti senza nome (riconoscimento dei volti di LightCraft, se attivo)
         import faces
         suggestions = faces.suggestions(settings or {}, lib)
+        auto = faces.current_auto(settings or {}, lib, read_catalog(lib)["photos"])
     except Exception as e:  # noqa: BLE001
         log(f"watch: face suggestions for {lib} not available ({e!r})")
-    data = build_library_index(lib, suggestions)
+    data = build_library_index(lib, suggestions, auto)
     os.makedirs(target_dir, exist_ok=True)
     tmp = target + ".tmp"
     with gzip.open(tmp, "wt", encoding="utf-8") as f:
@@ -1183,6 +1186,12 @@ def apply_phone_changes(lib, folder, settings):
             log(f"watch ERROR changes from {XMP_TOOL} for {lib}: {failed[:1] or 'no reply'} (retrying later)")
             return False
         log(f"--- watch: changes from {XMP_TOOL} applied to {len(per_photo)} photos in {lib} (backup: {backup})")
+        try:
+            import faces
+            faces.forget_auto(settings, lib, [(pid, f["rect"]) for pid, ch in per_photo.items()
+                                              for f in ch.get("faces") or [] if isinstance(f, dict) and f.get("rect")])
+        except Exception as e:  # noqa: BLE001
+            log(f"watch: automatic names register not updated ({e!r})")
     done_dir = os.path.join(changes_dir, "done")
     os.makedirs(done_dir, exist_ok=True)
     for name in read:

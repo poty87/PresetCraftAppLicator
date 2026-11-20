@@ -825,6 +825,21 @@ class AutoImportDialog(tk.Toplevel):
         ttk.Button(row, text=t("ai_button"), command=self.open_ai).pack(side="right")
         self.show_ai()
 
+        # volti: nomi dati da soli quando la somiglianza è molto alta (riconoscimento dei volti di LightCraft)
+        ttk.Label(frame, text=t("faces_title").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
+        fcfg = app.settings.get("faces") or {}
+        row = ttk.Frame(frame)
+        row.pack(fill="x")
+        self.faces_auto = tk.BooleanVar(value=bool(fcfg.get("auto")))
+        ttk.Checkbutton(row, text=t("faces_auto"), variable=self.faces_auto).pack(side="left")
+        self.faces_min = tk.IntVar(value=int(round(100 * float(fcfg.get("auto_min") or 0.85))))
+        ttk.Spinbox(row, from_=60, to=99, textvariable=self.faces_min, width=4, state="readonly").pack(
+            side="left", padx=(8, 4))
+        ttk.Label(row, text="%", style="Body.TLabel").pack(side="left")
+        ttk.Button(row, text=t("faces_undo"), command=self.faces_undo).pack(side="right")
+        ttk.Label(frame, text=t("faces_hint"), style="Muted.TLabel", wraplength=720, justify="left").pack(
+            anchor="w", pady=(4, 0))
+
         # raw proprietari in DNG (Adobe DNG Converter)
         ttk.Label(frame, text=t("dng_title").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
         dcfg = app.settings.get("dng") or {}
@@ -879,6 +894,40 @@ class AutoImportDialog(tk.Toplevel):
 
     def lib_name(self, lib):
         return os.path.basename(lib) or lib
+
+    def faces_undo(self):
+        """Toglie i nomi dati da soli e mai confermati (in tutte le librerie del telefono), con LightCraft chiuso."""
+        import faces
+        s = self.app.settings
+        _folder, libs = watcher.phone_settings(s)
+        if any(library_open_reason(lib) for lib in libs):
+            Dialog.ask(self, t("faces_title"), t("faces_undo_open"), None, level="warn")
+            return
+        answer = Dialog.ask(self, t("faces_title"), t("faces_undo_head"), t("faces_undo_body"), level="warn",
+                            buttons=[("cancel", t("btn_cancel"), False), ("undo", t("faces_undo"), True)],
+                            default="cancel")
+        if answer != "undo":
+            return
+        self.configure(cursor="watch")
+
+        def work():
+            cli = s.get("cli") or DEFAULT_CLI
+            total, error = 0, None
+            for lib in libs:
+                try:
+                    total += faces.undo_auto(s, cli, lib) or 0
+                except Exception as e:  # noqa: BLE001
+                    error = e
+                    log(f"ERROR undo automatic names {lib}: {e!r}")
+            self.after(0, lambda: self.faces_undone(total, error))
+        threading.Thread(target=work, daemon=True).start()
+
+    def faces_undone(self, total, error):
+        self.configure(cursor="")
+        if error:
+            Dialog.ask(self, t("faces_title"), t("faces_undo_failed"), str(error), level="error")
+        else:
+            Dialog.ask(self, t("faces_title"), t("faces_undo_done", count=total), None, level="info")
 
     def raw_count(self):
         """Quante foto raw proprietarie ci sono nelle librerie (per la casella dei raw già importati)."""
@@ -1058,6 +1107,8 @@ class AutoImportDialog(tk.Toplevel):
         import dng
         convert = bool(self.dng_convert.get()) and dng.exe() is not None
         s["dng"] = {"convert": convert, "existing": convert and bool(self.dng_existing.get())}
+        s["faces"] = {**(s.get("faces") or {}), "auto": bool(self.faces_auto.get()),
+                      "auto_min": max(60, min(99, int(self.faces_min.get()))) / 100}
         enabled = bool(self.enabled.get()) and bool(self.rules or phone_libs)
         try:
             # prima lo stato delle regole nuove, poi le impostazioni: il processo in background non vede mai una
