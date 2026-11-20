@@ -690,6 +690,10 @@ def cycle(rule, settings, finder, status=None, now=None):
             photo_of[(os.path.normcase(os.path.dirname(path)),
                       os.path.normcase(os.path.splitext(os.path.basename(path))[0]))] = pid
     xmp_todo = {}  # .xmp -> (id della foto, metadati, firma del file)
+    # .xmp di foto che entrano in libreria in questo giro: applicati subito dopo l'importazione, con lo stesso backup
+    ready_of = {(os.path.normcase(os.path.dirname(p)), os.path.normcase(os.path.splitext(os.path.basename(p))[0])): p
+                for p in ready}
+    later_xmp = {}  # .xmp -> (DNG in arrivo, metadati, firma del file)
     for path, (size, mtime) in sidecars.items():
         k, sig = key(path), [size, mtime]
         if seen_xmp.get(k) == sig:
@@ -706,6 +710,11 @@ def cycle(rule, settings, finder, status=None, now=None):
                             os.path.normcase(os.path.splitext(os.path.basename(path))[0])))
         if pid is not None:  # altrimenti il DNG non è ancora in libreria: si riprova al prossimo giro
             xmp_todo[path] = (pid, meta, sig)
+        else:
+            dng_path = ready_of.get((os.path.normcase(os.path.dirname(path)),
+                                     os.path.normcase(os.path.splitext(os.path.basename(path))[0])))
+            if dng_path:
+                later_xmp[path] = (dng_path, meta, sig)
     preset_todo = {pid: meta["preset"] for _p, (pid, meta, _s) in xmp_todo.items()
                    if meta["preset"] is not None and phone.get(str(pid), "") != meta["preset"]}
     uploads = preset_uploads(pdir)
@@ -812,6 +821,17 @@ def cycle(rule, settings, finder, status=None, now=None):
         if ready:
             log(f"watch: imported {summary['imported']} of {len(ready)}" +
                 (f", not imported: {summary['failed']}" if summary["failed"] else ""))
+        # i metadati del telefono delle foto appena importate: nello stesso giro (un solo backup)
+        if later_xmp and summary["imported"]:
+            fresh = LibraryIndex.of(lib)
+            for xpath, (dng_path, meta, sig) in later_xmp.items():
+                pid = fresh.find(dng_path, files[dng_path][0])
+                if pid is None:
+                    continue  # non entrata: si riprova al prossimo giro
+                xmp_todo[xpath] = (pid, meta, sig)
+                names[os.path.splitext(os.path.basename(dng_path))[0].lower()] = pid
+                if meta["preset"] is not None and phone.get(str(pid), "") != meta["preset"]:
+                    preset_todo[pid] = meta["preset"]
         # preset caricati dal telefono: prima di tutto, così sono già in libreria se una foto li sceglie
         if uploads and not library_open_reason(lib):
             import_uploads(cli, rule, state, uploads, summary, pdir)
