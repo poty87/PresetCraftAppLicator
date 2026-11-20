@@ -20,7 +20,7 @@ import tempfile
 import threading
 import time
 
-from lightcraft import (DATA_DIR, DEFAULT_CLI, NO_WINDOW, is_cli, library_open_reason, log, own_cli, read_catalog,
+from lightcraft import (DATA_DIR, DEFAULT_CLI, NO_WINDOW, catalog_signature, is_cli, library_open_reason, log, own_cli, read_catalog,
                         read_prefs)
 
 PREVIEWS_DIR = "previews"
@@ -262,8 +262,7 @@ def running():
 
 
 def snap_signature(lib):
-    st = os.stat(os.path.join(lib, "catalog.snap"))
-    return [st.st_size, st.st_mtime_ns, FORMAT]
+    return catalog_signature(lib) + [FORMAT]
 
 
 def maybe_start(settings):

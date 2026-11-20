@@ -6,6 +6,7 @@ mai scrivendo i file della libreria a mano.
 
 import ctypes
 import datetime
+import hashlib
 import json
 import os
 import shutil
@@ -36,70 +37,113 @@ def log(text):
         f.write(f"{stamp} {text}\n")
 
 
-# lightcraft-cli avviati da PresetCraftAppLicator senza libreria (anteprime sviluppate): non toccano le librerie, quindi
-# non contano come "LightCraft aperto". Tenuti anche in un file, perché la finestra dell'app (un altro processo) li
-# riconosca (elenco dei pid)
+# lightcraft-cli avviati da PresetCraftAppLicator: non sono "LightCraft aperto". Quelli senza libreria (anteprime
+# sviluppate) non toccano le librerie; quelli su una libreria (importazione, modifiche dal telefono, ricerca dei volti)
+# nello stesso processo passano uno alla volta (run_cli), e per gli altri processi (la finestra dell'app) la libreria è
+# "occupata da PresetCraftAppLicator". Tenuti in un file, perché tutti i processi li riconoscano: {pid: libreria o ""}
 OWN_FILE = os.path.join(DATA_DIR, "watch", "own-cli.json")
-OWN_PIDS = set()
+OWN = {}  # quelli di questo processo
 _own_lock = threading.Lock()
 
 
-def _save_own():
+def _read_own_file():
     try:
-        os.makedirs(os.path.dirname(OWN_FILE), exist_ok=True)
-        tmp = OWN_FILE + f".{os.getpid()}.tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(sorted(OWN_PIDS), f)
-        os.replace(tmp, OWN_FILE)
-    except OSError:
-        pass
+        with open(OWN_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if isinstance(data, list):  # formato della 1.20
+        return {int(x): "" for x in data}
+    return {int(k): v or "" for k, v in data.items()} if isinstance(data, dict) else {}
 
 
-def own_cli(pid, running):
-    """Segna (o toglie) un lightcraft-cli avviato da noi senza libreria."""
+def own_cli(pid, running, lib=""):
+    """Segna (o toglie) un lightcraft-cli avviato da noi (lib: la libreria su cui lavora, "" se nessuna)."""
     with _own_lock:
         if running:
-            OWN_PIDS.add(pid)
+            OWN[pid] = lib or ""
         else:
-            OWN_PIDS.discard(pid)
-        _save_own()
+            OWN.pop(pid, None)
+        try:
+            os.makedirs(os.path.dirname(OWN_FILE), exist_ok=True)
+            # nel file restano anche quelli degli altri processi (ancora vivi: controllati da chi legge)
+            data = {k: v for k, v in _read_own_file().items() if k not in OWN and k != pid}
+            data.update(OWN)
+            tmp = OWN_FILE + f".{os.getpid()}.tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({str(k): v for k, v in data.items()}, f)
+            os.replace(tmp, OWN_FILE)
+        except OSError:
+            pass
 
 
 def own_pids():
-    try:
-        with open(OWN_FILE, encoding="utf-8") as f:
-            return OWN_PIDS | {int(x) for x in json.load(f)}
-    except (OSError, ValueError, TypeError):
-        return set(OWN_PIDS)
+    return set(OWN) | set(_read_own_file())
 
 
-def lightcraft_running():
-    """Nomi dei processi LightCraft in esecuzione (app o riga di comando), esclusi i nostri senza libreria."""
-    own = own_pids()
+def _tasks():
+    """{pid: nome in minuscolo} dei processi LightCraft in esecuzione."""
     out = subprocess.run(["tasklist", "/fo", "csv", "/nh"], capture_output=True, text=True,
                          creationflags=NO_WINDOW).stdout
-    names = set()
+    found = {}
     for line in out.splitlines():
         parts = [x.strip('"') for x in line.split('","')]
         if len(parts) < 2:
             continue
         name = parts[0].lower()
-        try:
-            pid = int(parts[1])
-        except ValueError:
-            pid = None
-        if name in ("lightcraft.exe", "lightcraft-cli.exe") and pid not in own:
-            names.add(name)
-    return sorted(names)
+        if name in ("lightcraft.exe", "lightcraft-cli.exe"):
+            try:
+                found[int(parts[1])] = name
+            except ValueError:
+                pass
+    return found
+
+
+def lightcraft_running():
+    """Nomi dei processi LightCraft in esecuzione (app o riga di comando), esclusi quelli avviati da noi."""
+    own = own_pids()
+    return sorted({name for pid, name in _tasks().items() if pid not in own})
+
+
+def _same(a, b):
+    return os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(b))
 
 
 def library_open_reason(lib):
     """Chiave del testo che spiega perché la libreria non si può modificare adesso, oppure None."""
-    if lightcraft_running():
+    tasks = _tasks()
+    own = own_pids()
+    if any(pid not in own for pid in tasks):
         return "st_open_app"
-    if os.path.exists(os.path.join(lib, "catalog.lock.owner")):
+    # un nostro lightcraft-cli su questa libreria: di questo processo aspetta il suo turno (run_cli), di un altro
+    # processo (il processo in background mentre la finestra è aperta) la rende occupata per un po'
+    others = {pid for pid, l in _read_own_file().items() if l and _same(l, lib) and pid in tasks and pid not in OWN}
+    if others:
+        return "st_busy_pca"
+    ours = any(l and _same(l, lib) for l in OWN.values())
+    if os.path.exists(os.path.join(lib, "catalog.lock.owner")) and not ours:
         return "st_open_lock"
     return None
+
+
+_signatures = {}  # catalogo -> (dimensione, data, impronta)
+
+
+def catalog_signature(lib):
+    """[dimensione, impronta del contenuto] di catalog.snap: cambia solo se cambia il catalogo. lightcraft-cli riscrive
+    il file ogni volta che apre la libreria, anche solo per leggere: con la data i lavori in background si
+    rimetterebbero in moto a vicenda. L'impronta si ricalcola solo se dimensione o data sono cambiate."""
+    path = os.path.join(lib, "catalog.snap")
+    st = os.stat(path)
+    known = _signatures.get(path)
+    if known and known[0] == st.st_size and known[1] == st.st_mtime_ns:
+        return [st.st_size, known[2]]
+    h = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(4 * 1024 * 1024), b""):
+            h.update(chunk)
+    _signatures[path] = (st.st_size, st.st_mtime_ns, h.hexdigest())
+    return [st.st_size, h.hexdigest()]
 
 
 def is_library(lib):
@@ -197,18 +241,33 @@ def in_scope(imported, scope, batches):
     return True
 
 
+_cli_lock = threading.Lock()  # un solo lightcraft-cli alla volta su una libreria, da questo processo
+
+
 def run_cli(cli, lib, commands, check=True):
     """Esegue comandi con lightcraft-cli sulla libreria; restituisce le risposte JSON.
 
-    check=False restituisce le risposte anche se qualche comando è stato rifiutato.
+    check=False restituisce le risposte anche se qualche comando è stato rifiutato. Nello stesso processo i comandi
+    sulle librerie non si sovrappongono mai (importazione, modifiche dal telefono, ricerca dei volti).
     """
+    with _cli_lock:
+        return _run_cli(cli, lib, commands, check)
+
+
+def _run_cli(cli, lib, commands, check):
     fd, script = tempfile.mkstemp(suffix=".jsonl", prefix="presetcraft-")
     with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
         for name, params in commands:
             f.write(json.dumps({"command": name, "params": params}) + "\n")
     try:
-        r = subprocess.run([cli, "run", "--library", lib, "--script", script],
-                           capture_output=True, text=True, encoding="utf-8", creationflags=NO_WINDOW)
+        p = subprocess.Popen([cli, "run", "--library", lib, "--script", script], stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, text=True, encoding="utf-8", creationflags=NO_WINDOW)
+        own_cli(p.pid, True, lib)
+        try:
+            out, err = p.communicate()
+        finally:
+            own_cli(p.pid, False)
+        r = subprocess.CompletedProcess(p.args, p.returncode, out, err)
     finally:
         os.remove(script)
     replies = []

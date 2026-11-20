@@ -65,6 +65,13 @@
    "photos": 1,
    "prefer": true
   },
+  "pentax:265": {
+   "style": "HDR Tone",
+   "file": "HDR Tone.cube",
+   "name": "Measured HDR Tone",
+   "photos": 1,
+   "prefer": true
+  },
   "pentax:266": {
    "style": "Cross Processing",
    "file": "Cross Processing.cube",

@@ -27,7 +27,8 @@ import time
 
 import camera_styles as cs
 import matcher
-from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, backup_library, backup_root, is_cli, is_library,
+from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, backup_library, backup_root, catalog_signature, is_cli,
+                        is_library,
                         library_open_reason, lightcraft_running, log, read_catalog, run_cli)
 
 SETTINGS = os.path.join(DATA_DIR, "settings.json")
@@ -718,6 +719,27 @@ def cycle(rule, settings, finder, status=None, now=None):
         status.set(phase="incoming", count=len(pending), library=lib_name, quiet_left=int(quiet - still))
         save()
         return FAST_POLL
+    # raw proprietari (CR2, NEF, ORF…): se chiesto, prima in DNG con Adobe DNG Converter; in libreria entra il DNG
+    # (al prossimo controllo, come una foto nuova), l'originale resta nella cartella, segnato come già visto. Se la
+    # conversione non riesce entra il raw com'è.
+    import dng
+    if ready and dng.enabled(settings) and dng.exe():
+        raws = [p for p in ready if dng.convertible(p)]
+        for i, path in enumerate(raws, 1):
+            status.set(phase="converting", count=len(raws), done=i, library=lib_name)
+            try:
+                dest = dng.convert(path)
+            except Exception as e:  # noqa: BLE001
+                log(f"watch: {path} not converted to DNG ({e!r}), importing it as it is")
+                continue
+            handled.add(key(path))
+            pending.pop(key(path), None)
+            ready.remove(path)
+            log(f"watch: {path} -> {os.path.basename(dest)}")
+        if raws and not ready:
+            state["changed"] = time.time()  # i DNG appena scritti sono foto nuove: si aspetta che siano fermi
+            save()
+            return FAST_POLL
     if not ready and not profile_ids and not xmp_todo and not uploads:
         state.pop("waiting", None)
         save()
@@ -875,6 +897,7 @@ def watch_settings(settings):
 # ---------------------------------------------------------------- librerie consultabili dal telefono
 
 PHONE_INDEX = "index.json.gz"
+PHONE_INDEX_FORMAT = 3  # cambia quando l'indice porta campi nuovi (2: persone e volti, 3: suggerimenti): si ripubblica
 PHONE_STATE = os.path.join(STATE_DIR, "phone-libraries.json")
 # la cartella di servizio sul NAS: tutto quello che PresetCraftAppLicator prepara per il telefono e per ripartire
 LIBRARIES_DIR = "libraries"  # <libreria>/: indice, modifiche dal telefono (changes), ricerca IA (ia), anteprime
@@ -945,7 +968,7 @@ def library_folder_name(lib):
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(" .") or "library"
 
 
-def build_library_index(lib):
+def build_library_index(lib, suggestions=None):
     """L'indice compatto di una libreria per il telefono: foto (senza le eliminate e i video), metadati, pile e la
     corrispondenza tra unità del PC e cartelle condivise. Chiavi corte: l'indice di 18.000 foto pesa poco."""
     cat = read_catalog(lib)
@@ -968,6 +991,25 @@ def build_library_index(lib):
                 d[short] = m[name]
         if m.get("keywords"):
             d["kw"] = list(m["keywords"])
+        # persone (e animali) a cui hai dato un nome in LightCraft (volti riconosciuti)
+        people = sorted({(r.get("name") or "").strip() for r in m.get("regions") or []
+                         if isinstance(r, dict) and (r.get("name") or "").strip()})
+        if people:
+            d["pe"] = people
+        # i riquadri dei volti trovati da LightCraft, nell'ordine di LightCraft: [x0, y0, x1, y1, nome] (0..1, foto
+        # dritta); il telefono li mostra per dare un nome
+        # per i volti senza nome, il suggerimento di LightCraft: [..., nome, chi potrebbe essere, somiglianza 0..1]
+        faces = []
+        for i, r in enumerate(m.get("regions") or []):
+            if not isinstance(r, dict) or not isinstance(r.get("rect"), dict):
+                continue
+            face = [round(float(r["rect"].get(k, 0)), 4) for k in ("x0", "y0", "x1", "y1")] + [(r.get("name") or "").strip()]
+            guess = (suggestions or {}).get((int(p["id"]), i))
+            if guess and not face[4]:
+                face += [guess[0], round(float(guess[1]), 3)]
+            faces.append(face)
+        if faces:
+            d["fr"] = faces
         if p.get("copy_of"):  # copia virtuale: stesso file, sviluppo diverso
             d["co"], d["cn"] = int(p["copy_of"]), p.get("copy_name") or ""
         if p.get("edited"):
@@ -984,19 +1026,23 @@ def build_library_index(lib):
             "drives": mapped_drives(), "photos": photos, "stacks": stacks}
 
 
-def publish_library_index(lib, folder, state):
+def publish_library_index(lib, folder, state, settings=None):
     """Scrive (o aggiorna) l'indice di una libreria nella cartella del telefono, se il catalogo è cambiato e
     LightCraft è chiuso (con LightCraft aperto le ultime modifiche non sono ancora nel catalogo). True se scritto."""
-    snap = os.path.join(lib, "catalog.snap")
-    st = os.stat(snap)
-    sig = [st.st_size, st.st_mtime_ns]
+    sig = catalog_signature(lib) + [PHONE_INDEX_FORMAT]
     target_dir = library_dir(folder, lib)
     target = os.path.join(target_dir, PHONE_INDEX)
     if state.get(lib) == sig and os.path.exists(target):
         return False
     if library_open_reason(lib):
         return False
-    data = build_library_index(lib)
+    suggestions = {}
+    try:  # chi potrebbero essere i volti senza nome (riconoscimento dei volti di LightCraft, se attivo)
+        import faces
+        suggestions = faces.suggestions(settings or {}, lib)
+    except Exception as e:  # noqa: BLE001
+        log(f"watch: face suggestions for {lib} not available ({e!r})")
+    data = build_library_index(lib, suggestions)
     os.makedirs(target_dir, exist_ok=True)
     tmp = target + ".tmp"
     with gzip.open(tmp, "wt", encoding="utf-8") as f:
@@ -1005,7 +1051,9 @@ def publish_library_index(lib, folder, state):
     save_json(os.path.join(target_dir, "info.json"),
               {"version": 1, "library": data["library"], "photos": len(data["photos"]), "stacks": len(data["stacks"]),
                "updated": data["updated"]})
-    state[lib] = sig
+    # lightcraft-cli riscrive il catalogo quando si chiude (anche solo per i suggerimenti): conta il catalogo di adesso,
+    # altrimenti al giro dopo sembrerebbe cambiato e l'indice si rifarebbe ogni volta
+    state[lib] = catalog_signature(lib) + [PHONE_INDEX_FORMAT]
     log(f"watch: library index for {XMP_TOOL}: {data['library']} ({len(data['photos'])} photos, "
         f"{len(data['stacks'])} stacks)")
     return True
@@ -1015,10 +1063,37 @@ PHONE_LABELS = {"red", "yellow", "green", "blue", "purple", "none"}
 PHONE_FLAGS = {"pick", "reject", "none"}
 
 
-def phone_change_commands(change):
-    """I comandi di lightcraft-cli per una modifica del telefono: solo i campi presenti, gli altri restano com'erano."""
+def face_index(regions, rect):
+    """La posizione, tra i volti della foto in LightCraft, del riquadro `rect` [x0, y0, x1, y1] visto dal telefono
+    (lo stesso riquadro, a meno degli arrotondamenti), oppure None se non c'è più."""
+    best = None
+    for i, r in enumerate(regions or []):
+        rr = r.get("rect") if isinstance(r, dict) else None
+        if not isinstance(rr, dict):
+            continue
+        try:
+            d = max(abs(float(rr.get(k, 9)) - float(v)) for k, v in zip(("x0", "y0", "x1", "y1"), rect))
+        except (TypeError, ValueError):
+            continue
+        if d < 0.003 and (best is None or d < best[0]):
+            best = (d, i)
+    return best[1] if best else None
+
+
+def phone_change_commands(change, regions=None):
+    """I comandi di lightcraft-cli per una modifica del telefono: solo i campi presenti, gli altri restano com'erano.
+    `regions`: i volti della foto in LightCraft (per i nomi dati sul telefono)."""
     ids = [int(change["id"])]
     cmds = []
+    # nomi dati ai volti sul telefono: [{rect, name}] ("" = togli il nome)
+    for face in change.get("faces") or []:
+        if not isinstance(face, dict) or not isinstance(face.get("rect"), list) or len(face["rect"]) != 4:
+            continue
+        i = face_index(regions, face["rect"])
+        if i is None:
+            log(f"watch: face {face['rect']} of photo {ids[0]} not in LightCraft any more, name not set")
+            continue
+        cmds.append(("faces.setName", {"id": ids[0], "index": i, "name": str(face.get("name") or "").strip()}))
     if isinstance(change.get("rating"), int) and 0 <= change["rating"] <= 5:
         cmds.append(("photo.rate", {"ids": ids, "rating": change["rating"]}))
     if change.get("flag") in PHONE_FLAGS:
@@ -1057,7 +1132,8 @@ def phone_stack_commands(per_photo, known):
 
 
 def apply_phone_changes(lib, folder, settings):
-    """Le modifiche fatte sul telefono (stelle, bandierine, etichette, titolo, didascalia, parole chiave, cestino, pile), lasciate da
+    """Le modifiche fatte sul telefono (stelle, bandierine, etichette, titolo, didascalia, parole chiave, cestino, pile,
+    nomi dei volti), lasciate da
     ViewerCraftStar in <cartella>/libraries/<libreria>/changes/*.json: applicate con LightCraft chiuso, dopo un backup; i file
     applicati vanno in changes/done. Se lightcraft-cli non riesce, restano e si riprovano al giro dopo."""
     changes_dir = os.path.join(library_dir(folder, lib), "changes")
@@ -1084,17 +1160,19 @@ def apply_phone_changes(lib, folder, settings):
                 pid, at = int(ch["id"]), int(ch.get("at") or 0)
             except (KeyError, TypeError, ValueError):
                 continue
-            for field in ("rating", "flag", "label", "title", "caption", "keywords", "trash", "stack"):
+            for field in ("rating", "flag", "label", "title", "caption", "keywords", "trash", "stack", "faces"):
                 if field in ch and (at, ) >= (latest.get((pid, field), (-1, None))[0], ):
                     latest[(pid, field)] = (at, ch[field])
     if not read:
         return False
-    known = {int(k) for k in read_catalog(lib)["photos"]}
+    catalog = read_catalog(lib)["photos"]
+    known = {int(k) for k in catalog}
     per_photo = {}
     for (pid, field), (_at, value) in latest.items():
         if pid in known:
             per_photo.setdefault(pid, {"id": pid})[field] = value
-    commands = [cmd for ch in per_photo.values() for cmd in phone_change_commands(ch)]
+    commands = [cmd for ch in per_photo.values() for cmd in phone_change_commands(
+        ch, ((catalog.get(str(ch["id"])) or {}).get("meta") or {}).get("regions"))]
     commands += phone_stack_commands(per_photo, known)
     if commands:
         root, kept = backup_root(lib, settings), settings.get("backups_kept", BACKUPS_KEPT)
@@ -1172,7 +1250,7 @@ def publish_phone_libraries(settings):
         except Exception as e:  # noqa: BLE001
             log(f"watch ERROR changes from {XMP_TOOL} for {lib}: {e!r}")
         try:
-            changed |= publish_library_index(lib, folder, state)
+            changed |= publish_library_index(lib, folder, state, settings)
         except Exception as e:  # noqa: BLE001 — una libreria che non si legge non ferma le altre
             log(f"watch ERROR library index {lib}: {e!r}")
     if changed:
@@ -1269,14 +1347,35 @@ class Watcher:
                     save_settings_copy(settings)
                 except Exception as e:  # noqa: BLE001
                     log(f"watch ERROR settings copy: {e!r}")
+                # prima i raw in DNG: finché la conversione dei raw già in libreria è in corso, anteprime, volti e
+                # motore IA aspettano (lavorerebbero su foto che stanno per essere sostituite); poi ripartono da soli
+                converting = False
+                try:
+                    import dng
+                    dng.maybe_start(settings)
+                    converting = dng.running()
+                except Exception as e:  # noqa: BLE001
+                    log(f"watch ERROR dng: {e!r}")
                 try:  # anteprime sviluppate per il telefono (thread a priorità minima)
                     import developed
-                    developed.maybe_start(settings)
+                    if converting:
+                        developed.stop()
+                    else:
+                        developed.maybe_start(settings)
                 except Exception as e:  # noqa: BLE001
                     log(f"watch ERROR previews: {e!r}")
+                try:  # volti: LightCraft li cerca nelle foto mai analizzate (thread, con LightCraft chiuso)
+                    import faces
+                    if converting:
+                        faces.stop()
+                    else:
+                        faces.maybe_start(settings)
+                except Exception as e:  # noqa: BLE001
+                    log(f"watch ERROR faces: {e!r}")
                 try:  # ricerca IA: impronte delle foto nuove (processo a parte, a bassa priorità)
                     import ai
-                    ai.maybe_start(settings, log)
+                    if not converting:
+                        ai.maybe_start(settings, log)
                 except Exception as e:  # noqa: BLE001 — il motore IA non deve fermare l'importazione
                     log(f"watch ERROR ai: {e!r}")
                 next_check = time.time() + pause
@@ -1293,6 +1392,10 @@ class Watcher:
             try:
                 import developed
                 developed.stop()
+                import faces
+                faces.stop()
+                import dng
+                dng.stop()
             except Exception:  # noqa: BLE001
                 pass
             try:

@@ -86,6 +86,9 @@ def describe(s):
     elif phase == "metadata":
         main = t("tray_metadata", count=s.get("count", 0))
         sub = lib
+    elif phase == "converting":
+        main = t("tray_converting", done=s.get("done", 0), count=s.get("count", 0))
+        sub = lib
     elif phase == "error":
         main = t("tray_error")
         sub = (s.get("error") or "")[:90]

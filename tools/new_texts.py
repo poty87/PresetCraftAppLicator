@@ -1765,6 +1765,94 @@ NEW.update({
     "wz_error": _t("Non sono riuscito a salvare la configurazione.", "Could not save the setup.",
                    "Die Einrichtung konnte nicht gespeichert werden.", "No se pudo guardar la configuración.",
                    "Impossible d'enregistrer la configuration.", "Não foi possível guardar a configuração."),
+    "st_busy_pca": _t("PresetCraftAppLicator sta lavorando sulla libreria in background: tra poco è libera.",
+                      "PresetCraftAppLicator is working on the library in the background: it will be free shortly.",
+                      "PresetCraftAppLicator arbeitet im Hintergrund an der Bibliothek: gleich ist sie frei.",
+                      "PresetCraftAppLicator está trabajando en la biblioteca en segundo plano: enseguida queda libre.",
+                      "PresetCraftAppLicator travaille sur la bibliothèque en arrière-plan : elle sera libre sous peu.",
+                      "O PresetCraftAppLicator está a trabalhar na biblioteca em segundo plano: daqui a pouco fica livre."),
+    "dng_title": _t("Raw in DNG", "Raw to DNG", "Raw in DNG", "Raw a DNG", "Raw en DNG", "Raw em DNG"),
+    "dng_convert": _t("Converti in DNG i raw proprietari (CR2, NEF, ORF, ARW…) prima di importarli",
+                      "Convert proprietary raws (CR2, NEF, ORF, ARW…) to DNG before importing them",
+                      "Proprietäre Raws (CR2, NEF, ORF, ARW…) vor dem Import in DNG umwandeln",
+                      "Convertir a DNG los raw propietarios (CR2, NEF, ORF, ARW…) antes de importarlos",
+                      "Convertir en DNG les raw propriétaires (CR2, NEF, ORF, ARW…) avant de les importer",
+                      "Converter em DNG os raw proprietários (CR2, NEF, ORF, ARW…) antes de os importar"),
+    "dng_existing": _t("Converti anche quelli già nelle librerie ({count})", "Also convert those already in the libraries ({count})",
+                       "Auch die schon in den Bibliotheken umwandeln ({count})",
+                       "Convertir también los que ya están en las bibliotecas ({count})",
+                       "Convertir aussi ceux déjà dans les bibliothèques ({count})",
+                       "Converter também os que já estão nas bibliotecas ({count})"),
+    "dng_hint": _t(
+        "Con Adobe DNG Converter (gratuito). Il DNG nasce accanto al raw, con lo stesso nome, ed è quello che entra in "
+        "LightCraft: così anche i raw che LightCraft non sa leggere si sviluppano. L'originale resta nella cartella. "
+        "Per i raw già importati il DNG prende stelle, bandierina, etichetta, testi, parole chiave, sviluppo, pila e "
+        "album del raw, che va nel cestino di LightCraft (il file resta sul NAS); prima un backup.",
+        "With Adobe DNG Converter (free). The DNG is written next to the raw, with the same name, and it is what enters "
+        "LightCraft: so even raws LightCraft can't read get developed. The original stays in the folder. For raws "
+        "already imported the DNG takes the raw's stars, flag, label, texts, keywords, development, stack and albums, "
+        "and the raw goes to LightCraft's trash (the file stays on the NAS); a backup first.",
+        "Mit Adobe DNG Converter (kostenlos). Das DNG entsteht neben dem Raw, mit demselben Namen, und kommt in "
+        "LightCraft: so lassen sich auch Raws entwickeln, die LightCraft nicht lesen kann. Das Original bleibt im "
+        "Ordner. Bei schon importierten Raws übernimmt das DNG Sterne, Markierung, Farbe, Texte, Stichwörter, "
+        "Entwicklung, Stapel und Alben; das Raw kommt in den Papierkorb von LightCraft (die Datei bleibt auf dem NAS); "
+        "vorher ein Backup.",
+        "Con Adobe DNG Converter (gratuito). El DNG se crea junto al raw, con el mismo nombre, y es lo que entra en "
+        "LightCraft: así se revelan también los raw que LightCraft no sabe leer. El original se queda en la carpeta. "
+        "Para los raw ya importados el DNG toma estrellas, bandera, etiqueta, textos, palabras clave, revelado, pila y "
+        "álbumes del raw, que va a la papelera de LightCraft (el archivo se queda en el NAS); antes, una copia.",
+        "Avec Adobe DNG Converter (gratuit). Le DNG est créé à côté du raw, avec le même nom, et c'est lui qui entre "
+        "dans LightCraft : ainsi même les raw que LightCraft ne sait pas lire se développent. L'original reste dans le "
+        "dossier. Pour les raw déjà importés, le DNG reprend étoiles, drapeau, libellé, textes, mots-clés, "
+        "développement, pile et albums du raw, qui va dans la corbeille de LightCraft (le fichier reste sur le NAS) ; "
+        "une sauvegarde d'abord.",
+        "Com o Adobe DNG Converter (gratuito). O DNG é criado ao lado do raw, com o mesmo nome, e é ele que entra no "
+        "LightCraft: assim revelam-se também os raw que o LightCraft não sabe ler. O original fica na pasta. Para os "
+        "raw já importados o DNG fica com as estrelas, bandeira, etiqueta, textos, palavras-chave, revelação, pilha e "
+        "álbuns do raw, que vai para o lixo do LightCraft (o ficheiro fica no NAS); antes, uma cópia de segurança."),
+    "dng_installed": _t("Adobe DNG Converter installato", "Adobe DNG Converter installed", "Adobe DNG Converter installiert",
+                        "Adobe DNG Converter instalado", "Adobe DNG Converter installé", "Adobe DNG Converter instalado"),
+    "dng_missing": _t("Adobe DNG Converter non è installato", "Adobe DNG Converter is not installed",
+                      "Adobe DNG Converter ist nicht installiert", "Adobe DNG Converter no está instalado",
+                      "Adobe DNG Converter n'est pas installé", "O Adobe DNG Converter não está instalado"),
+    "dng_install": _t("Installa Adobe DNG Converter", "Install Adobe DNG Converter", "Adobe DNG Converter installieren",
+                      "Instalar Adobe DNG Converter", "Installer Adobe DNG Converter", "Instalar o Adobe DNG Converter"),
+    "dng_installing": _t("Installazione in corso…", "Installing…", "Wird installiert…", "Instalando…",
+                         "Installation…", "A instalar…"),
+    "dng_install_head": _t("Installare Adobe DNG Converter?", "Install Adobe DNG Converter?",
+                           "Adobe DNG Converter installieren?", "¿Instalar Adobe DNG Converter?",
+                           "Installer Adobe DNG Converter ?", "Instalar o Adobe DNG Converter?"),
+    "dng_install_body": _t(
+        "È il programma gratuito di Adobe che converte i raw in DNG. PresetCraftAppLicator lo scarica da Adobe e lo "
+        "installa con winget, il gestore dei programmi di Windows: Windows chiederà l'autorizzazione. Installandolo "
+        "accetti la licenza di Adobe.",
+        "It is Adobe's free program that converts raws to DNG. PresetCraftAppLicator downloads it from Adobe and "
+        "installs it with winget, Windows' package manager: Windows will ask for permission. By installing it you "
+        "accept Adobe's licence.",
+        "Das kostenlose Programm von Adobe, das Raws in DNG umwandelt. PresetCraftAppLicator lädt es von Adobe herunter "
+        "und installiert es mit winget, der Paketverwaltung von Windows: Windows fragt nach der Erlaubnis. Mit der "
+        "Installation akzeptierst du die Lizenz von Adobe.",
+        "Es el programa gratuito de Adobe que convierte los raw a DNG. PresetCraftAppLicator lo descarga de Adobe y lo "
+        "instala con winget, el gestor de programas de Windows: Windows pedirá permiso. Al instalarlo aceptas la "
+        "licencia de Adobe.",
+        "C'est le programme gratuit d'Adobe qui convertit les raw en DNG. PresetCraftAppLicator le télécharge chez "
+        "Adobe et l'installe avec winget, le gestionnaire de paquets de Windows : Windows demandera l'autorisation. En "
+        "l'installant, vous acceptez la licence d'Adobe.",
+        "É o programa gratuito da Adobe que converte os raw em DNG. O PresetCraftAppLicator descarrega-o da Adobe e "
+        "instala-o com o winget, o gestor de programas do Windows: o Windows pedirá autorização. Ao instalá-lo aceita "
+        "a licença da Adobe."),
+    "dng_install_failed": _t("Installazione non riuscita.", "Installation failed.", "Installation fehlgeschlagen.",
+                             "La instalación no se completó.", "L'installation a échoué.", "A instalação falhou."),
+    "dng_line": _t("Conversione in DNG: {library} {done} di {total}", "Converting to DNG: {library} {done} of {total}",
+                   "Umwandlung in DNG: {library} {done} von {total}", "Conversión a DNG: {library} {done} de {total}",
+                   "Conversion en DNG : {library} {done} sur {total}", "Conversão em DNG: {library} {done} de {total}"),
+    "tray_converting": _t("Converto in DNG: {done} di {count}", "Converting to DNG: {done} of {count}",
+                          "Umwandlung in DNG: {done} von {count}", "Convirtiendo a DNG: {done} de {count}",
+                          "Conversion en DNG : {done} sur {count}", "A converter em DNG: {done} de {count}"),
+    "faces_line": _t("Ricerca dei volti: {library} {done} di {total}", "Looking for faces: {library} {done} of {total}",
+                     "Gesichtersuche: {library} {done} von {total}", "Búsqueda de caras: {library} {done} de {total}",
+                     "Recherche des visages : {library} {done} sur {total}",
+                     "Procura de rostos: {library} {done} de {total}"),
     "previews_line": _t("Anteprime sviluppate: {library} {done} di {total}",
                         "Developed previews: {library} {done} of {total}",
                         "Entwickelte Vorschauen: {library} {done} von {total}",

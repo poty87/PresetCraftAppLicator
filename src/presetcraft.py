@@ -825,6 +825,24 @@ class AutoImportDialog(tk.Toplevel):
         ttk.Button(row, text=t("ai_button"), command=self.open_ai).pack(side="right")
         self.show_ai()
 
+        # raw proprietari in DNG (Adobe DNG Converter)
+        ttk.Label(frame, text=t("dng_title").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
+        dcfg = app.settings.get("dng") or {}
+        self.dng_convert = tk.BooleanVar(value=bool(dcfg.get("convert")))
+        self.dng_existing = tk.BooleanVar(value=bool(dcfg.get("existing")))
+        row = ttk.Frame(frame)
+        row.pack(fill="x")
+        ttk.Checkbutton(row, text=t("dng_convert"), variable=self.dng_convert,
+                        command=self.dng_changed).pack(side="left")
+        self.dng_state = ttk.Label(row, style="Muted.TLabel")
+        self.dng_state.pack(side="left", padx=(12, 0))
+        self.dng_install_btn = ttk.Button(row, text=t("dng_install"), command=self.dng_install)
+        ttk.Checkbutton(frame, text=t("dng_existing", count=self.raw_count()), variable=self.dng_existing).pack(
+            anchor="w", pady=(4, 0))
+        ttk.Label(frame, text=t("dng_hint"), style="Muted.TLabel", wraplength=720, justify="left").pack(
+            anchor="w", pady=(4, 0))
+        self.dng_show()
+
         ttk.Label(frame, text=t("auto_options").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
         self.enabled = tk.BooleanVar(value=bool(w.get("enabled")))
         ttk.Checkbutton(frame, text=t("auto_enable"), variable=self.enabled).pack(anchor="w")
@@ -861,6 +879,55 @@ class AutoImportDialog(tk.Toplevel):
 
     def lib_name(self, lib):
         return os.path.basename(lib) or lib
+
+    def raw_count(self):
+        """Quante foto raw proprietarie ci sono nelle librerie (per la casella dei raw già importati)."""
+        import dng
+        n = 0
+        for lib in self.libs:
+            try:
+                n += len(dng.library_raws(lib))
+            except Exception:  # noqa: BLE001 — libreria non raggiungibile adesso
+                pass
+        return n
+
+    def dng_show(self):
+        import dng
+        ok = dng.exe() is not None
+        self.dng_state.configure(text=("✓  " + t("dng_installed")) if ok else t("dng_missing"))
+        if ok:
+            self.dng_install_btn.pack_forget()
+        else:
+            self.dng_install_btn.pack(side="left", padx=(12, 0))
+
+    def dng_changed(self):
+        import dng
+        if self.dng_convert.get() and dng.exe() is None:
+            self.dng_install()
+
+    def dng_install(self):
+        import dng
+        answer = Dialog.ask(self, t("dng_title"), t("dng_install_head"), t("dng_install_body"), level="info",
+                            buttons=[("cancel", t("btn_cancel"), False), ("install", t("dng_install"), True)],
+                            default="install")
+        if answer != "install":
+            if dng.exe() is None:
+                self.dng_convert.set(False)
+            return
+        self.dng_state.configure(text=t("dng_installing"))
+        self.configure(cursor="watch")
+
+        def work():
+            ok, detail = dng.install()
+            self.after(0, lambda: self.dng_installed(ok, detail))
+        threading.Thread(target=work, daemon=True).start()
+
+    def dng_installed(self, ok, detail):
+        self.configure(cursor="")
+        if not ok:
+            self.dng_convert.set(False)
+            Dialog.ask(self, t("dng_title"), t("dng_install_failed"), detail, level="error")
+        self.dng_show()
 
     def show_ai(self):
         s = self.app.settings
@@ -988,6 +1055,9 @@ class AutoImportDialog(tk.Toplevel):
             Dialog.ask(self, t("auto_title"), t("auto_phone_need_folder"), None, level="warn")
             return
         s["phone"] = {**(s.get("phone") or {}), "folder": phone_folder, "libraries": phone_libs}
+        import dng
+        convert = bool(self.dng_convert.get()) and dng.exe() is not None
+        s["dng"] = {"convert": convert, "existing": convert and bool(self.dng_existing.get())}
         enabled = bool(self.enabled.get()) and bool(self.rules or phone_libs)
         try:
             # prima lo stato delle regole nuove, poi le impostazioni: il processo in background non vede mai una
@@ -2052,7 +2122,7 @@ def import_lines(settings):
         done, total = st.get("done") or 0, st.get("total") or 0
         text = " · ".join(x for x in (main, st.get("library"), sub if sub != st.get("library") else "") if x)
         lines.append(("work", f"{text}  ·  {done * 100 // max(1, total)}%", done / total if total else None, "auto"))
-    elif phase in ("incoming", "waiting", "metadata"):
+    elif phase in ("incoming", "waiting", "metadata", "converting"):
         lines.append(("work", " · ".join(x for x in (main, sub) if x), None, "auto"))
     elif phase == "error":
         lines.append(("error", " · ".join(x for x in (main, sub) if x), False, "auto"))
@@ -2067,6 +2137,24 @@ def import_lines(settings):
                           done / total, "auto"))
     except Exception as e:  # noqa: BLE001
         log(f"status previews: {e!r}")
+    try:  # raw già nelle librerie convertiti in DNG (thread del processo in background)
+        import dng
+        dv = watcher.load_json(dng.STATUS)
+        if dv.get("running") and dv.get("pid") == st.get("pid") and dv.get("total"):
+            done, total = dv.get("done") or 0, dv["total"]
+            lines.append(("work", t("dng_line", library=dv.get("library") or "", done=done, total=total),
+                          done / total, "auto"))
+    except Exception as e:  # noqa: BLE001
+        log(f"status dng: {e!r}")
+    try:  # ricerca dei volti (thread del processo in background)
+        import faces
+        fv = watcher.load_json(faces.STATUS)
+        if fv.get("running") and fv.get("pid") == st.get("pid") and fv.get("total"):
+            done, total = fv.get("done") or 0, fv["total"]
+            lines.append(("work", t("faces_line", library=fv.get("library") or "", done=done, total=total),
+                          done / total, "auto"))
+    except Exception as e:  # noqa: BLE001
+        log(f"status faces: {e!r}")
     if last and recent((st.get("last") or {}).get("when")):
         lines.append(("news", last, False, "auto"))
     return lines

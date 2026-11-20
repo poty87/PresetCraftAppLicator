@@ -588,8 +588,8 @@ def library_signatures(libs):
     sig = {}
     for lib in libs:
         try:
-            st = os.stat(os.path.join(lib, "catalog.snap"))
-            sig[lib] = [st.st_size, st.st_mtime_ns]
+            from lightcraft import catalog_signature
+            sig[lib] = catalog_signature(lib)
         except OSError:
             pass
     return sig
