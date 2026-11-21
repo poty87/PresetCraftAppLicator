@@ -1138,9 +1138,11 @@ def phone_change_commands(change, regions=None):
     return cmds
 
 
-def phone_stack_commands(per_photo, known):
+def phone_stack_commands(per_photo, known, covers=None):
     """Pile create sul telefono: ogni foto porta "stack" = l'id della copertina; le foto con la stessa copertina
-    diventano una pila (quelle già in una pila la portano con sé: LightCraft unisce le pile)."""
+    diventano una pila (quelle già in una pila la portano con sé: LightCraft unisce le pile). Una foto che indica sé
+    stessa e basta, già in una pila di cui non è la copertina, è «Rendi copertina»: stack.setTop.
+    covers: {id della foto: id della copertina della sua pila} per le foto in una pila."""
     groups = {}
     for pid, ch in per_photo.items():
         top = ch.get("stack")
@@ -1151,6 +1153,8 @@ def phone_stack_commands(per_photo, known):
         members.discard(top)
         if members:
             cmds.append(("stack.group", {"ids": [top] + sorted(members), "top": top, "collapsed": True}))
+        elif covers and top in covers and covers[top] != top:
+            cmds.append(("stack.setTop", {"id": top}))
     return cmds
 
 
@@ -1188,15 +1192,21 @@ def apply_phone_changes(lib, folder, settings):
                     latest[(pid, field)] = (at, ch[field])
     if not read:
         return False
-    catalog = read_catalog(lib)["photos"]
+    cat = read_catalog(lib)
+    catalog = cat["photos"]
     known = {int(k) for k in catalog}
+    covers = {}  # foto in una pila -> la copertina (la prima della pila)
+    for st in (cat.get("stacks") or {}).values():
+        members = [int(x) for x in st.get("photos") or []]
+        for m in members:
+            covers[m] = members[0]
     per_photo = {}
     for (pid, field), (_at, value) in latest.items():
         if pid in known:
             per_photo.setdefault(pid, {"id": pid})[field] = value
     commands = [cmd for ch in per_photo.values() for cmd in phone_change_commands(
         ch, ((catalog.get(str(ch["id"])) or {}).get("meta") or {}).get("regions"))]
-    commands += phone_stack_commands(per_photo, known)
+    commands += phone_stack_commands(per_photo, known, covers)
     if commands:
         root, kept = backup_root(lib, settings), settings.get("backups_kept", BACKUPS_KEPT)
         backup = backup_library(lib, root, kept)
