@@ -917,7 +917,7 @@ def watch_settings(settings):
 # ---------------------------------------------------------------- librerie consultabili dal telefono
 
 PHONE_INDEX = "index.json.gz"
-PHONE_INDEX_FORMAT = 3  # cambia quando l'indice porta campi nuovi (2: persone e volti, 3: suggerimenti): si ripubblica
+PHONE_INDEX_FORMAT = 4  # cambia quando l'indice porta campi nuovi (2: persone e volti, 3: suggerimenti, 4: cestino): si ripubblica
 PHONE_STATE = os.path.join(STATE_DIR, "phone-libraries.json")
 # la cartella di servizio sul NAS: tutto quello che PresetCraftAppLicator prepara per il telefono e per ripartire
 LIBRARIES_DIR = "libraries"  # <libreria>/: indice, modifiche dal telefono (changes), ricerca IA (ia), anteprime
@@ -988,13 +988,16 @@ def library_folder_name(lib):
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name).strip(" .") or "library"
 
 
-def build_library_index(lib, suggestions=None, auto=None):
-    """L'indice compatto di una libreria per il telefono: foto (senza le eliminate e i video), metadati, pile e la
-    corrispondenza tra unità del PC e cartelle condivise. Chiavi corte: l'indice di 18.000 foto pesa poco."""
+def build_library_index(lib, suggestions=None, auto=None, restored=None):
+    """L'indice compatto di una libreria per il telefono: foto (senza i video), metadati, pile e la corrispondenza tra
+    unità del PC e cartelle condivise. Le foto eliminate (nel cestino di LightCraft) stanno a parte, in "trash": il
+    telefono le mostra nel suo Cestino e le può ripristinare. restored: le pile ricreate da un ripristino (il telefono le
+    segna «Ripristinate» finché non le apri). Chiavi corte: l'indice di 18.000 foto pesa poco."""
     cat = read_catalog(lib)
     photos = []
+    trash = []
     for p in cat["photos"].values():
-        if p.get("deleted") or p.get("kind") not in ("raw", "image"):
+        if p.get("kind") not in ("raw", "image"):
             continue
         m = p.get("meta") or {}
         src = (p.get("source") or {}).get("path") or ""
@@ -1036,16 +1039,122 @@ def build_library_index(lib, suggestions=None, auto=None):
             d["co"], d["cn"] = int(p["copy_of"]), p.get("copy_name") or ""
         if p.get("edited"):
             d["e"] = 1
-        photos.append(d)
+        (trash if p.get("deleted") else photos).append(d)
     ids = {d["i"] for d in photos}
     stacks = []
     for st in (cat.get("stacks") or {}).values():
         members = [int(x) for x in st.get("photos") or [] if int(x) in ids]
         if len(members) > 1:  # la prima foto è la copertina della pila
-            stacks.append({"id": int(st["id"]), "photos": members, "collapsed": bool(st.get("collapsed", True))})
+            s = {"id": int(st["id"]), "photos": members, "collapsed": bool(st.get("collapsed", True))}
+            if restored and int(st["id"]) in restored:
+                s["r"] = 1  # pila ricreata da un ripristino
+            stacks.append(s)
     return {"version": 1, "library": os.path.basename(os.path.normpath(lib)),
             "updated": datetime.datetime.now().isoformat(timespec="seconds"),
-            "drives": mapped_drives(), "photos": photos, "stacks": stacks}
+            "drives": mapped_drives(), "photos": photos, "stacks": stacks, "trash": trash}
+
+
+STACK_MEMORY = "stacks-memory.json"
+
+
+def update_stack_memory(lib, folder, cat=None):
+    """Ricorda in che pila sta ogni foto: LightCraft, eliminando una foto, la toglie dalla sua pila e ripristinandola non
+    ce la rimette. Per ogni foto in una pila si tiene l'elenco della pila (in ordine, la prima è la copertina); quelle
+    eliminate tengono l'ultimo elenco visto, quelle cancellate del tutto si dimenticano. Nella cartella di servizio,
+    accanto all'indice: dopo una reinstallazione si ritrova. Restituisce la memoria."""
+    cat = cat or read_catalog(lib)
+    path = os.path.join(library_dir(folder, lib), STACK_MEMORY)
+    mem = load_json(path) or {}
+    old = {int(k): v for k, v in (mem.get("photos") or {}).items()}
+    photos = cat["photos"]
+    alive = {int(k) for k, p in photos.items() if not p.get("deleted")}
+    out = {k: v for k, v in old.items() if str(k) in photos and k not in alive}  # eliminate: l'ultimo elenco visto
+    stacks = set()
+    for st in (cat.get("stacks") or {}).values():
+        members = [int(x) for x in st.get("photos") or [] if int(x) in alive]
+        if len(members) > 1:
+            stacks.add(int(st["id"]))
+            for m in members:
+                out[m] = members
+    restored = [s for s in mem.get("restored") or [] if s in stacks]
+    new = {"version": 1, "photos": {str(k): v for k, v in sorted(out.items())}, "restored": restored}
+    if new != {"version": 1, "photos": {str(k): v for k, v in sorted(old.items())}, "restored": mem.get("restored") or []}:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        save_json(path, new)
+    return new
+
+
+def stack_move_commands(current, desired):
+    """I comandi stack.moveUp che portano l'ordine `current` a `desired` (stessi elementi): ogni moveUp scambia la foto
+    con quella prima di lei."""
+    cur = list(current)
+    cmds = []
+    for i, want in enumerate(desired):
+        j = cur.index(want)
+        while j > i:
+            cmds.append(("stack.moveUp", {"id": want}))
+            cur[j - 1], cur[j] = cur[j], cur[j - 1]
+            j -= 1
+    return cmds
+
+
+def restore_stacks(lib, folder, cli, restored_ids):
+    """Dopo photo.restore (LightCraft non rimette le foto nelle pile): ogni foto torna nella sua pila, nella posizione
+    di prima (anche come copertina, se lo era). Se di quella pila non è rimasta nessuna foto, quelle ripristinate
+    insieme diventano una pila nuova (segnata come ripristinata); una sola resta da sola."""
+    path = os.path.join(library_dir(folder, lib), STACK_MEMORY)
+    mem = load_json(path) or {}
+    remembered = {int(k): v for k, v in (mem.get("photos") or {}).items()}
+    cat = read_catalog(lib)
+    photos = cat["photos"]
+    alive = {int(k) for k, p in photos.items() if not p.get("deleted")}
+    stack_of, order_of = {}, {}
+    for st in (cat.get("stacks") or {}).values():
+        members = [int(x) for x in st.get("photos") or [] if int(x) in alive]
+        for m in members:
+            stack_of[m] = int(st["id"])
+        order_of[int(st["id"])] = members
+    into, fresh = {}, {}
+    for r in restored_ids:
+        lst = remembered.get(r)
+        if not lst or r not in alive:
+            continue
+        target = next((stack_of[m] for m in lst if m != r and m in stack_of and m not in restored_ids), None)
+        if target is not None:
+            into.setdefault(target, []).append(r)
+        else:
+            fresh.setdefault(tuple(lst), []).append(r)
+    cmds = []
+    for sid, rs in into.items():
+        cover = order_of[sid][0]
+        cmds.append(("stack.group", {"ids": [cover] + rs, "top": cover, "collapsed": True}))
+    new_groups = []
+    for lst, rs in fresh.items():
+        if len(rs) > 1:
+            rs = sorted(rs, key=lst.index)
+            cmds.append(("stack.group", {"ids": rs, "top": rs[0], "collapsed": True}))
+            new_groups.append(rs)
+    if not cmds:
+        return
+    run_cli(cli, lib, cmds, check=False)
+    # l'ordine di prima: dove stavano le foto ripristinate (e se una era la copertina, torna copertina)
+    cat = read_catalog(lib)
+    moves, restored_stacks = [], set(mem.get("restored") or [])
+    for st in (cat.get("stacks") or {}).values():
+        members = [int(x) for x in st.get("photos") or []]
+        rs = [r for r in restored_ids if r in members]
+        if not rs:
+            continue
+        ref = remembered.get(rs[0]) or []
+        desired = sorted(members, key=lambda m: (ref.index(m) if m in ref else len(ref) + members.index(m)))
+        moves += stack_move_commands(members, desired)
+        if any(set(g) <= set(members) for g in new_groups):
+            restored_stacks.add(int(st["id"]))
+    if moves:
+        run_cli(cli, lib, moves, check=False)
+    mem["restored"] = sorted(restored_stacks)
+    save_json(path, mem)
+    log(f"--- watch: {len(restored_ids)} photos restored from the trash in {lib}, back in their stacks")
 
 
 def publish_library_index(lib, folder, state, settings=None):
@@ -1065,7 +1174,12 @@ def publish_library_index(lib, folder, state, settings=None):
         auto = faces.current_auto(settings or {}, lib, read_catalog(lib)["photos"])
     except Exception as e:  # noqa: BLE001
         log(f"watch: face suggestions for {lib} not available ({e!r})")
-    data = build_library_index(lib, suggestions, auto)
+    try:
+        mem = update_stack_memory(lib, folder)
+    except Exception as e:  # noqa: BLE001
+        log(f"watch: stack memory for {lib} not updated ({e!r})")
+        mem = {}
+    data = build_library_index(lib, suggestions, auto, set(mem.get("restored") or []))
     os.makedirs(target_dir, exist_ok=True)
     tmp = target + ".tmp"
     with gzip.open(tmp, "wt", encoding="utf-8") as f:
@@ -1208,6 +1322,10 @@ def apply_phone_changes(lib, folder, settings):
         ch, ((catalog.get(str(ch["id"])) or {}).get("meta") or {}).get("regions"))]
     commands += phone_stack_commands(per_photo, known, covers)
     if commands:
+        try:
+            update_stack_memory(lib, folder, cat)  # le pile come sono prima di eliminare
+        except Exception as e:  # noqa: BLE001
+            log(f"watch: stack memory for {lib} not updated ({e!r})")
         root, kept = backup_root(lib, settings), settings.get("backups_kept", BACKUPS_KEPT)
         backup = backup_library(lib, root, kept)
         replies = run_cli(cli, lib, commands, check=False)
@@ -1216,6 +1334,13 @@ def apply_phone_changes(lib, folder, settings):
             log(f"watch ERROR changes from {XMP_TOOL} for {lib}: {failed[:1] or 'no reply'} (retrying later)")
             return False
         log(f"--- watch: changes from {XMP_TOOL} applied to {len(per_photo)} photos in {lib} (backup: {backup})")
+        restored = [pid for pid, ch in per_photo.items() if ch.get("trash") is False
+                    and (catalog.get(str(pid)) or {}).get("deleted")]
+        if restored:
+            try:
+                restore_stacks(lib, folder, cli, restored)
+            except Exception as e:  # noqa: BLE001
+                log(f"watch: restored photos not put back in their stacks ({e!r})")
         try:
             import faces
             faces.forget_auto(settings, lib, [(pid, f["rect"]) for pid, ch in per_photo.items()
