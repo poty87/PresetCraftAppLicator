@@ -1,14 +1,19 @@
-"""Anteprime sviluppate per ViewerCraftStar.
+"""Anteprime per ViewerCraftStar, per TUTTE le foto delle librerie del telefono.
 
-Il telefono mostra l'anteprima che la fotocamera ha messo nel file: la foto com'era allo scatto. Per le foto ritoccate
-in LightCraft (oltre al profilo della fotocamera che dà PresetCraftAppLicator, che riproduce proprio lo stile della
-fotocamera) qui si prepara un'anteprima sviluppata con LightCraft stesso: lightcraft-cli apre la foto in una sessione
-sua, senza la libreria, le dà le impostazioni di sviluppo lette dal catalogo e la esporta in JPEG.
-Sola lettura su librerie e foto. Scrive nella cartella di servizio:
-  libraries/<libreria>/previews/<id>.jpg   le anteprime (lato lungo 2048 pixel)
-  libraries/<libreria>/previews.json       {"version", "size", "photos": {id: firma dello sviluppo}}
-La firma cambia quando cambia lo sviluppo: l'anteprima si rifà; se la foto torna com'era (o sparisce) si cancella.
-Il lavoro gira in un thread del processo in background, a priorità minima, due foto alla volta.
+Ogni foto si sviluppa con LightCraft stesso (lightcraft-cli la apre in una sessione sua, senza la libreria, le dà le
+impostazioni di sviluppo lette dal catalogo e la esporta), così il telefono la vede esattamente come in LightCraft.
+Dall'esportazione si ricavano due AVIF (a parità di qualità circa metà di un JPEG: misurato il 25/11/2026):
+  libraries/<libreria>/previews/<id>.avif  anteprima grande (lato lungo 2560 pixel, come le Smart Preview di
+                                           Lightroom) per lo schermo intero
+  libraries/<libreria>/thumbs/<id>.avif    miniatura (lato lungo 512 pixel) per la galleria
+  libraries/<libreria>/previews.json       {"version": 2, "format": "avif", "size", "thumb", "photos": {id: firma},
+                                            "edited": [id delle foto ritoccate in LightCraft], "failed"}
+La firma cambia quando cambiano lo sviluppo o il file: le anteprime si rifanno; se la foto sparisce si cancellano.
+"edited" serve al telefono per la matita e per «Originale» (l'anteprima della fotocamera, com'era allo scatto).
+Prossimo passo (sviluppo dal telefono): accanto, in smart/<id>.dng, un DNG ridotto e ancora modificabile; le anteprime
+qui sopra restano solo da guardare e si rifanno quando arriva lo sviluppo nuovo (la firma cambia).
+Sola lettura su librerie e foto. Il lavoro gira in un thread del processo in background, a priorità minima, due foto
+alla volta, prima le più recenti.
 """
 import concurrent.futures as cf
 import hashlib
@@ -24,10 +29,17 @@ from lightcraft import (DATA_DIR, DEFAULT_CLI, NO_WINDOW, catalog_signature, is_
                         read_prefs)
 
 PREVIEWS_DIR = "previews"
+THUMBS_DIR = "thumbs"
+SMART_DIR = "smart"  # riservata: i DNG ridotti per lo sviluppo dal telefono (prossimo passo)
 LIST_FILE = "previews.json"
-SIZE = 2048  # lato lungo: nitida a schermo intero sul telefono, ~600 KB
-QUALITY = 82
-FORMAT = 1  # cambia se cambia il modo di fare le anteprime: tutte si rifanno
+LIST_VERSION = 2
+SIZE = 2560  # lato lungo: nitida a schermo intero sul telefono, ~450 KB in AVIF
+THUMB = 512  # miniatura per la galleria, ~25 KB
+EXPORT_QUALITY = 97  # il JPEG intermedio di LightCraft, poi ricompresso in AVIF: quasi senza perdita
+AVIF_QUALITY = 80  # misurato: come un JPEG qualità ~90 a metà peso
+THUMB_QUALITY = 72
+AVIF_SPEED = 6
+FORMAT = 2  # cambia se cambia il modo di fare le anteprime: tutte si rifanno
 WORKERS = 2
 MAX_TRIES = 3
 IDLE = 0x00000040  # IDLE_PRIORITY_CLASS: il PC resta libero per chi lo usa
@@ -144,13 +156,21 @@ def default_develop(cli, photo, cache):
 
 def signature(photo):
     data = {"d": {k: v for k, v in (photo.get("develop") or {}).items()}, "h": photo.get("content_hash"),
-            "z": photo.get("file_size"), "s": SIZE, "f": FORMAT}
+            "z": photo.get("file_size"), "s": SIZE, "t": THUMB, "q": AVIF_QUALITY, "f": FORMAT}
     return hashlib.sha1(json.dumps(data, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def plan(lib, settings, cli):
-    """{id: (foto, firma)} delle foto che hanno bisogno di un'anteprima sviluppata."""
+    """({id: (foto, firma)} di tutte le foto da mostrare sul telefono (anche quelle nel cestino), {id ritoccate})."""
     cat = read_catalog(lib)
+    everything = {int(p["id"]): (p, signature(p)) for p in cat["photos"].values()
+                  if p.get("kind") in ("raw", "image") and (p.get("source") or {}).get("path")}
+    return everything, edited_ids(lib, cat, settings, cli)
+
+
+def edited_ids(lib, cat, settings, cli):
+    """Le foto ritoccate in LightCraft: lo sviluppo è diverso da quello che LightCraft dà a una foto appena importata
+    (il profilo della fotocamera dato da PresetCraftAppLicator non conta: riproduce l'aspetto della fotocamera)."""
     cache = load_json(DEFAULTS)
     size0 = len(cache)
     want, profile_only = {}, []
@@ -184,13 +204,14 @@ def plan(lib, settings, cli):
         for p in profile_only:
             if int(p["id"]) not in auto:
                 want[int(p["id"])] = p
-    return {pid: (p, signature(p)) for pid, p in want.items()}
+    return set(want)
 
 
 # ---------------------------------------------------------------- sviluppo di una foto
 
-def render(cli, photo, profiles, dest):
-    """Sviluppa la foto con le sue impostazioni e scrive il JPEG in dest (in modo atomico)."""
+def render(cli, photo, profiles, dest, thumb_dest):
+    """Sviluppa la foto con le sue impostazioni e scrive l'anteprima AVIF in dest e la miniatura in thumb_dest (in modo
+    atomico). Torna (larghezza, altezza) dell'anteprima."""
     dev = json.loads(json.dumps(photo.get("develop") or {}))
     commands = []
     prof = profiles.get(profile_id(dev))
@@ -201,7 +222,7 @@ def render(cli, photo, profiles, dest):
         out = os.path.join(work, "preview.jpg")
         script = os.path.join(work, "script.jsonl")
         tail = [{"command": "develop.merge", "params": {"settings": dev}},
-                {"command": "app.export", "params": {"path": out, "longEdge": SIZE, "quality": QUALITY,
+                {"command": "app.export", "params": {"path": out, "longEdge": SIZE, "quality": EXPORT_QUALITY,
                                                      "metadata": "none", "conflict": "overwrite"}}]
         # il profilo importato nella sessione ha un nome diverso da quello della libreria: lo si chiede a LightCraft
         # la prima volta (per ogni file di profilo) e poi si ricorda
@@ -221,12 +242,29 @@ def render(cli, photo, profiles, dest):
         r = run_cli([cli, "run", "--import", photo["source"]["path"], "--script", script], timeout=900)
         if r.returncode != 0 or not os.path.isfile(out):
             raise RuntimeError(f"lightcraft-cli ({r.returncode}): {(r.stdout + r.stderr)[-300:]}")
-        os.makedirs(os.path.dirname(dest), exist_ok=True)
-        tmp = dest + ".tmp"
-        shutil.copyfile(out, tmp)
-        os.replace(tmp, dest)
+        return encode(out, dest, thumb_dest)
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def encode(src, dest, thumb_dest):
+    """Dal JPEG esportato da LightCraft: l'anteprima AVIF (stessa misura) e la miniatura AVIF, scritte in modo
+    atomico. Torna (larghezza, altezza)."""
+    from PIL import Image
+    with Image.open(src) as im:
+        im = im.convert("RGB")
+        size = im.size
+        for d in (dest, thumb_dest):
+            os.makedirs(os.path.dirname(d), exist_ok=True)
+        tmp = dest + ".tmp"
+        im.save(tmp, "AVIF", quality=AVIF_QUALITY, speed=AVIF_SPEED)
+        small = im.copy()
+        small.thumbnail((THUMB, THUMB), Image.LANCZOS)
+        ttmp = thumb_dest + ".tmp"
+        small.save(ttmp, "AVIF", quality=THUMB_QUALITY, speed=AVIF_SPEED)
+    os.replace(tmp, dest)
+    os.replace(ttmp, thumb_dest)
+    return size
 
 
 _imported_ids = {}  # file del profilo -> nome che gli dà una sessione di lightcraft-cli
@@ -328,19 +366,30 @@ def _library(settings, libdir, lib, name, cli):
     """Allinea le anteprime di una libreria. True se è tutto fatto (nessun errore, non interrotto)."""
     started = time.time()
     _status(running=True, library=name, phase="plan", done=0, total=0, started=started)
-    want = plan(lib, settings, cli)
+    want, edited = plan(lib, settings, cli)
     list_path = os.path.join(libdir, LIST_FILE)
     current = load_json(list_path, {})
-    photos = {int(k): v for k, v in (current.get("photos") or {}).items()} if current.get("size") == SIZE else {}
+    pdir = os.path.join(libdir, PREVIEWS_DIR)
+    tdir = os.path.join(libdir, THUMBS_DIR)
+    same_kind = current.get("version") == LIST_VERSION and current.get("size") == SIZE and current.get("thumb") == THUMB
+    if not same_kind:
+        # anteprime di un altro tipo (le JPEG da 2048 delle versioni prima della 1.27): via tutte, si rifanno
+        for d in (pdir, tdir):
+            for f in (os.listdir(d) if os.path.isdir(d) else []):
+                try:
+                    os.remove(os.path.join(d, f))
+                except OSError:
+                    pass
+    photos = {int(k): v for k, v in (current.get("photos") or {}).items()} if same_kind else {}
     # foto non riuscite: [firma, tentativi]; si riprovano (fino a MAX_TRIES) quando il catalogo cambia di nuovo
     failed = {int(k): v for k, v in (current.get("failed") or {}).items() if isinstance(v, list)}
-    pdir = os.path.join(libdir, PREVIEWS_DIR)
-    # anteprime che non servono più: foto ripristinate o tolte dalla libreria
+    # anteprime che non servono più: foto tolte dalla libreria (cancellate da CleanCraftNas)
     for pid in [pid for pid in photos if pid not in want]:
-        try:
-            os.remove(os.path.join(pdir, f"{pid}.jpg"))
-        except OSError:
-            pass
+        for d in (pdir, tdir):
+            try:
+                os.remove(os.path.join(d, f"{pid}.avif"))
+            except OSError:
+                pass
         photos.pop(pid, None)
     for pid in [pid for pid in failed if pid not in want or failed[pid][0] != want[pid][1]]:
         failed.pop(pid)  # foto cambiata o non più da fare: si riparte da zero
@@ -350,16 +399,21 @@ def _library(settings, libdir, lib, name, cli):
     lock = threading.Lock()
     state = {"done": 0, "saved": time.time(), "errors": 0}
 
+    def done_edited():
+        return sorted(pid for pid in edited if pid in photos)
+
     def save():
         os.makedirs(libdir, exist_ok=True)
-        save_json(list_path, {"version": 1, "size": SIZE, "photos": {str(k): v for k, v in sorted(photos.items())},
+        save_json(list_path, {"version": LIST_VERSION, "format": "avif", "size": SIZE, "thumb": THUMB,
+                              "photos": {str(k): v for k, v in sorted(photos.items())}, "edited": done_edited(),
                               "failed": {str(k): v for k, v in failed.items()}})
 
     if not jobs:
-        if current.get("photos") != {str(k): v for k, v in sorted(photos.items())} or not os.path.exists(list_path):
+        if (not same_kind or current.get("photos") != {str(k): v for k, v in sorted(photos.items())}
+                or current.get("edited") != done_edited() or not os.path.exists(list_path)):
             save()
         return True
-    log(f"previews: {name}: {len(jobs)} to develop ({len(want)} edited photos)")
+    log(f"previews: {name}: {len(jobs)} to develop ({len(want)} photos, {len(edited)} edited)")
     _status(running=True, library=name, phase="render", done=0, total=len(jobs), started=started)
     profiles = {}
     prefs = read_prefs(lib)
@@ -372,7 +426,7 @@ def _library(settings, libdir, lib, name, cli):
         if _stop.is_set():
             return
         try:
-            render(cli, photo, profiles, os.path.join(pdir, f"{pid}.jpg"))
+            render(cli, photo, profiles, os.path.join(pdir, f"{pid}.avif"), os.path.join(tdir, f"{pid}.avif"))
             ok = True
         except Exception as e:  # noqa: BLE001
             log(f"previews ERROR {name} #{pid} {photo.get('file_name')}: {e!r}")
