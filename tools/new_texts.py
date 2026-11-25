@@ -553,9 +553,18 @@ NEW = {
                   "fr": "Ouvrir PresetCraftAppLicator", "pt": "Abrir o PresetCraftAppLicator"},
     "tray_check_now": {"it": "Controlla adesso", "en": "Check now", "de": "Jetzt prüfen", "es": "Comprobar ahora",
                        "fr": "Vérifier maintenant", "pt": "Verificar agora"},
-    "tray_quit": {"it": "Chiudi (riparte al prossimo accesso)", "en": "Quit (starts again at next sign-in)",
-                  "de": "Beenden (startet bei der nächsten Anmeldung)", "es": "Cerrar (vuelve al próximo inicio de sesión)",
-                  "fr": "Quitter (redémarre à la prochaine session)", "pt": "Fechar (volta no próximo início de sessão)"},
+    "tray_quit": {"it": "Chiudi (riparte quando apri l'app o al prossimo accesso)",
+                  "en": "Quit (starts again when you open the app or at next sign-in)",
+                  "de": "Beenden (startet wieder, wenn du die App öffnest, oder bei der nächsten Anmeldung)",
+                  "es": "Cerrar (vuelve al abrir la app o al próximo inicio de sesión)",
+                  "fr": "Quitter (redémarre à l'ouverture de l'app ou à la prochaine session)",
+                  "pt": "Fechar (volta ao abrir a app ou no próximo início de sessão)"},
+    "shutdown_reason": {"it": "Sto finendo di salvare il lavoro in corso (riprende alla prossima accensione)",
+                        "en": "Finishing saving the work in progress (it resumes next time you start the PC)",
+                        "de": "Die laufende Arbeit wird noch gespeichert (sie geht beim nächsten Start weiter)",
+                        "es": "Terminando de guardar el trabajo en curso (continúa en el próximo encendido)",
+                        "fr": "Enregistrement du travail en cours (il reprendra au prochain démarrage)",
+                        "pt": "A terminar de guardar o trabalho em curso (continua no próximo arranque)"},
     # ---- disinstallazione guidata (da Impostazioni › App)
     "w_remove_head": {"it": "Disinstallare PresetCraftAppLicator {version}?",
                       "en": "Uninstall PresetCraftAppLicator {version}?",
@@ -1913,3 +1922,51 @@ NEW.update({
                         "Aperçus développés : {library} {done} sur {total}",
                         "Pré-visualizações reveladas: {library} {done} de {total}"),
 })
+
+# 1.27: anteprime AVIF di tutte le foto
+NEW.update({'previews_line': {'de': 'Vorschauen für das Telefon: {library} {done} von {total}',
+                   'en': 'Previews for the phone: {library} {done} of {total}',
+                   'es': 'Vistas previas para el teléfono: {library} {done} de {total}',
+                   'fr': 'Aperçus pour le téléphone : {library} {done} sur {total}',
+                   'it': 'Anteprime per il telefono: {library} {done} di {total}',
+                   'pt': 'Pré-visualizações para o telemóvel: {library} {done} de {total}'},
+ 'wz_previews_check': {'de': 'Scharfe, leichte Vorschauen aller Fotos für das Telefon vorbereiten, so wie sie in '
+                             'LightCraft sind',
+                       'en': 'Prepare sharp, light previews of all photos for the phone, as they are in LightCraft',
+                       'es': 'Preparar para el teléfono vistas previas nítidas y ligeras de todas las fotos, como '
+                             'están en LightCraft',
+                       'fr': 'Préparer pour le téléphone des aperçus nets et légers de toutes les photos, telles '
+                             "qu'elles sont dans LightCraft",
+                       'it': 'Prepara per il telefono anteprime nitide e leggere di tutte le foto, come sono in '
+                             'LightCraft',
+                       'pt': 'Preparar para o telemóvel pré-visualizações nítidas e leves de todas as fotos, como '
+                             'estão no LightCraft'},
+ 'wz_previews_hint': {'de': 'Der PC entwickelt jedes Foto mit LightCraft und erstellt im Dienstordner eine '
+                            'AVIF-Vorschau mit 2560 Pixeln (etwa 450 KB) und eine Miniatur mit 512 Pixeln: Das '
+                            'Telefon zeigt sie statt der Vorschauen in den Raw-Dateien (oft klein oder sehr groß). '
+                            'Beim ersten Mal dauert es einige Stunden, im Hintergrund mit niedriger Priorität; '
+                            'danach nur neue oder geänderte Fotos.',
+                      'en': 'The PC develops every photo with LightCraft and makes a 2560-pixel AVIF preview (about '
+                            '450 KB) and a 512-pixel thumbnail in the service folder: the phone shows them instead '
+                            'of the previews inside the raw files (often small or very heavy). The first time takes '
+                            'a few hours, in the background at low priority; then only new or changed photos.',
+                      'es': 'El PC revela cada foto con LightCraft y crea en la carpeta de servicio una vista previa '
+                            'AVIF de 2560 píxeles (unos 450 KB) y una miniatura de 512 píxeles: el teléfono las '
+                            'muestra en lugar de las vistas previas dentro de los raw (a menudo pequeñas o muy '
+                            'pesadas). La primera vez tarda unas horas, en segundo plano y con baja prioridad; '
+                            'después solo las fotos nuevas o modificadas.',
+                      'fr': 'Le PC développe chaque photo avec LightCraft et crée dans le dossier de service un '
+                            'aperçu AVIF de 2560 pixels (environ 450 Ko) et une miniature de 512 pixels : le '
+                            'téléphone les affiche à la place des aperçus contenus dans les fichiers raw (souvent '
+                            'petits ou très lourds). La première fois prend quelques heures, en arrière-plan et en '
+                            'basse priorité ; ensuite seulement les photos nouvelles ou modifiées.',
+                      'it': "Il PC sviluppa ogni foto con LightCraft e ne fa un'anteprima AVIF da 2560 pixel (circa "
+                            '450 KB) e una miniatura da 512 pixel, nella cartella di servizio: il telefono le mostra '
+                            'al posto delle anteprime dentro i file raw (spesso piccole o molto pesanti). La prima '
+                            'volta ci vogliono alcune ore, in background e a bassa priorità; poi solo le foto nuove '
+                            'o modificate.',
+                      'pt': 'O PC revela cada foto com o LightCraft e cria na pasta de serviço uma pré-visualização '
+                            'AVIF de 2560 píxeis (cerca de 450 KB) e uma miniatura de 512 píxeis: o telemóvel '
+                            'mostra-as em vez das pré-visualizações dentro dos ficheiros raw (muitas vezes pequenas '
+                            'ou muito pesadas). Da primeira vez demora algumas horas, em segundo plano e com baixa '
+                            'prioridade; depois só as fotos novas ou alteradas.'}})

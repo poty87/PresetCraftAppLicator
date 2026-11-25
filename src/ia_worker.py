@@ -34,6 +34,7 @@ import re
 import struct
 import subprocess
 import sys
+import threading
 import time
 import traceback
 import urllib.request
@@ -107,8 +108,32 @@ def in_fascia(window, adesso=None):
     return da <= t < a if da <= a else (t >= da or t < a)
 
 
+# spegnimento o disconnessione di Windows: il lavoro si ferma al passo dopo salvando, poi Windows chiude il processo
+_spegnimento = threading.Event()
+_salvato = threading.Event()
+
+
+def ascolta_spegnimento():
+    """Windows avvisa i processi senza finestra con un evento della console (CTRL_SHUTDOWN_EVENT): il gestore
+    chiede di fermarsi e tiene vivo il processo finché i progressi sono salvati (al massimo ~15 secondi)."""
+    import ctypes
+    from ctypes import wintypes
+    tipo = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
+
+    def gestore(evento):
+        if evento in (2, 5, 6):  # CTRL_CLOSE, CTRL_LOGOFF, CTRL_SHUTDOWN
+            _spegnimento.set()
+            _salvato.wait(15)
+            return True
+        return False
+
+    ascolta_spegnimento.gestore = tipo(gestore)  # tenuto vivo finché vive il processo
+    ctypes.windll.kernel32.SetConsoleCtrlHandler(ascolta_spegnimento.gestore, True)
+
+
 class Controllo:
-    """Controlli tra un passo e l'altro: pausa chiesta, fascia oraria (solo lavori grandi), GPU usata da altri."""
+    """Controlli tra un passo e l'altro: spegnimento di Windows, pausa chiesta, fascia oraria (solo lavori grandi), GPU
+    usata da altri."""
 
     def __init__(self, motore):
         self.motore = motore
@@ -118,6 +143,8 @@ class Controllo:
         self.pausa_path = os.path.join(motore.dir, "pausa")
 
     def __call__(self, grande=False, gpu_in_uso=False):
+        if _spegnimento.is_set():
+            raise Stop("shutdown")
         if os.path.exists(self.pausa_path):
             raise Stop("paused")
         if grande and not in_fascia(self.window):
@@ -620,7 +647,7 @@ def aggiorna_impronte(motore, modello, cart, foto, dest, nome_lib, controllo):
                 salva()
             if (k + 1) % 10 == 0 or fatte_ora == len(nuove):
                 motore.stato(phase="embeddings", library=nome_lib, done=fatte_ora, total=len(nuove))
-            if (k + 1) % 10 == 0:
+            if (k + 1) % 10 == 0 or _spegnimento.is_set():
                 try:
                     controllo(grande=grande, gpu_in_uso=modello.dev == "cuda")
                 except Stop:
@@ -1127,11 +1154,17 @@ def figlio(cfg_path):
     cfg = carica_json(cfg_path)
     motore = Motore(cfg)
     try:
+        ascolta_spegnimento()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
         lavoro(cfg)
         return 0
     except Stop as s:
         motore.log({"paused": "in pausa (richiesta)", "gpu_busy": "fermo: la GPU è usata da un altro programma",
-                    "waiting_window": "fermo: fuori dalla fascia oraria"}[s.motivo] + ", progressi salvati")
+                    "waiting_window": "fermo: fuori dalla fascia oraria",
+                    "shutdown": "fermo: Windows si sta spegnendo, riprendo alla prossima accensione"}[s.motivo]
+                   + ", progressi salvati")
         motore.stato(phase=s.motivo, library="", done=0, total=0)
         return 0
     except Exception as e:  # noqa: BLE001
@@ -1141,6 +1174,8 @@ def figlio(cfg_path):
         motore.log("ERRORE " + "".join(traceback.format_exception(e)).strip())
         motore.stato(phase="error", error=f"{type(e).__name__}: {e}")
         return 1
+    finally:
+        _salvato.set()
 
 
 def supervisore(cfg_path):

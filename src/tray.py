@@ -8,6 +8,7 @@
   Windows quando un giro ha catalogato foto nuove.
 """
 
+import ctypes
 import datetime
 import os
 import subprocess
@@ -30,6 +31,9 @@ from watcher import SETTINGS, Status, Watcher, load_json, save_json
 
 LOG = os.path.join(DATA_DIR, "presetcraft.log")
 WM_LBUTTONDBLCLK = 0x0203
+WM_QUERYENDSESSION = 0x0011
+WM_ENDSESSION = 0x0016
+SHUTDOWN_WAIT = 600  # al massimo così tanto per finire un comando sulla libreria (Windows mostra il motivo)
 DOTS = {"idle": "#4ade80", "done": "#4ade80", "incoming": "#60a5fa", "importing": "#60a5fa",
         "profiles": "#60a5fa", "metadata": "#60a5fa", "waiting": "#fbbf24", "error": "#f87171"}
 
@@ -194,6 +198,48 @@ class Tray:
         self.shown_phase = None
         self.ai_line = ""
         self.ai_queue = False
+        self.blocking = False
+        # spegnimento o disconnessione: la finestra nascosta dell'icona riceve i messaggi di Windows
+        self.icon._message_handlers[WM_QUERYENDSESSION] = self.on_query_end_session
+        self.icon._message_handlers[WM_ENDSESSION] = self.on_end_session
+
+    def on_query_end_session(self, _wparam, _lparam):
+        """Windows chiede se può spegnersi: sì, ma prima i lavori si fermano salvando. Se qualcosa sta ancora
+        lavorando, Windows mostra il motivo e aspetta (con «Arresta comunque» per chi ha fretta)."""
+        log("watch: Windows is shutting down, stopping the work in progress")
+        self.watcher.hold()
+        busy = self.watcher.busy()
+        if busy:
+            log(f"watch: still working: {', '.join(busy)}")
+            try:
+                user32 = ctypes.windll.user32
+                user32.ShutdownBlockReasonCreate.argtypes = (ctypes.c_void_p, ctypes.c_wchar_p)
+                self.blocking = bool(user32.ShutdownBlockReasonCreate(self.icon._hwnd, t("shutdown_reason")))
+            except Exception as e:  # noqa: BLE001
+                log(f"watch: shutdown reason: {e!r}")
+        return 1
+
+    def on_end_session(self, wparam, _lparam):
+        """Windows si spegne davvero (wparam) o ci ha ripensato. Al ritorno di qui il processo può essere chiuso in
+        qualsiasi momento: prima si aspetta che il lavoro in corso sia finito e salvato."""
+        try:
+            if wparam:
+                t0 = time.time()
+                idle = self.watcher.wait_idle(SHUTDOWN_WAIT)
+                log(f"watch: ready for shutdown in {time.time() - t0:.1f}s"
+                    + ("" if idle else f" (still working: {', '.join(self.watcher.busy())})"))
+            else:
+                log("watch: shutdown cancelled, resuming")
+                self.watcher.release()
+        finally:
+            if self.blocking:
+                self.blocking = False
+                try:
+                    ctypes.windll.user32.ShutdownBlockReasonDestroy.argtypes = (ctypes.c_void_p,)
+                    ctypes.windll.user32.ShutdownBlockReasonDestroy(self.icon._hwnd)
+                except Exception:  # noqa: BLE001
+                    pass
+        return 0
 
     def image(self, phase):
         color = DOTS.get(phase, DOTS["idle"])

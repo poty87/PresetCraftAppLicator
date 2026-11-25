@@ -2511,6 +2511,14 @@ TEXTS = {
         'fr': 'Paramètres',
         'pt': 'Definições',
     },
+    'shutdown_reason': {
+        'it': 'Sto finendo di salvare il lavoro in corso (riprende alla prossima accensione)',
+        'en': 'Finishing saving the work in progress (it resumes next time you start the PC)',
+        'de': 'Die laufende Arbeit wird noch gespeichert (sie geht beim nächsten Start weiter)',
+        'es': 'Terminando de guardar el trabajo en curso (continúa en el próximo encendido)',
+        'fr': 'Enregistrement du travail en cours (il reprendra au prochain démarrage)',
+        'pt': 'A terminar de guardar o trabalho em curso (continua no próximo arranque)',
+    },
     'st_apply': {
         'it': 'Riceverà il profilo',
         'en': 'Will get the profile',
@@ -3056,12 +3064,12 @@ TEXTS = {
         'pt': 'Perfis: {done} de {total} fotos',
     },
     'tray_quit': {
-        'it': 'Chiudi (riparte al prossimo accesso)',
-        'en': 'Quit (starts again at next sign-in)',
-        'de': 'Beenden (startet bei der nächsten Anmeldung)',
-        'es': 'Cerrar (vuelve al próximo inicio de sesión)',
-        'fr': 'Quitter (redémarre à la prochaine session)',
-        'pt': 'Fechar (volta no próximo início de sessão)',
+        'it': "Chiudi (riparte quando apri l'app o al prossimo accesso)",
+        'en': 'Quit (starts again when you open the app or at next sign-in)',
+        'de': 'Beenden (startet wieder, wenn du die App öffnest, oder bei der nächsten Anmeldung)',
+        'es': 'Cerrar (vuelve al abrir la app o al próximo inicio de sesión)',
+        'fr': "Quitter (redémarre à l'ouverture de l'app ou à la prochaine session)",
+        'pt': 'Fechar (volta ao abrir a app ou no próximo início de sessão)',
     },
     'tray_today': {
         'it': 'oggi',
@@ -4044,7 +4052,7 @@ TEXTS = {
         'en': 'The PC develops every photo with LightCraft and makes a 2560-pixel AVIF preview (about 450 KB) and a 512-pixel thumbnail in the service folder: the phone shows them instead of the previews inside the raw files (often small or very heavy). The first time takes a few hours, in the background at low priority; then only new or changed photos.',
         'de': 'Der PC entwickelt jedes Foto mit LightCraft und erstellt im Dienstordner eine AVIF-Vorschau mit 2560 Pixeln (etwa 450 KB) und eine Miniatur mit 512 Pixeln: Das Telefon zeigt sie statt der Vorschauen in den Raw-Dateien (oft klein oder sehr groß). Beim ersten Mal dauert es einige Stunden, im Hintergrund mit niedriger Priorität; danach nur neue oder geänderte Fotos.',
         'es': 'El PC revela cada foto con LightCraft y crea en la carpeta de servicio una vista previa AVIF de 2560 píxeles (unos 450 KB) y una miniatura de 512 píxeles: el teléfono las muestra en lugar de las vistas previas dentro de los raw (a menudo pequeñas o muy pesadas). La primera vez tarda unas horas, en segundo plano y con baja prioridad; después solo las fotos nuevas o modificadas.',
-        'fr': "Le PC développe chaque photo avec LightCraft et crée dans le dossier de service un aperçu AVIF de 2560 pixels (environ 450 Ko) et une miniature de 512 pixels : le téléphone les affiche à la place des aperçus contenus dans les fichiers raw (souvent petits ou très lourds). La première fois prend quelques heures, en arrière-plan et en basse priorité ; ensuite seulement les photos nouvelles ou modifiées.",
+        'fr': 'Le PC développe chaque photo avec LightCraft et crée dans le dossier de service un aperçu AVIF de 2560 pixels (environ 450 Ko) et une miniature de 512 pixels : le téléphone les affiche à la place des aperçus contenus dans les fichiers raw (souvent petits ou très lourds). La première fois prend quelques heures, en arrière-plan et en basse priorité ; ensuite seulement les photos nouvelles ou modifiées.',
         'pt': 'O PC revela cada foto com o LightCraft e cria na pasta de serviço uma pré-visualização AVIF de 2560 píxeis (cerca de 450 KB) e uma miniatura de 512 píxeis: o telemóvel mostra-as em vez das pré-visualizações dentro dos ficheiros raw (muitas vezes pequenas ou muito pesadas). Da primeira vez demora algumas horas, em segundo plano e com baixa prioridade; depois só as fotos novas ou alteradas.',
     },
     'wz_restore_found': {

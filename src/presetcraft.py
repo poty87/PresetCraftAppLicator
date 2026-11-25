@@ -3456,6 +3456,14 @@ def main():
         sys.exit(ai.install_main(args[i + 1], args[i + 2], args[i + 3] if len(args) > i + 3 else None))
     if already_open():
         sys.exit(0)
+
+    def background():
+        try:
+            if autostart.ensure_running():
+                log("app: automatic import was not running, started it again")
+        except Exception as e:  # noqa: BLE001 — l'app si apre lo stesso
+            log(f"app: background start: {e!r}")
+    threading.Thread(target=background, daemon=True).start()
     dpi_aware()
     App().mainloop()
 

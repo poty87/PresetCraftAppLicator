@@ -101,6 +101,27 @@ def stop_running(timeout=120):
     return True
 
 
+def running():
+    """True se il processo in background è in esecuzione (ne possiede il mutex)."""
+    import ctypes
+    k32 = ctypes.windll.kernel32
+    k32.OpenMutexW.restype = ctypes.c_void_p
+    h = k32.OpenMutexW(0x00100000, False, MUTEX)  # SYNCHRONIZE
+    if not h:
+        return False
+    k32.CloseHandle(ctypes.c_void_p(h))
+    return True
+
+
+def ensure_running(task=TASK):
+    """All'apertura dell'app: se l'importazione automatica è attiva ma il processo in background non c'è (chiuso
+    dall'icona, o fermato da un errore), lo riaccende. True se l'ha riacceso."""
+    if running() or not is_enabled(task):
+        return False
+    subprocess.run(["schtasks", "/Run", "/TN", task], capture_output=True, creationflags=NO_WINDOW)
+    return True
+
+
 def start_now(task=TASK):
     """Riavvia il processo in background dopo un aggiornamento, se l'importazione automatica è attiva."""
     if is_enabled(task):

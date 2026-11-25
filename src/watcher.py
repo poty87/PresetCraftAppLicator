@@ -29,7 +29,7 @@ import camera_styles as cs
 import matcher
 from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, backup_library, backup_root, catalog_signature, is_cli,
                         is_library,
-                        library_open_reason, lightcraft_running, log, read_catalog, run_cli)
+                        library_open_reason, lightcraft_busy, lightcraft_running, log, read_catalog, run_cli)
 
 SETTINGS = os.path.join(DATA_DIR, "settings.json")
 STATE_DIR = os.path.join(DATA_DIR, "watch")
@@ -1465,6 +1465,51 @@ class Watcher:
         self.events = (ctypes.c_void_p * 2)(k32.CreateEventW(None, True, False, STOP_EVENT),
                                              k32.CreateEventW(None, False, False, None))
         self.quit = False
+        # spegnimento di Windows: niente lavori nuovi (held) finché Windows non chiude il processo o ci ripensa;
+        # gate tiene insieme "controllo held" e "avvio dei lavori in background", così uno stop non si perde
+        self.held = False
+        self.in_cycle = False
+        self.gate = threading.Lock()
+
+    def hold(self):
+        """Windows si sta spegnendo: il giro in corso finisce, i lavori in background si fermano salvando."""
+        with self.gate:
+            self.held = True
+            for name in ("developed", "faces", "dng"):
+                try:
+                    __import__(name).stop()
+                except Exception:  # noqa: BLE001
+                    pass
+        self.wake()
+
+    def release(self):
+        """Spegnimento annullato: si riprende."""
+        self.held = False
+        self.wake()
+
+    def busy(self):
+        """Cosa sta ancora lavorando (vuoto quando si può spegnere senza perdere niente)."""
+        out = []
+        if self.in_cycle:
+            out.append("cycle")
+        for name in ("developed", "faces", "dng"):
+            try:
+                if __import__(name).running():
+                    out.append(name)
+            except Exception:  # noqa: BLE001
+                pass
+        if lightcraft_busy():
+            out.append("lightcraft-cli")
+        return out
+
+    def wait_idle(self, timeout):
+        """Aspetta che il lavoro in corso finisca (al massimo timeout secondi). True se è tutto fermo."""
+        end = time.time() + timeout
+        while self.busy():
+            if time.time() > end:
+                return False
+            time.sleep(0.2)
+        return True
 
     def wake(self):
         ctypes.windll.kernel32.SetEvent(ctypes.c_void_p(self.events[1]))
@@ -1509,67 +1554,15 @@ class Watcher:
                 if self.wait(0):
                     log("watch: stopped" + ("" if self.quit else " (update or uninstall)"))
                     return 0
-                settings = load_json(SETTINGS)
-                enabled, rules, interval = watch_settings(settings)
-                if not enabled:
-                    log("watch: stopped (automatic import is off)")
-                    return 0
-                finder = cs.ProfileFinder(settings.get("profiles_dir"))
-                pause = interval * 60
-                if self.status.get().get("phase") in ("incoming", "waiting", "importing", "profiles", "error"):
-                    self.status.set(phase="idle")
-                for rule in rules:
-                    try:
-                        wanted = cycle(rule, settings, finder, self.status)
-                    except Exception as e:  # noqa: BLE001 — un errore non deve fermare il processo in background
-                        log(f"watch ERROR {rule.get('folder')}: {e!r}")
-                        self.status.set(phase="error", error=str(e))
-                        wanted = None
-                    if wanted:
-                        pause = min(pause, wanted)
-                    write_heartbeat(phone_dir(rule, settings), interval, self.status.get().get("phase"))
-                publish_phone_libraries(settings)
+                if self.held:  # Windows si sta spegnendo: si aspetta senza cominciare niente
+                    self.wait(1)
+                    continue
+                self.in_cycle = True
                 try:
-                    save_settings_copy(settings)
-                except Exception as e:  # noqa: BLE001
-                    log(f"watch ERROR settings copy: {e!r}")
-                # prima i raw in DNG: finché la conversione dei raw già in libreria è in corso, anteprime, volti e
-                # motore IA aspettano (lavorerebbero su foto che stanno per essere sostituite); poi ripartono da soli
-                converting = False
-                try:
-                    import dng
-                    dng.maybe_start(settings)
-                    converting = dng.running()
-                except Exception as e:  # noqa: BLE001
-                    log(f"watch ERROR dng: {e!r}")
-                try:  # anteprime sviluppate per il telefono (thread a priorità minima)
-                    import developed
-                    if converting:
-                        developed.stop()
-                    else:
-                        developed.maybe_start(settings)
-                except Exception as e:  # noqa: BLE001
-                    log(f"watch ERROR previews: {e!r}")
-                try:  # volti: LightCraft li cerca nelle foto mai analizzate (thread, con LightCraft chiuso)
-                    import faces
-                    if converting:
-                        faces.stop()
-                    else:
-                        faces.maybe_start(settings)
-                except Exception as e:  # noqa: BLE001
-                    log(f"watch ERROR faces: {e!r}")
-                try:  # ricerca IA: impronte delle foto nuove (processo a parte, a bassa priorità)
-                    import ai
-                    if not converting:
-                        ai.maybe_start(settings, log)
-                except Exception as e:  # noqa: BLE001 — il motore IA non deve fermare l'importazione
-                    log(f"watch ERROR ai: {e!r}")
-                next_check = time.time() + pause
-                self.status.set(next_check=next_check)
-                save_json(STATUS, {"pid": os.getpid(), "checked": datetime.datetime.now().isoformat(timespec="seconds"),
-                                   "interval": interval, **{k: v for k, v in self.status.get().items()
-                                                            if k in LIVE_KEYS}})
-                if once:
+                    pause = self.one_round(once)
+                finally:
+                    self.in_cycle = False
+                if pause is None:
                     return 0
                 if self.wait_or_closed(pause):
                     log("watch: stopped" + ("" if self.quit else " (update or uninstall)"))
@@ -1589,10 +1582,86 @@ class Watcher:
             except OSError:
                 pass
 
+    def one_round(self, once):
+        """Un giro dei controlli. Torna i secondi da aspettare prima del prossimo, o None per chiudere."""
+        settings = load_json(SETTINGS)
+        enabled, rules, interval = watch_settings(settings)
+        if not enabled:
+            log("watch: stopped (automatic import is off)")
+            return None
+        finder = cs.ProfileFinder(settings.get("profiles_dir"))
+        pause = interval * 60
+        if self.status.get().get("phase") in ("incoming", "waiting", "importing", "profiles", "error"):
+            self.status.set(phase="idle")
+        for rule in rules:
+            try:
+                wanted = cycle(rule, settings, finder, self.status)
+            except Exception as e:  # noqa: BLE001 — un errore non deve fermare il processo in background
+                log(f"watch ERROR {rule.get('folder')}: {e!r}")
+                self.status.set(phase="error", error=str(e))
+                wanted = None
+            if wanted:
+                pause = min(pause, wanted)
+            write_heartbeat(phone_dir(rule, settings), interval, self.status.get().get("phase"))
+        publish_phone_libraries(settings)
+        try:
+            save_settings_copy(settings)
+        except Exception as e:  # noqa: BLE001
+            log(f"watch ERROR settings copy: {e!r}")
+        # prima i raw in DNG: finché la conversione dei raw già in libreria è in corso, anteprime, volti e
+        # motore IA aspettano (lavorerebbero su foto che stanno per essere sostituite); poi ripartono da soli
+        with self.gate:
+            if not self.held:
+                self.start_background(settings)
+        next_check = time.time() + pause
+        self.status.set(next_check=next_check)
+        save_json(STATUS, {"pid": os.getpid(), "checked": datetime.datetime.now().isoformat(timespec="seconds"),
+                           "interval": interval, **{k: v for k, v in self.status.get().items()
+                                                    if k in LIVE_KEYS}})
+        return None if once else pause
+
+    def start_background(self, settings):
+        """Avvia (o ferma) i lavori in background: DNG, anteprime, volti, motore IA."""
+        converting = False
+        try:
+            import dng
+            dng.maybe_start(settings)
+            converting = dng.running()
+        except Exception as e:  # noqa: BLE001
+            log(f"watch ERROR dng: {e!r}")
+        try:  # anteprime sviluppate per il telefono (thread a priorità minima)
+            import developed
+            if converting:
+                developed.stop()
+            else:
+                developed.maybe_start(settings)
+        except Exception as e:  # noqa: BLE001
+            log(f"watch ERROR previews: {e!r}")
+        try:  # volti: LightCraft li cerca nelle foto mai analizzate (thread, con LightCraft chiuso)
+            import faces
+            if converting:
+                faces.stop()
+            else:
+                faces.maybe_start(settings)
+        except Exception as e:  # noqa: BLE001
+            log(f"watch ERROR faces: {e!r}")
+        try:  # ricerca IA: impronte delle foto nuove (processo a parte, a bassa priorità)
+            import ai
+            if not converting:
+                ai.maybe_start(settings, log)
+        except Exception as e:  # noqa: BLE001 — il motore IA non deve fermare l'importazione
+            log(f"watch ERROR ai: {e!r}")
+
 
 def run(once=False, tray=True):
     if not single_instance():
         return 0
+    try:
+        # avvisato prima degli altri programmi (lightcraft-cli compreso), così può aspettare che finiscano i comandi
+        # sulle librerie prima che Windows li chiuda
+        ctypes.windll.kernel32.SetProcessShutdownParameters(0x3FF, 0)
+    except Exception:  # noqa: BLE001
+        pass
     if tray and not once:
         try:
             import tray as tray_ui

@@ -429,6 +429,8 @@ def _library(settings, libdir, lib, name, cli):
             render(cli, photo, profiles, os.path.join(pdir, f"{pid}.avif"), os.path.join(tdir, f"{pid}.avif"))
             ok = True
         except Exception as e:  # noqa: BLE001
+            if _stop.is_set():
+                return  # interrotta (spegnimento, LightCraft aperto…): si rifà la prossima volta, non è un errore
             log(f"previews ERROR {name} #{pid} {photo.get('file_name')}: {e!r}")
             ok = False
         with lock:

@@ -255,6 +255,8 @@ def _library(settings, cli, lib):
                 twin = os.path.splitext(src)[0] + ".dng"
                 made.append((p, twin if os.path.isfile(twin) else convert(src)))
             except Exception as e:  # noqa: BLE001
+                if _stop.is_set():
+                    break  # interrotta (spegnimento): si rifà la prossima volta, non è un errore
                 failed[str(p["id"])] = failed.get(str(p["id"]), 0) + 1
                 log(f"dng ERROR {name}: {p.get('file_name')}: {e!r}")
             done += 1

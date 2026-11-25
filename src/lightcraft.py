@@ -244,6 +244,11 @@ def in_scope(imported, scope, batches):
 _cli_lock = threading.Lock()  # un solo lightcraft-cli alla volta su una libreria, da questo processo
 
 
+def lightcraft_busy():
+    """True mentre lightcraft-cli sta lavorando su una libreria per questo processo (non va interrotto)."""
+    return _cli_lock.locked()
+
+
 def run_cli(cli, lib, commands, check=True):
     """Esegue comandi con lightcraft-cli sulla libreria; restituisce le risposte JSON.
 
