@@ -180,6 +180,8 @@ def copy_durable(src, dest):
         shutil.copyfileobj(fi, fo, 4 << 20)
         fo.flush()
         os.fsync(fo.fileno())
+    st = os.stat(src)
+    os.utime(tmp, (st.st_atime, st.st_mtime))  # la data vera: la pulizia delle orfane guarda quanto sono vecchie
     os.replace(tmp, dest)
 
 

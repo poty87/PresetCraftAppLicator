@@ -160,6 +160,20 @@ def maybe_start(settings):
             continue
         if (state.get(lib) or {}).get("snap") == sig or library_open_reason(lib):
             continue
+        # niente raw da convertire (o solo quelli già falliti): si segna come fatta senza avviare il lavoro. Il lavoro
+        # avviato ferma anteprime, smart preview e volti finché gira: prima bastava un catalogo cambiato (una stella
+        # dal telefono) per interromperli a vuoto
+        try:
+            failed = (state.get(lib) or {}).get("failed") or {}
+            pending = [p for p in library_raws(lib) if failed.get(str(p["id"]), 0) < 3]
+        except (OSError, ValueError, KeyError):
+            pending = [None]
+        if not pending:
+            st = state.setdefault(lib, {})
+            st["snap"] = sig
+            st["updated"] = datetime.datetime.now().isoformat(timespec="seconds")
+            save_json(STATE, state)
+            continue
         todo.append(lib)
     if not todo:
         return False
