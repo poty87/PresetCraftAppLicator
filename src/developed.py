@@ -86,7 +86,34 @@ def save_json(path, data):
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
+        durable(f)
     os.replace(tmp, path)
+
+
+def durable(f):
+    """Il contenuto del file arriva davvero sul disco (del NAS) prima che il file prenda il suo nome: senza, un
+    blackout lasciava il nome giusto e un file vuoto (successo il 25/11/2026 a un'anteprima)."""
+    f.flush()
+    os.fsync(f.fileno())
+
+
+MIN_BYTES = 100  # un'anteprima più piccola di così è rovinata (vuota o tagliata)
+
+
+def damaged(folder, pids):
+    """Le foto, tra pids, il cui file <id>.avif in folder manca o è vuoto: una lettura sola della cartella."""
+    sizes = {}
+    try:
+        with os.scandir(folder) as it:
+            for e in it:
+                if e.name.endswith(".avif"):
+                    try:
+                        sizes[e.name[:-5]] = e.stat().st_size
+                    except OSError:
+                        pass
+    except OSError:
+        pass
+    return {pid for pid in pids if sizes.get(str(pid), 0) < MIN_BYTES}
 
 
 def enabled(settings):
@@ -257,11 +284,15 @@ def encode(src, dest, thumb_dest):
         for d in (dest, thumb_dest):
             os.makedirs(os.path.dirname(d), exist_ok=True)
         tmp = dest + ".tmp"
-        im.save(tmp, "AVIF", quality=AVIF_QUALITY, speed=AVIF_SPEED)
+        with open(tmp, "wb") as f:
+            im.save(f, "AVIF", quality=AVIF_QUALITY, speed=AVIF_SPEED)
+            durable(f)
         small = im.copy()
         small.thumbnail((THUMB, THUMB), Image.LANCZOS)
         ttmp = thumb_dest + ".tmp"
-        small.save(ttmp, "AVIF", quality=THUMB_QUALITY, speed=AVIF_SPEED)
+        with open(ttmp, "wb") as f:
+            small.save(f, "AVIF", quality=THUMB_QUALITY, speed=AVIF_SPEED)
+            durable(f)
     os.replace(tmp, dest)
     os.replace(ttmp, thumb_dest)
     return size
@@ -381,6 +412,12 @@ def _library(settings, libdir, lib, name, cli):
                 except OSError:
                     pass
     photos = {int(k): v for k, v in (current.get("photos") or {}).items()} if same_kind else {}
+    # anteprime segnate come fatte ma il cui file manca o è vuoto (un blackout mentre si scrivevano): si rifanno
+    broken = damaged(pdir, photos) | damaged(tdir, photos)
+    if broken:
+        log(f"previews: {name}: {len(broken)} previews missing or empty, developing them again")
+        for pid in broken:
+            photos.pop(pid, None)
     # foto non riuscite: [firma, tentativi]; si riprovano (fino a MAX_TRIES) quando il catalogo cambia di nuovo
     failed = {int(k): v for k, v in (current.get("failed") or {}).items() if isinstance(v, list)}
     # anteprime che non servono più: foto tolte dalla libreria (cancellate da CleanCraftNas)
