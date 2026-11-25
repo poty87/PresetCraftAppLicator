@@ -5,7 +5,8 @@ Nella cartella di servizio, accanto all'indice della libreria (libraries/<librer
                     {"version": 1, "base": {impostazioni più comuni},
                      "photos": {id: [firma, {"sezione.campo": valore diverso da base, ...}, [campi da togliere]?]}}
                     (le impostazioni di una foto = base, con i valori del secondo elemento al posto dei suoi e senza i
-                    campi del terzo, se c'è; null è un valore vero di LightCraft, non vuol dire "togli")
+                    campi del terzo, se c'è; null è un valore vero di LightCraft, non vuol dire "togli");
+                    "smart": {id: nome del file della smart preview} (in smart/<prime 2 cifre>/<nome>), dalla 1.29.1
                     La firma (develop_signature) è quella che il telefono rimanda con una modifica ("base"): se intanto
                     sul PC la foto è cambiata, PresetCraftAppLicator non sovrascrive (copia virtuale).
   profiles/         i file dei profili importati nella libreria (.dcp, .cube), copiati com'erano
@@ -73,7 +74,9 @@ def build_develop(photos):
         diff = {k: v for k, v in f.items() if k not in base or base[k] != v}
         drop = sorted(k for k in base if k not in f)  # campi che questa foto non ha
         out[str(pid)] = [develop_signature(devs[pid]), diff] + ([drop] if drop else [])
-    return {"version": 1, "base": unflatten(base), "photos": out}
+    import smart
+    names = {str(int(p["id"])): smart.file_name(p) for p in photos}
+    return {"version": 1, "base": unflatten(base), "photos": out, "smart": names}
 
 
 def rebuild(data, pid):
