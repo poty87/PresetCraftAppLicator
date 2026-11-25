@@ -184,8 +184,8 @@ def build_plan(lib, scope, settings, finder, progress=None, ids=None, locked=Non
                 else:
                     item["target"], item["target_path"] = target_profile(settings, finder, item["model"], style)
                 item["status"] = status_of(item, dcps, finder)
-        if locked and item["id"] in locked:
-            item["status"] = "phone"  # preset scelto sul telefono: il profilo automatico non lo sovrascrive
+        if (locked and item["id"] in locked) or profile_from_phone(p):
+            item["status"] = "phone"  # scelto sul telefono (preset o profilo): il profilo automatico non lo sovrascrive
         item["action"] = "apply" if item["status"] == "apply" else "skip"
         if saved and item["status"] in ("apply", "manual"):
             if item["own"]:
@@ -195,6 +195,23 @@ def build_plan(lib, scope, settings, finder, progress=None, ids=None, locked=Non
         items.append(item)
     save_cache(cache)
     return {"items": items, "unsupported": unsupported, "in_scope": len(photos), "batches": batches}
+
+
+PHONE_LABEL = "ViewerCraftStar"  # etichetta della cronologia delle modifiche di sviluppo arrivate dal telefono
+
+
+def profile_from_phone(photo):
+    """True se l'ultimo cambio di profilo nella cronologia di LightCraft viene dal telefono («Sviluppa» di
+    ViewerCraftStar): è una scelta fatta a mano, il profilo automatico non la deve sostituire. Se poi il profilo si
+    cambia in LightCraft sul PC, l'ultimo cambio non è più del telefono e valgono le regole di sempre."""
+    last_id, last_label = None, None
+    for h in photo.get("history") or []:
+        pid = ((h.get("settings") or {}).get("profile") or {}).get("id")
+        if pid != last_id:
+            if last_id is not None:
+                last_label = h.get("label")
+            last_id = pid
+    return last_label == PHONE_LABEL
 
 
 def status_of(item, dcps, finder):

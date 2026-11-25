@@ -2664,12 +2664,12 @@ TEXTS = {
         'pt': 'A biblioteca ainda parece estar aberta. Se o LightCraft estiver fechado, abra-o e feche-o uma vez.',
     },
     'st_phone': {
-        'it': 'Preset scelto sul telefono',
-        'en': 'Preset chosen on the phone',
-        'de': 'Auf dem Handy gewähltes Preset',
-        'es': 'Ajuste elegido en el móvil',
-        'fr': 'Préréglage choisi sur le téléphone',
-        'pt': 'Predefinição escolhida no telemóvel',
+        'it': 'Scelto sul telefono (preset o profilo)',
+        'en': 'Chosen on the phone (preset or profile)',
+        'de': 'Auf dem Handy gewählt (Preset oder Profil)',
+        'es': 'Elegido en el móvil (ajuste o perfil)',
+        'fr': 'Choisi sur le téléphone (préréglage ou profil)',
+        'pt': 'Escolhido no telemóvel (predefinição ou perfil)',
     },
     'st_preparing': {
         'it': 'Salvo una copia del catalogo e importo i profili…',
