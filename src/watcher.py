@@ -1256,13 +1256,21 @@ def phone_stack_commands(per_photo, known, covers=None):
     """Pile create sul telefono: ogni foto porta "stack" = l'id della copertina; le foto con la stessa copertina
     diventano una pila (quelle già in una pila la portano con sé: LightCraft unisce le pile). Una foto che indica sé
     stessa e basta, già in una pila di cui non è la copertina, è «Rendi copertina»: stack.setTop.
-    covers: {id della foto: id della copertina della sua pila} per le foto in una pila."""
+    covers: {id della foto: id della copertina della sua pila} per le foto in una pila.
+    "stack" = 0 è «Togli dalla pila»: stack.remove (se era la copertina, lo diventa la foto dopo; LightCraft scioglie
+    la pila quando resta una foto sola)."""
     groups = {}
+    removed = []
     for pid, ch in per_photo.items():
         top = ch.get("stack")
-        if isinstance(top, int) and not isinstance(top, bool) and top in known:
+        if not isinstance(top, int) or isinstance(top, bool):
+            continue
+        if top == 0:
+            if covers and pid in covers:
+                removed.append(pid)
+        elif top in known:
             groups.setdefault(top, set()).add(pid)
-    cmds = []
+    cmds = [("stack.remove", {"ids": sorted(removed)})] if removed else []
     for top, members in sorted(groups.items()):
         members.discard(top)
         if members:
