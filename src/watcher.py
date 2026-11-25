@@ -1098,6 +1098,22 @@ def stack_move_commands(current, desired):
     return cmds
 
 
+def restored_order(members, restored, remembered):
+    """L'ordine della pila dopo un ripristino: si spostano SOLO le foto ripristinate, ognuna subito dopo la foto che
+    la precedeva quando è stata eliminata (in testa, come copertina, se lo era). Le altre restano come sono adesso:
+    una copertina scelta nel frattempo (o nello stesso giro, dal telefono) non torna quella vecchia."""
+    rs = [r for r in members if r in restored]
+    desired = [m for m in members if m not in restored]
+    for r in sorted(rs, key=lambda x: (remembered.get(x) or []).index(x) if x in (remembered.get(x) or []) else 10**9):
+        ref = remembered.get(r) or []
+        if r not in ref:
+            desired.append(r)
+            continue
+        before = [m for m in ref[:ref.index(r)] if m in desired]
+        desired.insert(desired.index(before[-1]) + 1 if before else 0, r)
+    return desired
+
+
 def restore_stacks(lib, folder, cli, restored_ids):
     """Dopo photo.restore (LightCraft non rimette le foto nelle pile): ogni foto torna nella sua pila, nella posizione
     di prima (anche come copertina, se lo era). Se di quella pila non è rimasta nessuna foto, quelle ripristinate
@@ -1145,9 +1161,7 @@ def restore_stacks(lib, folder, cli, restored_ids):
         rs = [r for r in restored_ids if r in members]
         if not rs:
             continue
-        ref = remembered.get(rs[0]) or []
-        desired = sorted(members, key=lambda m: (ref.index(m) if m in ref else len(ref) + members.index(m)))
-        moves += stack_move_commands(members, desired)
+        moves += stack_move_commands(members, restored_order(members, rs, remembered))
         if any(set(g) <= set(members) for g in new_groups):
             restored_stacks.add(int(st["id"]))
     if moves:
