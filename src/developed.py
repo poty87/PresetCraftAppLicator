@@ -30,7 +30,6 @@ from lightcraft import (DATA_DIR, DEFAULT_CLI, NO_WINDOW, catalog_signature, is_
 
 PREVIEWS_DIR = "previews"
 THUMBS_DIR = "thumbs"
-SMART_DIR = "smart"  # riservata: i DNG ridotti per lo sviluppo dal telefono (prossimo passo)
 LIST_FILE = "previews.json"
 LIST_VERSION = 2
 SIZE = 2560  # lato lungo: nitida a schermo intero sul telefono, ~450 KB in AVIF

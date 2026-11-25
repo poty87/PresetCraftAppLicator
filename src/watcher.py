@@ -917,7 +917,8 @@ def watch_settings(settings):
 # ---------------------------------------------------------------- librerie consultabili dal telefono
 
 PHONE_INDEX = "index.json.gz"
-PHONE_INDEX_FORMAT = 4  # cambia quando l'indice porta campi nuovi (2: persone e volti, 3: suggerimenti, 4: cestino): si ripubblica
+PHONE_INDEX_FORMAT = 5  # cambia quando l'indice porta campi nuovi (2: persone e volti, 3: suggerimenti, 4: cestino,
+# 5: impostazioni di sviluppo e profili per lo sviluppo dal telefono): si ripubblica
 PHONE_STATE = os.path.join(STATE_DIR, "phone-libraries.json")
 # la cartella di servizio sul NAS: tutto quello che PresetCraftAppLicator prepara per il telefono e per ripartire
 LIBRARIES_DIR = "libraries"  # <libreria>/: indice, modifiche dal telefono (changes), ricerca IA (ia), anteprime
@@ -1202,6 +1203,12 @@ def publish_library_index(lib, folder, state, settings=None):
     save_json(os.path.join(target_dir, "info.json"),
               {"version": 1, "library": data["library"], "photos": len(data["photos"]), "stacks": len(data["stacks"]),
                "updated": data["updated"]})
+    try:  # sviluppo dal telefono: le impostazioni di ogni foto e i profili della libreria
+        import phone_develop
+        phone_develop.publish_develop(target_dir, read_catalog(lib))
+        phone_develop.publish_profiles(lib, target_dir)
+    except Exception as e:  # noqa: BLE001 — l'indice resta valido anche senza
+        log(f"watch: develop settings for {XMP_TOOL} not published for {lib} ({e!r})")
     # lightcraft-cli riscrive il catalogo quando si chiude (anche solo per i suggerimenti): conta il catalogo di adesso,
     # altrimenti al giro dopo sembrerebbe cambiato e l'indice si rifarebbe ogni volta
     state[lib] = catalog_signature(lib) + [PHONE_INDEX_FORMAT]
@@ -1323,7 +1330,7 @@ def apply_phone_changes(lib, folder, settings):
                 pid, at = int(ch["id"]), int(ch.get("at") or 0)
             except (KeyError, TypeError, ValueError):
                 continue
-            for field in ("rating", "flag", "label", "title", "caption", "keywords", "trash", "stack", "faces"):
+            for field in ("rating", "flag", "label", "title", "caption", "keywords", "trash", "stack", "faces", "develop"):
                 if field in ch and (at, ) >= (latest.get((pid, field), (-1, None))[0], ):
                     latest[(pid, field)] = (at, ch[field])
     if not read:
@@ -1343,17 +1350,21 @@ def apply_phone_changes(lib, folder, settings):
     commands = [cmd for ch in per_photo.values() for cmd in phone_change_commands(
         ch, ((catalog.get(str(ch["id"])) or {}).get("meta") or {}).get("regions"))]
     commands += phone_stack_commands(per_photo, known, covers)
-    if commands:
+    develops = {pid: ch["develop"] for pid, ch in per_photo.items()
+                if isinstance(ch.get("develop"), dict) and isinstance(ch["develop"].get("settings"), dict)}
+    if commands or develops:
         try:
             update_stack_memory(lib, folder, cat)  # le pile come sono prima di eliminare
         except Exception as e:  # noqa: BLE001
             log(f"watch: stack memory for {lib} not updated ({e!r})")
         root, kept = backup_root(lib, settings), settings.get("backups_kept", BACKUPS_KEPT)
         backup = backup_library(lib, root, kept)
-        replies = run_cli(cli, lib, commands, check=False)
+        replies = run_cli(cli, lib, commands, check=False) if commands else []
         failed = [r for r in replies if not r.get("ok")]
         if failed or len(replies) < len(commands):
             log(f"watch ERROR changes from {XMP_TOOL} for {lib}: {failed[:1] or 'no reply'} (retrying later)")
+            return False
+        if develops and not apply_phone_develops(cli, lib, catalog, develops, read):
             return False
         log(f"--- watch: changes from {XMP_TOOL} applied to {len(per_photo)} photos in {lib} (backup: {backup})")
         restored = [pid for pid, ch in per_photo.items() if ch.get("trash") is False
@@ -1381,6 +1392,46 @@ def apply_phone_changes(lib, folder, settings):
             os.remove(os.path.join(done_dir, old))
         except OSError:
             pass
+    return True
+
+
+DEVELOP_CONFLICTS = os.path.join(STATE_DIR, "develop-conflicts.json")
+
+
+def apply_phone_develops(cli, lib, catalog, develops, sources):
+    """Sviluppo modificato sul telefono: {id: {"settings": impostazioni complete di LightCraft, "base": firma da cui il
+    telefono era partito}}. Se intanto sul PC la foto è cambiata (firma diversa) non si sovrascrive: le impostazioni
+    del telefono vanno su una copia virtuale (nella stessa pila). True se tutto applicato."""
+    import phone_develop
+    conflicts = load_json(DEVELOP_CONFLICTS)
+    key_of = "|".join(sorted(sources))  # la stessa richiesta riprovata non crea un'altra copia
+    for pid, ch in sorted(develops.items()):
+        target = pid
+        current = (catalog.get(str(pid)) or {}).get("develop") or {}
+        base = ch.get("base")
+        if base and base != phone_develop.develop_signature(current):
+            k = f"{lib}|{key_of}|{pid}"
+            target = conflicts.get(k)
+            if not target:
+                r = run_cli(cli, lib, [("photo.virtualCopy", {"ids": [pid], "name": "Telefono"})], check=False)
+                ids = ((r[0].get("result") or {}).get("ids") or []) if r and r[0].get("ok") else []
+                if not ids:
+                    log(f"watch ERROR develop from {XMP_TOOL} for {lib} #{pid}: virtual copy not made (retrying later)")
+                    return False
+                target = int(ids[0])
+                conflicts[k] = target
+                save_json(DEVELOP_CONFLICTS, conflicts)
+            log(f"watch: photo {pid} changed on the PC too: the phone's develop settings go to virtual copy {target}")
+        r = run_cli(cli, lib, [("library.select", {"ids": [target], "active": target}),
+                               ("develop.merge", {"settings": ch["settings"], "label": XMP_TOOL})], check=False)
+        if len(r) < 2 or not all(x.get("ok") for x in r):
+            log(f"watch ERROR develop from {XMP_TOOL} for {lib} #{target}: {[x for x in r if not x.get('ok')][:1]}"
+                " (retrying later)")
+            return False
+    for k in [k for k in conflicts if k.startswith(f"{lib}|{key_of}|")]:
+        conflicts.pop(k)
+    save_json(DEVELOP_CONFLICTS, conflicts)
+    log(f"--- watch: develop settings from {XMP_TOOL} applied to {len(develops)} photos in {lib}")
     return True
 
 
@@ -1417,6 +1468,9 @@ def read_settings_copy(folder):
     return data if isinstance(data.get("settings"), dict) else None
 
 
+_lightcraft_checked = 0.0
+
+
 def publish_phone_libraries(settings):
     folder, libs = phone_settings(settings)
     if not libs:
@@ -1430,6 +1484,14 @@ def publish_phone_libraries(settings):
         return  # cartelle ancora nel posto vecchio: si pubblica quando sono state spostate
     state = load_json(PHONE_STATE)
     changed = False
+    global _lightcraft_checked
+    if time.time() - _lightcraft_checked > 6 * 3600:  # la versione di LightCraft per il telefono
+        try:
+            import phone_develop
+            phone_develop.publish_lightcraft_version(folder, settings.get("cli") or DEFAULT_CLI)
+        except Exception as e:  # noqa: BLE001
+            log(f"watch: LightCraft version not published ({e!r})")
+        _lightcraft_checked = time.time()
     for lib in libs:
         try:
             apply_phone_changes(lib, folder, settings)
@@ -1475,7 +1537,7 @@ class Watcher:
         """Windows si sta spegnendo: il giro in corso finisce, i lavori in background si fermano salvando."""
         with self.gate:
             self.held = True
-            for name in ("developed", "faces", "dng"):
+            for name in ("developed", "smart", "faces", "dng"):
                 try:
                     __import__(name).stop()
                 except Exception:  # noqa: BLE001
@@ -1492,7 +1554,7 @@ class Watcher:
         out = []
         if self.in_cycle:
             out.append("cycle")
-        for name in ("developed", "faces", "dng"):
+        for name in ("developed", "smart", "faces", "dng"):
             try:
                 if __import__(name).running():
                     out.append(name)
@@ -1571,6 +1633,8 @@ class Watcher:
             try:
                 import developed
                 developed.stop()
+                import smart
+                smart.stop()
                 import faces
                 faces.stop()
                 import dng
@@ -1637,6 +1701,14 @@ class Watcher:
                 developed.maybe_start(settings)
         except Exception as e:  # noqa: BLE001
             log(f"watch ERROR previews: {e!r}")
+        try:  # smart preview di LightCraft per lo sviluppo dal telefono (thread, LightCraft chiuso)
+            import smart
+            if converting:
+                smart.stop()
+            else:
+                smart.maybe_start(settings)
+        except Exception as e:  # noqa: BLE001
+            log(f"watch ERROR smart previews: {e!r}")
         try:  # volti: LightCraft li cerca nelle foto mai analizzate (thread, con LightCraft chiuso)
             import faces
             if converting:

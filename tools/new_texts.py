@@ -1970,3 +1970,19 @@ NEW.update({'previews_line': {'de': 'Vorschauen für das Telefon: {library} {don
                             'mostra-as em vez das pré-visualizações dentro dos ficheiros raw (muitas vezes pequenas '
                             'ou muito pesadas). Da primeira vez demora algumas horas, em segundo plano e com baixa '
                             'prioridade; depois só as fotos novas ou alteradas.'}})
+
+# 1.29: smart preview per lo sviluppo dal telefono
+NEW.update({
+    "smart_line": _t("Smart preview per il telefono: {library} {done} di {total}",
+                     "Smart previews for the phone: {library} {done} of {total}",
+                     "Smart-Vorschauen für das Telefon: {library} {done} von {total}",
+                     "Vistas inteligentes para el teléfono: {library} {done} de {total}",
+                     "Aperçus dynamiques pour le téléphone : {library} {done} sur {total}",
+                     "Pré-visualizações inteligentes para o telemóvel: {library} {done} de {total}"),
+    "smart_line_move": _t("Smart preview spostate sul NAS: {library} {done} di {total}",
+                          "Moving smart previews to the NAS: {library} {done} of {total}",
+                          "Smart-Vorschauen werden auf das NAS verschoben: {library} {done} von {total}",
+                          "Moviendo las vistas inteligentes al NAS: {library} {done} de {total}",
+                          "Déplacement des aperçus dynamiques vers le NAS : {library} {done} sur {total}",
+                          "A mover as pré-visualizações inteligentes para o NAS: {library} {done} de {total}"),
+})

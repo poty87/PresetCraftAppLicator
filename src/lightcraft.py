@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 import threading
 from ctypes import wintypes
 
@@ -299,6 +300,9 @@ def backup_root(lib, settings):
 
 def backup_library(lib, root, kept=BACKUPS_KEPT):
     dest = os.path.join(root, datetime.datetime.now().strftime(STAMP))
+    while os.path.exists(dest):  # due backup nello stesso secondo: il nome (la data) dev'essere diverso
+        time.sleep(0.2)
+        dest = os.path.join(root, datetime.datetime.now().strftime(STAMP))
     os.makedirs(dest)
     for name in LIBRARY_FILES:
         src = os.path.join(lib, name)

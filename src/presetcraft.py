@@ -2188,6 +2188,15 @@ def import_lines(settings):
                           done / total, "auto"))
     except Exception as e:  # noqa: BLE001
         log(f"status previews: {e!r}")
+    try:  # smart preview per lo sviluppo dal telefono (thread del processo in background)
+        import smart
+        sv = watcher.load_json(smart.STATUS)
+        if sv.get("running") and sv.get("pid") == st.get("pid") and sv.get("total"):
+            done, total = sv.get("done") or 0, sv["total"]
+            key = "smart_line_move" if sv.get("phase") == "move" else "smart_line"
+            lines.append(("work", t(key, library=sv.get("library") or "", done=done, total=total), done / total, "auto"))
+    except Exception as e:  # noqa: BLE001
+        log(f"status smart previews: {e!r}")
     try:  # raw già nelle librerie convertiti in DNG (thread del processo in background)
         import dng
         dv = watcher.load_json(dng.STATUS)

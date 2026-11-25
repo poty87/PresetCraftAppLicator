@@ -2519,6 +2519,22 @@ TEXTS = {
         'fr': 'Enregistrement du travail en cours (il reprendra au prochain démarrage)',
         'pt': 'A terminar de guardar o trabalho em curso (continua no próximo arranque)',
     },
+    'smart_line': {
+        'it': 'Smart preview per il telefono: {library} {done} di {total}',
+        'en': 'Smart previews for the phone: {library} {done} of {total}',
+        'de': 'Smart-Vorschauen für das Telefon: {library} {done} von {total}',
+        'es': 'Vistas inteligentes para el teléfono: {library} {done} de {total}',
+        'fr': 'Aperçus dynamiques pour le téléphone : {library} {done} sur {total}',
+        'pt': 'Pré-visualizações inteligentes para o telemóvel: {library} {done} de {total}',
+    },
+    'smart_line_move': {
+        'it': 'Smart preview spostate sul NAS: {library} {done} di {total}',
+        'en': 'Moving smart previews to the NAS: {library} {done} of {total}',
+        'de': 'Smart-Vorschauen werden auf das NAS verschoben: {library} {done} von {total}',
+        'es': 'Moviendo las vistas inteligentes al NAS: {library} {done} de {total}',
+        'fr': 'Déplacement des aperçus dynamiques vers le NAS : {library} {done} sur {total}',
+        'pt': 'A mover as pré-visualizações inteligentes para o NAS: {library} {done} de {total}',
+    },
     'st_apply': {
         'it': 'Riceverà il profilo',
         'en': 'Will get the profile',
