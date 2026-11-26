@@ -1317,6 +1317,7 @@ def apply_phone_changes(lib, folder, settings):
     if not is_cli(cli):
         return False
     latest = {}  # (id, campo) -> (momento, valore): per ogni campo vale l'ultima modifica
+    copy_reqs = {}  # id provvisorio (negativo) del telefono -> {"token", "parent", "name"}: copie virtuali da creare
     read = []
     for name in files:
         try:
@@ -1330,6 +1331,8 @@ def apply_phone_changes(lib, folder, settings):
                 pid, at = int(ch["id"]), int(ch.get("at") or 0)
             except (KeyError, TypeError, ValueError):
                 continue
+            if isinstance(ch.get("copy"), dict) and ch["copy"].get("token"):
+                copy_reqs[pid] = ch["copy"]
             for field in ("rating", "flag", "label", "title", "caption", "keywords", "trash", "stack", "faces", "develop"):
                 if field in ch and (at, ) >= (latest.get((pid, field), (-1, None))[0], ):
                     latest[(pid, field)] = (at, ch[field])
@@ -1343,8 +1346,23 @@ def apply_phone_changes(lib, folder, settings):
         members = [int(x) for x in st.get("photos") or []]
         for m in members:
             covers[m] = members[0]
+    backup = None
+    remap = {}  # id provvisorio del telefono -> id della copia virtuale creata
+    if copy_reqs:
+        remap, backup = make_phone_copies(lib, folder, settings, cli, catalog, copy_reqs, latest)
+        if remap is None:
+            return False
+        known |= set(remap.values())
     per_photo = {}
     for (pid, field), (_at, value) in latest.items():
+        if pid < 0:
+            if pid not in remap:
+                continue
+            pid = remap[pid]
+            if field == "develop" and isinstance(value, dict):
+                value = {**value, "base": None}  # la copia è nuova e sua: nessun conflitto con il PC
+            if field == "stack":
+                continue
         if pid in known:
             per_photo.setdefault(pid, {"id": pid})[field] = value
     commands = [cmd for ch in per_photo.values() for cmd in phone_change_commands(
@@ -1357,8 +1375,9 @@ def apply_phone_changes(lib, folder, settings):
             update_stack_memory(lib, folder, cat)  # le pile come sono prima di eliminare
         except Exception as e:  # noqa: BLE001
             log(f"watch: stack memory for {lib} not updated ({e!r})")
-        root, kept = backup_root(lib, settings), settings.get("backups_kept", BACKUPS_KEPT)
-        backup = backup_library(lib, root, kept)
+        if backup is None:
+            root, kept = backup_root(lib, settings), settings.get("backups_kept", BACKUPS_KEPT)
+            backup = backup_library(lib, root, kept)
         replies = run_cli(cli, lib, commands, check=False) if commands else []
         failed = [r for r in replies if not r.get("ok")]
         if failed or len(replies) < len(commands):
@@ -1393,6 +1412,60 @@ def apply_phone_changes(lib, folder, settings):
         except OSError:
             pass
     return True
+
+
+def make_phone_copies(lib, folder, settings, cli, catalog, copy_reqs, latest):
+    """Copie virtuali chieste dal telefono ({id provvisorio: {"token", "parent", "name"}}). Ogni token si crea una volta
+    sola (copies.json nella cartella della libreria: la stessa richiesta rimandata, o mandata di nuovo dopo altre
+    modifiche, non fa un doppione). La copia parte com'era la foto all'importazione (prima voce della cronologia: il
+    profilo scelto da PresetCraftAppLicator, nessun ritocco). Torna ({id provvisorio: id della copia}, backup) o
+    (None, None) se lightcraft-cli non riesce (si riprova al giro dopo)."""
+    import phone_develop
+    path = os.path.join(library_dir(folder, lib), phone_develop.COPIES_FILE)
+    copies = load_json(path)
+    remap, backup = {}, None
+    for tmp_id, req in sorted(copy_reqs.items()):
+        token = str(req.get("token"))
+        made = copies.get(token)
+        if made is not None:
+            if str(made) in catalog:
+                remap[tmp_id] = int(made)
+            continue  # già fatta (se poi è stata eliminata sul PC, non si rifà)
+        try:
+            parent = int(req.get("parent"))
+        except (TypeError, ValueError):
+            continue
+        if latest.get((tmp_id, "trash"), (0, None))[1] is True:
+            continue  # tolta sul telefono prima che il PC la creasse
+        photo = catalog.get(str(parent))
+        if not photo or photo.get("deleted"):
+            log(f"watch: virtual copy from {XMP_TOOL} not made: photo {parent} is not in {lib} any more")
+            copies[token] = -1
+            save_json(path, copies)
+            continue
+        if backup is None:
+            root, kept = backup_root(lib, settings), settings.get("backups_kept", BACKUPS_KEPT)
+            backup = backup_library(lib, root, kept)
+        name = str(req.get("name") or "Copia")[:80]
+        r = run_cli(cli, lib, [("photo.virtualCopy", {"ids": [parent], "name": name})], check=False)
+        ids = ((r[0].get("result") or {}).get("ids") or []) if r and r[0].get("ok") else []
+        if not ids:
+            log(f"watch ERROR virtual copy from {XMP_TOOL} for {lib} #{parent}: {r[:1]} (retrying later)")
+            return None, None
+        new = int(ids[0])
+        copies[token] = new
+        save_json(path, copies)
+        h = photo.get("history") or []
+        clean = h[0].get("settings") if h and isinstance(h[0], dict) else None
+        if isinstance(clean, dict):
+            r = run_cli(cli, lib, [("library.select", {"ids": [new], "active": new}),
+                                   ("develop.merge", {"settings": clean, "label": XMP_TOOL})], check=False)
+            if len(r) < 2 or not all(x.get("ok") for x in r):
+                log(f"watch: virtual copy {new} of #{parent}: starting settings not set ({r[-1:]})")
+        catalog[str(new)] = {"id": new, "develop": clean or photo.get("develop") or {}, "history": [{"label": XMP_TOOL}]}
+        remap[tmp_id] = new
+        log(f"watch: virtual copy «{name}» of photo {parent} made for {XMP_TOOL}: #{new}")
+    return remap, backup
 
 
 DEVELOP_CONFLICTS = os.path.join(STATE_DIR, "develop-conflicts.json")

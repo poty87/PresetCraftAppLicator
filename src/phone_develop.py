@@ -60,6 +60,10 @@ def unflatten(flat):
     return out
 
 
+# copie virtuali create su richiesta del telefono: {token: id} (nella cartella della libreria, accanto a changes/)
+COPIES_FILE = "copies.json"
+
+
 def build_develop(photos):
     """Il contenuto di develop.json.gz: base comune + differenze per foto."""
     devs = {int(p["id"]): p.get("develop") or {} for p in photos}
@@ -74,9 +78,23 @@ def build_develop(photos):
         diff = {k: v for k, v in f.items() if k not in base or base[k] != v}
         drop = sorted(k for k in base if k not in f)  # campi che questa foto non ha
         out[str(pid)] = [develop_signature(devs[pid]), diff] + ([drop] if drop else [])
+    # com'era ogni foto all'importazione (prima voce della cronologia di LightCraft: il profilo scelto da
+    # PresetCraftAppLicator, nessun ritocco), solo dove è diversa da adesso: da lì parte una copia virtuale fatta sul
+    # telefono («senza nulla applicato»)
+    first = {}
+    for p in photos:
+        h = p.get("history") or []
+        h0 = h[0].get("settings") if h and isinstance(h[0], dict) else None
+        pid = int(p["id"])
+        if not isinstance(h0, dict) or h0 == devs[pid]:
+            continue
+        f = flatten(h0)
+        diff = {k: v for k, v in f.items() if k not in base or base[k] != v}
+        drop = sorted(k for k in base if k not in f)
+        first[str(pid)] = [diff] + ([drop] if drop else [])
     import smart
     names = {str(int(p["id"])): smart.file_name(p) for p in photos}
-    return {"version": 1, "base": unflatten(base), "photos": out, "smart": names}
+    return {"version": 1, "base": unflatten(base), "photos": out, "smart": names, "first": first}
 
 
 def rebuild(data, pid):
@@ -102,6 +120,13 @@ def publish_develop(target_dir, cat):
     """Scrive develop.json.gz per il telefono. Torna il numero di foto."""
     photos = [p for p in cat["photos"].values() if p.get("kind") in ("raw", "image")]
     data = build_develop(photos)
+    # copie virtuali chieste dal telefono: token → id della copia (il telefono riconosce così la sua copia in attesa)
+    try:
+        with open(os.path.join(target_dir, COPIES_FILE), encoding="utf-8") as f:
+            copies = json.load(f)
+    except (OSError, ValueError):
+        copies = {}
+    data["copies"] = {t: i for t, i in copies.items() if str(i) in cat["photos"]}
     os.makedirs(target_dir, exist_ok=True)
     write_gz_json(os.path.join(target_dir, DEVELOP_FILE), data)
     return len(photos)
