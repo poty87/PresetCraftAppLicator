@@ -319,6 +319,9 @@ def _run(cli, photo, work, commands):
 
 _runner = None
 _stop = threading.Event()
+# una libreria più piccola è cambiata mentre si lavora su una grande: si lascia la grande (riprende dopo)
+_yield = threading.Event()
+_broken = {}  # librerie che non si sono lette: lib → firma (non fanno fermare le altre finché non cambiano di nuovo)
 
 
 def stop():
@@ -331,6 +334,30 @@ def running():
 
 def snap_signature(lib):
     return catalog_signature(lib) + [FORMAT]
+
+
+def catalog_size(lib):
+    """Dimensione di catalog.snap: per fare prima le librerie piccole (le modifiche lì non aspettano ore dietro le grandi)."""
+    try:
+        return os.path.getsize(os.path.join(lib, "catalog.snap"))
+    except OSError:
+        return 0
+
+
+def _smaller_changed(lib, libs):
+    """Una libreria più piccola di `lib` ha il catalogo cambiato (e LightCraft chiuso): va fatta prima."""
+    size = catalog_size(lib)
+    state = load_json(STATE)
+    for other in libs:
+        if other == lib or catalog_size(other) >= size:
+            continue
+        try:
+            sig = snap_signature(other)
+            if state.get(other) != sig and _broken.get(other) != sig and not library_open_reason(other):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def maybe_start(settings):
@@ -359,8 +386,10 @@ def maybe_start(settings):
         todo.append((lib, sig))
     if not todo:
         return False
+    todo.sort(key=lambda t: catalog_size(t[0]))  # prima le librerie piccole
     _stop.clear()
-    _runner = threading.Thread(target=_work, args=(settings, folder, cli, todo), name="previews", daemon=True)
+    _yield.clear()
+    _runner = threading.Thread(target=_work, args=(settings, folder, cli, todo, libs), name="previews", daemon=True)
     _runner.start()
     return True
 
@@ -372,17 +401,18 @@ def _status(**values):
         pass
 
 
-def _work(settings, folder, cli, todo):
+def _work(settings, folder, cli, todo, libs=()):
     import watcher
     try:
         for lib, sig in todo:
-            if _stop.is_set():
+            if _stop.is_set() or _yield.is_set():
                 return
             name = os.path.basename(os.path.normpath(lib))
             try:
-                done = _library(settings, watcher.library_dir(folder, lib), lib, name, cli)
+                done = _library(settings, watcher.library_dir(folder, lib), lib, name, cli, libs)
             except Exception as e:  # noqa: BLE001 — una libreria che non si legge non ferma le altre
                 log(f"previews ERROR {name}: {e!r}")
+                _broken[lib] = sig
                 done = False
             if done:
                 state = load_json(STATE)
@@ -392,7 +422,7 @@ def _work(settings, folder, cli, todo):
         _status(running=False)
 
 
-def _library(settings, libdir, lib, name, cli):
+def _library(settings, libdir, lib, name, cli, libs=()):
     """Allinea le anteprime di una libreria. True se è tutto fatto (nessun errore, non interrotto)."""
     started = time.time()
     _status(running=True, library=name, phase="plan", done=0, total=0, started=started)
@@ -433,7 +463,7 @@ def _library(settings, libdir, lib, name, cli):
             if photos.get(pid) != s and failed.get(pid, [s, 0])[1] < MAX_TRIES]
     jobs.sort(key=lambda j: j[1].get("captured") or "", reverse=True)  # prima le foto più recenti
     lock = threading.Lock()
-    state = {"done": 0, "saved": time.time(), "errors": 0}
+    state = {"done": 0, "saved": time.time(), "errors": 0, "checked": time.time()}
 
     def done_edited():
         return sorted(pid for pid in edited if pid in photos)
@@ -459,13 +489,13 @@ def _library(settings, libdir, lib, name, cli):
 
     def one(job):
         pid, photo, sig = job
-        if _stop.is_set():
+        if _stop.is_set() or _yield.is_set():
             return
         try:
             render(cli, photo, profiles, os.path.join(pdir, f"{pid}.avif"), os.path.join(tdir, f"{pid}.avif"))
             ok = True
         except Exception as e:  # noqa: BLE001
-            if _stop.is_set():
+            if _stop.is_set() or _yield.is_set():
                 return  # interrotta (spegnimento, LightCraft aperto…): si rifà la prossima volta, non è un errore
             log(f"previews ERROR {name} #{pid} {photo.get('file_name')}: {e!r}")
             ok = False
@@ -480,11 +510,16 @@ def _library(settings, libdir, lib, name, cli):
             if time.time() - state["saved"] > 20:
                 save()
                 state["saved"] = time.time()
+            if time.time() - state["checked"] > 60:
+                state["checked"] = time.time()
+                if _smaller_changed(lib, libs):
+                    log(f"previews: {name}: a smaller library changed, doing it first")
+                    _yield.set()
             _status(running=True, library=name, phase="render", done=state["done"], total=len(jobs), started=started)
 
     with cf.ThreadPoolExecutor(WORKERS) as pool:
         list(pool.map(one, jobs))
     save()
     log(f"previews: {name}: {state['done'] - state['errors']} developed, {state['errors']} errors"
-        + (" (stopped)" if _stop.is_set() else ""))
-    return not _stop.is_set()
+        + (" (stopped)" if _stop.is_set() else " (paused for a smaller library)" if _yield.is_set() else ""))
+    return not (_stop.is_set() or _yield.is_set())

@@ -211,6 +211,14 @@ def signature(lib):
     return catalog_signature(lib) + [FORMAT]
 
 
+def catalog_size(lib):
+    """Dimensione di catalog.snap: per fare prima le librerie piccole (le modifiche lì non aspettano ore dietro le grandi)."""
+    try:
+        return os.path.getsize(os.path.join(lib, "catalog.snap"))
+    except OSError:
+        return 0
+
+
 def maybe_start(settings):
     """Avvia il lavoro se una libreria del telefono è cambiata dall'ultima volta. True se l'ha avviato."""
     global _runner
@@ -234,6 +242,7 @@ def maybe_start(settings):
         todo.append((lib, sig))
     if not todo:
         return False
+    todo.sort(key=lambda t: catalog_size(t[0]))  # prima le librerie piccole
     _stop.clear()
     _runner = threading.Thread(target=_work, args=(settings, folder, cli, todo), name="smart", daemon=True)
     _runner.start()
