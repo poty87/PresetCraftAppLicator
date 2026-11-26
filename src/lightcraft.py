@@ -157,7 +157,30 @@ def is_cli(path):
 
 def read_catalog(lib):
     with open(os.path.join(lib, "catalog.snap"), encoding="utf-8") as f:
-        return json.load(f)["catalog"]
+        cat = json.load(f)["catalog"]
+    if cat.get("grids"):
+        resolve_grids(cat.get("photos") or {}, cat["grids"])
+    return cat
+
+
+def resolve_grids(node, grids):
+    """Gli scontorni delle maschere IA (Oggetto, Descrivi) col loro dato vero al posto del rimando alla tabella.
+
+    Nel catalogo LightCraft salva ogni scontorno una volta sola, in `catalog.grids`, e nella maschera lascia solo
+    `{"side", "grid": n}`. Fuori dal catalogo (una sessione di lightcraft-cli per le anteprime, le impostazioni mandate
+    al telefono) quel numero non vale niente e la maschera verrebbe vuota: qui si rimette `data`."""
+    if isinstance(node, dict):
+        g = node.get("grid")
+        if isinstance(g, int) and "side" in node and not node.get("data") and 0 <= g < len(grids):
+            node["data"] = grids[g]
+            del node["grid"]
+        for v in node.values():
+            if isinstance(v, (dict, list)):
+                resolve_grids(v, grids)
+    elif isinstance(node, list):
+        for v in node:
+            if isinstance(v, (dict, list)):
+                resolve_grids(v, grids)
 
 
 def read_prefs(lib):
