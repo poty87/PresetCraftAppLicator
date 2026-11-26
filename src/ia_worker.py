@@ -696,6 +696,22 @@ def scrivi_descrizioni(path, items, modello, vecchie=()):
     os.replace(tmp, path)
 
 
+# memoria video lasciata a Windows e ai programmi aperti: la stessa scheda disegna anche lo schermo. Senza margine il
+# modello delle descrizioni (Qwen3.5-9B, ~21 GB) riempiva i 24 GB della RTX 3090 e il driver video si riavviava
+# (schermo nero per un attimo, nvlddmkm 153) ogni 2-3 minuti
+MARGINE_GPU = int(2.5 * 1024 ** 3)  # Qwen3.5-9B arriva a 20,9 GB con il lotto da 16: tetto 21,5 su 24
+
+
+def limita_gpu(torch, dopo_il_modello):
+    """Tetto alla memoria video di questo processo: tutta meno MARGINE_GPU (ma almeno il modello più 1 GB).
+
+    Il tetto non rallenta: PyTorch riusa la memoria che ha già; solo un lotto che non ci sta si divide (vedi descrivi)."""
+    tot = torch.cuda.get_device_properties(0).total_memory
+    tetto = min(tot, max(tot - MARGINE_GPU, dopo_il_modello + 1024 ** 3))
+    torch.cuda.set_per_process_memory_fraction(tetto / tot)
+    return tetto
+
+
 class Descrittore:
     """Il modello visivo-linguistico che scrive le descrizioni (sulla GPU, bfloat16)."""
 
@@ -709,6 +725,8 @@ class Descrittore:
         self.proc = AutoProcessor.from_pretrained(src)
         self.proc.tokenizer.padding_side = "left"
         self.m = AutoModelForImageTextToText.from_pretrained(src, dtype=torch.bfloat16).to("cuda").eval()
+        self.tetto = limita_gpu(torch, torch.cuda.memory_allocated())
+        self.divisi = 0  # lotti che non stavano sotto il tetto (divisi a metà)
 
     def chat(self, m):
         # i modelli Qwen3.5 «ragionano» prima di rispondere se non glielo si spegne: qui serve solo la descrizione
@@ -718,6 +736,18 @@ class Descrittore:
             return self.proc.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
 
     def descrivi(self, imgs):
+        """Le descrizioni di un lotto; se non sta nella memoria lasciata al modello, a metà (di rado: foto grandi)."""
+        try:
+            return self._descrivi(imgs)
+        except self.torch.cuda.OutOfMemoryError:
+            self.torch.cuda.empty_cache()
+            if len(imgs) == 1:
+                raise
+            self.divisi += 1
+            k = len(imgs) // 2
+            return self.descrivi(imgs[:k]) + self.descrivi(imgs[k:])
+
+    def _descrivi(self, imgs):
         msgs = [[{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": DOMANDA_DESCRIZIONE}]}]
                 for _ in imgs]
         testi = [self.chat(m) for m in msgs]
@@ -789,7 +819,8 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
             scrivi_descrizioni(dest, items, hf, vecchie)
             raise
     dt = time.time() - t0
-    motore.log(f"{nome_lib}: {fatte} descrizioni in {dt:.0f}s ({dt / max(fatte, 1):.2f} s/foto)")
+    motore.log(f"{nome_lib}: {fatte} descrizioni in {dt:.0f}s ({dt / max(fatte, 1):.2f} s/foto; memoria video al modello "
+               f"{desc.tetto / 1024 ** 3:.1f} GB, lotti divisi {desc.divisi})")
     return fatte
 
 
