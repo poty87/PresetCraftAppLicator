@@ -4,7 +4,7 @@
 
 <p align="center">
 Give your <b>LightCraft</b> photos the camera profile that matches the style you shot them with.<br>
-<a href="#-italiano">🇮🇹 Italiano</a> · <a href="https://github.com/poty87/PresetCraftAppLicator/releases/latest">⬇ Download</a>
+<a href="#-italiano">🇮🇹 Italiano</a> · <a href="https://github.com/poty87/PresetCraftAppLicator/releases/latest">⬇ Download</a> · <a href="https://buymeacoffee.com/poty87">☕ Buy me a coffee</a>
 </p>
 
 > PresetCraftAppLicator is an independent tool. It is not made by, affiliated with or endorsed by the authors of
@@ -313,6 +313,11 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 `dist\` then holds the MSI and the setup. To run from source:
 `pip install sv_ttk pillow` and `python src\presetcraft.py`.
 
+## Support the project
+
+PresetCraftAppLicator is free and will stay free: no subscriptions, no ads, no accounts. If it is useful to you and you would like to
+help me spend more time on it, you can [buy me a coffee](https://buymeacoffee.com/poty87). Thank you! ☕
+
 ## License
 
 [MIT](LICENSE).
@@ -494,3 +499,8 @@ sconosciuto*) usa **Stili e profili…** e scegli tu il profilo da usare.
 **Fotocamere supportate:** al momento solo le Ricoh GR (GR III, GR IIIx, GR IV) in DNG, provata con la GR IV. Il codice
 legge anche lo stile dei file Pentax (DNG e PEF), ma non è stato provato. I profili Adobe non sono inclusi:
 vengono usati quelli già presenti sul PC, o una cartella scelta nelle Impostazioni.
+
+### Sostieni il progetto
+
+PresetCraftAppLicator è gratuito e lo resterà: niente abbonamenti, pubblicità o account. Se ti è utile e vuoi aiutarmi a dedicarci
+più tempo, puoi [offrirmi un caffè](https://buymeacoffee.com/poty87). Grazie! ☕
