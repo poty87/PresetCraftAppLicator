@@ -34,7 +34,7 @@ import i18n
 from ai_panel import AiChoice
 from i18n import registry_value, t
 from translations import LANGUAGES
-from ui_theme import ACCENT, MUTED, TEXT, Dialog, dark_title_bar, dpi_aware, resource, set_icon, setup_theme
+from ui_theme import ACCENT, MUTED, TEXT, Dialog, dark_title_bar, dpi_aware, resource, reveal, set_icon, setup_theme
 from version import APP_NAME, EXE, UPGRADE_CODE, parse_version
 
 LOCAL = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
@@ -309,7 +309,7 @@ class Wizard(tk.Tk):
         self.geometry(f"{width}x{height}+{(self.winfo_screenwidth() - width) // 2}+"
                       f"{(self.winfo_screenheight() - height) // 3}")
         dark_title_bar(self)
-        self.deiconify()
+        reveal(self)
 
     def _mode(self):
         if self.uninstall_mode:

@@ -30,7 +30,7 @@ from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, LOCAL, backup_root,
 from ai_panel import AiChoice
 from translations import DATE_FORMATS, LANGUAGES, TEXTS
 from ui_theme import (LEVELS, MUTED, TEXT, DateField, Dialog, TimeField, attach_scrollbars, center_on, dark_title_bar,
-                      dpi_aware, set_icon, setup_theme)
+                      dpi_aware, reveal, set_icon, setup_theme)
 from version import APP_NAME, VERSION
 
 SETTINGS = os.path.join(DATA_DIR, "settings.json")
@@ -263,7 +263,7 @@ class SettingsDialog(tk.Toplevel):
 
         center_on(self, app)
         dark_title_bar(self)
-        self.deiconify()
+        reveal(self)
         self.grab_set()
 
     def open_wizard(self):
@@ -384,7 +384,7 @@ class BackupsDialog(tk.Toplevel):
         self.load()
         center_on(self, app)
         dark_title_bar(self)
-        self.deiconify()
+        reveal(self)
         self.grab_set()
 
     def load(self):
@@ -522,7 +522,7 @@ class MappingsDialog(tk.Toplevel):
         self.bind("<Escape>", lambda e: self.destroy())
         center_on(self, app)
         dark_title_bar(self)
-        self.deiconify()
+        reveal(self)
         self.grab_set()
         if first is not None:
             first.focus_set()
@@ -629,7 +629,7 @@ class AdvancedFilterDialog(tk.Toplevel):
             self.fill()
         center_on(self, app)
         dark_title_bar(self)
-        self.deiconify()
+        reveal(self)
         self.grab_set()
         self.pickers["from"][0].entry.focus_set()
 
@@ -723,7 +723,7 @@ class PhotoProfileDialog(tk.Toplevel):
         self.bind("<Escape>", lambda e: self.destroy())
         center_on(self, app)
         dark_title_bar(self)
-        self.deiconify()
+        reveal(self)
         self.grab_set()
         self.combo.focus_set()
 
@@ -889,7 +889,7 @@ class AutoImportDialog(tk.Toplevel):
         self.show_status()
         center_on(self, app)
         dark_title_bar(self)
-        self.deiconify()
+        reveal(self)
         self.grab_set()
 
     def lib_name(self, lib):
@@ -1181,7 +1181,7 @@ class SetupWizard(tk.Toplevel):
         self.render()
         center_on(self, app)
         dark_title_bar(self)
-        self.deiconify()
+        reveal(self)
         self.grab_set()
 
     # ---- stato
@@ -1647,7 +1647,7 @@ class AiDialog(tk.Toplevel):
         self.render()
         center_on(self, master)
         dark_title_bar(self)
-        self.deiconify()
+        reveal(self)
         self.grab_set()
         self.after(1000, self.poll)
 
@@ -2279,8 +2279,8 @@ class App(tk.Tk):
         self.loading = 0  # numero dell'ultima lettura avviata: quelle superate si ignorano
         self._build()
         dark_title_bar(self)
-        self.deiconify()
-        self.after(150, self.refresh)
+        self.refresh()  # prima di mostrarla: la finestra compare già con la lettura della libreria avviata
+        reveal(self, max_ms=450)  # in un colpo solo: con il contenuto, se arriva presto, o dopo mezzo secondo
         if not self.settings.get("setup_done"):
             if self.settings.get("libraries"):  # già configurata da una versione precedente: niente procedura guidata
                 self.settings["setup_done"] = True
@@ -2889,6 +2889,7 @@ class App(tk.Tk):
         if error:
             self.set_status("error", t("st_read_error", error=error))
             return
+        getattr(self, "reveal_now", lambda: None)()  # il contenuto c'è: la finestra si può mostrare
         self.items, self.reason, self.info = plan["items"], reason, plan
         self.fill_scope(plan.get("batches") or [])
         self.rows.clear()

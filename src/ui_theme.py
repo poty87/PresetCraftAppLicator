@@ -54,6 +54,35 @@ def dark_title_bar(window):
         pass
 
 
+def reveal(window, max_ms=60):
+    """Mostra una finestra preparata nascosta già disegnata, in un colpo solo.
+
+    Tkinter disegna un elemento alla volta e solo quando la finestra è visibile (il tema Sun Valley con tante piccole
+    immagini): mostrata subito la si vedeva comporre a pezzi. Qui la finestra compare trasparente, si disegna tutta e
+    dopo `max_ms` (o prima, con `window.reveal_now()`, quando il contenuto è arrivato) diventa visibile."""
+    try:
+        window.attributes("-alpha", 0.0)
+    except tk.TclError:
+        window.deiconify()
+        return
+    window.deiconify()
+    tok = getattr(window, "_reveal_tok", 0) + 1
+    window._reveal_tok = tok
+
+    def show():
+        if getattr(window, "_reveal_tok", None) != tok:
+            return  # già mostrata (o c'è una richiesta più nuova)
+        window._reveal_tok = tok + 0.5
+        try:
+            window.update_idletasks()
+            window.attributes("-alpha", 1.0)
+        except tk.TclError:
+            pass
+
+    window.reveal_now = lambda: window.after(30, show)
+    window.after(max_ms, show)
+
+
 def set_icon(window):
     try:
         window.iconbitmap(resource("assets", "icon.ico"))
@@ -259,7 +288,7 @@ class Dialog(tk.Toplevel):
 
         center_on(self, master)
         dark_title_bar(self)
-        self.deiconify()
+        reveal(self)
         self.grab_set()
         (focus or self).focus_set()
 
