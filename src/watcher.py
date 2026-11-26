@@ -1407,9 +1407,16 @@ def apply_phone_develops(cli, lib, catalog, develops, sources):
     key_of = "|".join(sorted(sources))  # la stessa richiesta riprovata non crea un'altra copia
     for pid, ch in sorted(develops.items()):
         target = pid
-        current = (catalog.get(str(pid)) or {}).get("develop") or {}
+        photo = catalog.get(str(pid)) or {}
+        current = photo.get("develop") or {}
         base = ch.get("base")
-        if base and base != phone_develop.develop_signature(current):
+        # conflitto solo se sul PC la foto è stata davvero cambiata dopo l'ultima modifica arrivata dal telefono: se l'ultima
+        # voce della cronologia di LightCraft è del telefono, la firma diversa viene da una modifica precedente del telefono
+        # stesso (già applicata, ma il telefono non aveva ancora le impostazioni nuove) e non c'è niente da proteggere.
+        # (Prima qui nascevano copie virtuali «Telefono» per niente, 26/11/2026.)
+        history = photo.get("history") or []
+        last_from_phone = bool(history) and history[-1].get("label") == XMP_TOOL
+        if base and base != phone_develop.develop_signature(current) and not last_from_phone:
             k = f"{lib}|{key_of}|{pid}"
             target = conflicts.get(k)
             if not target:
