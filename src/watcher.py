@@ -917,9 +917,9 @@ def watch_settings(settings):
 # ---------------------------------------------------------------- librerie consultabili dal telefono
 
 PHONE_INDEX = "index.json.gz"
-PHONE_INDEX_FORMAT = 6  # cambia quando l'indice porta campi nuovi (2: persone e volti, 3: suggerimenti, 4: cestino,
+PHONE_INDEX_FORMAT = 7  # cambia quando l'indice porta campi nuovi (2: persone e volti, 3: suggerimenti, 4: cestino,
 # 5: impostazioni di sviluppo e profili per lo sviluppo dal telefono, 6: com'erano le foto all'importazione e copie
-# virtuali dal telefono in develop.json): si ripubblica
+# virtuali dal telefono in develop.json, 7: correzioni dell'obiettivo dal database in develop.json): si ripubblica
 PHONE_STATE = os.path.join(STATE_DIR, "phone-libraries.json")
 # la cartella di servizio sul NAS: tutto quello che PresetCraftAppLicator prepara per il telefono e per ripartire
 LIBRARIES_DIR = "libraries"  # <libreria>/: indice, modifiche dal telefono (changes), ricerca IA (ia), anteprime

@@ -92,9 +92,23 @@ def build_develop(photos):
         diff = {k: v for k, v in f.items() if k not in base or base[k] != v}
         drop = sorted(k for k in base if k not in f)
         first[str(pid)] = [diff] + ([drop] if drop else [])
+    # correzioni dell'obiettivo trovate da LightCraft nel suo database (lensfun) e tenute nel catalogo: le smart preview
+    # hanno solo quelle scritte nel file (DNG), quindi senza queste il telefono svilupperebbe le foto senza correzione
+    # dell'obiettivo. In tabella (molte foto con lo stesso obiettivo e la stessa focale hanno la stessa correzione).
+    lenses, lens_of, seen = [], {}, {}
+    for p in photos:
+        el = p.get("embedded_lens")
+        if not isinstance(el, dict) or el.get("source") != "database":
+            continue
+        k = json.dumps(el, sort_keys=True)
+        if k not in seen:
+            seen[k] = len(lenses)
+            lenses.append(el)
+        lens_of[str(int(p["id"]))] = seen[k]
     import smart
     names = {str(int(p["id"])): smart.file_name(p) for p in photos}
-    return {"version": 1, "base": unflatten(base), "photos": out, "smart": names, "first": first}
+    return {"version": 1, "base": unflatten(base), "photos": out, "smart": names, "first": first,
+            "lenses": lenses, "lens": lens_of}
 
 
 def rebuild(data, pid):
