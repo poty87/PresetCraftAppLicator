@@ -54,17 +54,33 @@ LOG = os.path.join(DATA_DIR, "presetcraft.log")
 
 
 def load_settings():
-    try:
-        with open(SETTINGS, encoding="utf-8-sig") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {}
+    # settings.json.bak: la versione di prima, se quella attuale non si legge (vedi save_settings)
+    for path in (SETTINGS, SETTINGS + ".bak"):
+        try:
+            with open(path, encoding="utf-8-sig") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            continue
+    return {}
 
 
 def save_settings(data):
+    """Scrittura a prova di riavvio improvviso: un file temporaneo scritto davvero sul disco prende il posto di
+    settings.json in un colpo solo, e la versione di prima resta in settings.json.bak. Il 26/11/2026 una schermata blu
+    durante la scrittura diretta aveva lasciato il file rovinato, e PresetCraftAppLicator ripartiva da zero."""
     os.makedirs(DATA_DIR, exist_ok=True)
-    with open(SETTINGS, "w", encoding="utf-8") as f:
+    tmp = SETTINGS + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    try:
+        with open(SETTINGS, encoding="utf-8-sig") as f:
+            json.load(f)  # si tiene come copia solo una versione buona
+        os.replace(SETTINGS, SETTINGS + ".bak")
+    except (OSError, ValueError):
+        pass
+    os.replace(tmp, SETTINGS)
     # copia nella cartella di servizio sul NAS (per ripartire dopo una formattazione), senza bloccare la finestra
     snapshot = json.loads(json.dumps(data))
     threading.Thread(target=_copy_settings, args=(snapshot,), daemon=True).start()

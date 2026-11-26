@@ -158,6 +158,8 @@ def save_json(path, data):
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=1)
+        f.flush()
+        os.fsync(f.fileno())  # sul disco prima di prendere il nome: un riavvio improvviso non lascia un file vuoto
     os.replace(tmp, path)
 
 

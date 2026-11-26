@@ -47,6 +47,8 @@ TENTATIVI = 5
 GRANDE = 1000  # foto da fare oltre le quali un lavoro è "grande" (rispetta la fascia oraria)
 CONTROLLO_GPU = 120  # secondi tra un controllo e l'altro dell'uso della GPU da parte di altri programmi
 GPU_OCCUPATA = 40  # % di uso medio della GPU, con il motore fermo, oltre la quale la GPU è di qualcun altro
+CONTROLLO_SPAZIO = 15  # secondi tra un controllo e l'altro di LightCraft aperto e della memoria video libera
+MEMORIA_MINIMA = 1024  # MB di memoria video libera sotto cui il motore si ferma (lascia la GPU agli altri programmi)
 
 # modelli: id Hugging Face, lotto (piccolo = ogni calcolo dura poco: niente TDR), testo minuscolo, lunghezza del testo
 MODELLI = {
@@ -96,6 +98,27 @@ def uso_gpu(campioni=4, pausa=0.5):
     return sum(vals) / len(vals) if vals else None
 
 
+def memoria_libera():
+    """MB di memoria video libera sulla GPU NVIDIA, o None se non si sa."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
+                             capture_output=True, text=True, timeout=10,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+        return min(int(x) for x in out.split() if x.strip().isdigit())
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def lightcraft_aperto():
+    """True se l'app LightCraft (non la riga di comando) è aperta: usa anche lei la GPU per mostrare le foto."""
+    try:
+        out = subprocess.run(["tasklist", "/fi", "IMAGENAME eq lightcraft.exe", "/fo", "csv", "/nh"], capture_output=True,
+                             text=True, timeout=10, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)).stdout
+        return "lightcraft.exe" in out.lower()
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def in_fascia(window, adesso=None):
     """True se l'ora è dentro la fascia oraria (anche a cavallo della mezzanotte); senza fascia sempre True."""
     if not window:
@@ -142,7 +165,21 @@ class Controllo:
         self.window = motore.cfg.get("window")
         self.gpu = bool(motore.cfg.get("gpu_check", True))
         self.ultimo_gpu = time.time()
+        self.ultimo_spazio = 0.0
         self.pausa_path = os.path.join(motore.dir, "pausa")
+
+    def spazio(self):
+        """LightCraft aperto o memoria video quasi piena: il motore si ferma (salvando) e libera la GPU. Il 26/11/2026,
+        con il modello delle descrizioni al lavoro, aprire LightCraft aveva riempito i 24 GB e Windows si è fermato con
+        una schermata blu (0x119). PresetCraftAppLicator lo fa ripartire più tardi."""
+        self.ultimo_spazio = time.time()
+        if lightcraft_aperto():
+            self.motore.log("LightCraft è aperto: lascio la GPU a LightCraft e riprendo quando si chiude")
+            raise Stop("gpu_busy")
+        libera = memoria_libera()
+        if libera is not None and libera < MEMORIA_MINIMA:
+            self.motore.log(f"memoria video quasi piena ({libera} MB liberi): lascio la GPU agli altri programmi")
+            raise Stop("gpu_busy")
 
     def __call__(self, grande=False, gpu_in_uso=False):
         if _spegnimento.is_set():
@@ -151,6 +188,8 @@ class Controllo:
             raise Stop("paused")
         if grande and not in_fascia(self.window):
             raise Stop("waiting_window")
+        if gpu_in_uso and time.time() - self.ultimo_spazio >= CONTROLLO_SPAZIO:
+            self.spazio()
         if self.gpu and time.time() - self.ultimo_gpu >= CONTROLLO_GPU:
             self.ultimo_gpu = time.time()
             if gpu_in_uso:
@@ -161,6 +200,9 @@ class Controllo:
 
     def subito_gpu(self):
         """Controllo della GPU prima di cominciare (il motore non la sta ancora usando)."""
+        if lightcraft_aperto():
+            self.motore.log("LightCraft è aperto: aspetto che si chiuda per usare la GPU")
+            raise Stop("gpu_busy")
         if self.gpu:
             u = uso_gpu()
             self.ultimo_gpu = time.time()
