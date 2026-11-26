@@ -1724,6 +1724,18 @@ class AiDialog(tk.Toplevel):
                                 command=lambda d=describer: self.toggle_descriptions(d)).pack(anchor="w", pady=(10, 0))
                 ttk.Label(f, text=t("ai_desc_hint"), style="Muted.TLabel", wraplength=640, justify="left").pack(
                     anchor="w", padx=(24, 0))
+                # un modello delle descrizioni più nuovo per questa GPU: si propone di passarci (le foto si ridescrivono)
+                best = ai.recommended_describer(ai.detect_gpu())
+                if best and best != describer and self.cfg().get("descriptions"):
+                    up = ttk.Frame(f)
+                    up.pack(anchor="w", padx=(24, 0), pady=(6, 0))
+                    ttk.Label(up, text=t("ai_desc_upgrade", name=ai.DESCRIBERS[best]["hf"].split("/")[-1],
+                                         gb=f"{ai.DESCRIBERS[best]['download']:.0f}"),
+                              style="Body.TLabel", wraplength=520, justify="left").pack(side="left")
+                    ttk.Button(up, text=t("ai_desc_upgrade_btn"),
+                               command=lambda b=best: self.install(self.folder(), self.cfg().get("model") or
+                                                                   (ai.installed_info(self.folder()) or {}).get("model"), b)
+                               ).pack(side="left", padx=(10, 0))
             # quando lavorare: GPU libera, fascia oraria per le analisi grandi
             self.gpu_check = tk.BooleanVar(value=bool(self.cfg().get("gpu_check", True)))
             ttk.Checkbutton(f, text=t("ai_gpu_check"), variable=self.gpu_check,

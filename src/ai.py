@@ -51,6 +51,10 @@ MODELS = {
 }
 # modelli delle descrizioni (facoltative): id Hugging Face, download (GB), memoria video minima (GB)
 DESCRIBERS = {
+    # il primo che sta nella GPU è quello consigliato. Qwen3.5-9B: confrontato con Qwen3-VL-8B e Qwen3.8-27B (4 bit) su 30
+    # foto il 26/11/2026: descrizioni più ricche (40 parole e 11 parole chiave contro 30 e 10), stessa velocità (1 s a
+    # foto su una RTX 3090); il 27B, che in 24 GB entra solo a 4 bit, era 4 volte più lento e non migliore
+    "qwen3.5-9b": {"hf": "Qwen/Qwen3.5-9B", "download": 19.3, "vram": 22},
     "qwen3-vl-8b": {"hf": "Qwen/Qwen3-VL-8B-Instruct", "download": 17.5, "vram": 20},
     "qwen3-vl-4b": {"hf": "Qwen/Qwen3-VL-4B-Instruct", "download": 8.9, "vram": 12},
 }
@@ -629,8 +633,8 @@ def maybe_start(settings, log=None):
     if describer and not missing:  # descrizioni attivate ma non ancora fatte (o non complete) per qualche libreria
         for lib in libs:
             m = load_json(os.path.join(watcher.library_dir(phone_folder, lib), "ia", "manifest.json"), {})
-            if (m.get("descriptions") or {}).get("count", 0) < m.get("count", 0):
-                missing = True
+            if (m.get("descriptions") or {}).get("count", 0) < m.get("count", 0) or (m.get("descriptions") or {}).get("old"):
+                missing = True  # (anche: descrizioni scritte da un modello precedente, da rifare)
                 break
     if not missing:  # modello del telefono ancora dentro la libreria (fino alla 1.30.1): va nella cartella condivisa
         for lib in libs:

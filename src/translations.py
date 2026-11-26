@@ -279,6 +279,22 @@ TEXTS = {
         'fr': 'Les descriptions ont besoin de leur modèle ({gb} Go). Le télécharger maintenant ?',
         'pt': 'As descrições precisam do seu modelo ({gb} GB). Transferi-lo agora?',
     },
+    'ai_desc_upgrade': {
+        'it': "C'è un modello delle descrizioni più nuovo per la tua scheda video: {name} ({gb} GB). Le descrizioni si riscrivono tutte con quello (intanto restano le vecchie).",
+        'en': "There's a newer description model for your graphics card: {name} ({gb} GB). All descriptions are rewritten with it (the old ones stay meanwhile).",
+        'de': 'Für deine Grafikkarte gibt es ein neueres Beschreibungsmodell: {name} ({gb} GB). Alle Beschreibungen werden damit neu geschrieben (die alten bleiben solange).',
+        'es': 'Hay un modelo de descripciones más nuevo para tu tarjeta gráfica: {name} ({gb} GB). Todas las descripciones se reescriben con él (mientras tanto quedan las antiguas).',
+        'fr': 'Un modèle de descriptions plus récent existe pour ta carte graphique : {name} ({gb} Go). Toutes les descriptions sont réécrites avec lui (les anciennes restent en attendant).',
+        'pt': 'Há um modelo de descrições mais recente para a tua placa gráfica: {name} ({gb} GB). Todas as descrições são reescritas com ele (entretanto ficam as antigas).',
+    },
+    'ai_desc_upgrade_btn': {
+        'it': 'Passa al nuovo modello',
+        'en': 'Switch to the new model',
+        'de': 'Zum neuen Modell wechseln',
+        'es': 'Cambiar al nuevo modelo',
+        'fr': 'Passer au nouveau modèle',
+        'pt': 'Mudar para o novo modelo',
+    },
     'ai_enable': {
         'it': 'Cataloga le foto per la ricerca per soggetti',
         'en': 'Catalog photos for search by subject',

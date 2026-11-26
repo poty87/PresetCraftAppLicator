@@ -56,6 +56,7 @@ MODELLI = {
 }
 # modelli delle descrizioni: id Hugging Face, lotto (con 24 GB di memoria video il lotto da 32 è il più veloce)
 DESCRITTORI = {
+    "qwen3.5-9b": {"hf": "Qwen/Qwen3.5-9B", "lotto": 16},
     "qwen3-vl-8b": {"hf": "Qwen/Qwen3-VL-8B-Instruct", "lotto": 32},
     "qwen3-vl-4b": {"hf": "Qwen/Qwen3-VL-4B-Instruct", "lotto": 16},
 }
@@ -662,6 +663,17 @@ def aggiorna_impronte(motore, modello, cart, foto, dest, nome_lib, controllo):
 
 # ---------------------------------------------------------------- modello del telefono (solo la parte testo)
 
+def carica_meta_descrizioni(path):
+    """(modello che le ha scritte, id delle foto descritte da un modello precedente e ancora da rifare)."""
+    import gzip
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            d = json.load(f)
+        return d.get("model"), {int(x) for x in d.get("old") or []}
+    except (OSError, ValueError, EOFError):
+        return None, set()
+
+
 def carica_descrizioni(path):
     """{id: testo} da descrizioni.json.gz, o {} se manca."""
     import gzip
@@ -673,13 +685,14 @@ def carica_descrizioni(path):
         return {}
 
 
-def scrivi_descrizioni(path, items, modello):
+def scrivi_descrizioni(path, items, modello, vecchie=()):
+    """`vecchie`: foto la cui descrizione è ancora quella di un modello precedente (resta finché non è rifatta)."""
     import gzip
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
     with gzip.open(tmp, "wt", encoding="utf-8") as f:
-        json.dump({"version": FORMATO_DESCRIZIONI, "model": modello, "items": {str(k): v for k, v in items.items()}},
-                  f, ensure_ascii=False, separators=(",", ":"))
+        json.dump({"version": FORMATO_DESCRIZIONI, "model": modello, "old": sorted(int(x) for x in vecchie if x in items),
+                   "items": {str(k): v for k, v in items.items()}}, f, ensure_ascii=False, separators=(",", ":"))
     os.replace(tmp, path)
 
 
@@ -697,14 +710,22 @@ class Descrittore:
         self.proc.tokenizer.padding_side = "left"
         self.m = AutoModelForImageTextToText.from_pretrained(src, dtype=torch.bfloat16).to("cuda").eval()
 
+    def chat(self, m):
+        # i modelli Qwen3.5 «ragionano» prima di rispondere se non glielo si spegne: qui serve solo la descrizione
+        try:
+            return self.proc.apply_chat_template(m, tokenize=False, add_generation_prompt=True, enable_thinking=False)
+        except TypeError:
+            return self.proc.apply_chat_template(m, tokenize=False, add_generation_prompt=True)
+
     def descrivi(self, imgs):
         msgs = [[{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": DOMANDA_DESCRIZIONE}]}]
                 for _ in imgs]
-        testi = [self.proc.apply_chat_template(m, tokenize=False, add_generation_prompt=True) for m in msgs]
+        testi = [self.chat(m) for m in msgs]
         x = self.proc(text=testi, images=imgs, return_tensors="pt", padding=True).to("cuda")
         with self.torch.no_grad():
-            out = self.m.generate(**x, max_new_tokens=160, do_sample=False)
-        return [t.strip() for t in self.proc.batch_decode(out[:, x["input_ids"].shape[1]:], skip_special_tokens=True)]
+            out = self.m.generate(**x, max_new_tokens=200, do_sample=False)
+        return [re.sub(r"<think>.*?</think>", "", t, flags=re.S).strip()
+                for t in self.proc.batch_decode(out[:, x["input_ids"].shape[1]:], skip_special_tokens=True)]
 
 
 def annuncia_descrizioni(ia, dest, nome_desc):
@@ -713,8 +734,9 @@ def annuncia_descrizioni(ia, dest, nome_desc):
     m = carica_json(manifest_path, {})
     if not m or not os.path.exists(dest):
         return
+    _modello, vecchie = carica_meta_descrizioni(dest)
     info = {"file": "descrizioni.json.gz", "model": DESCRITTORI[nome_desc]["hf"], "count": len(carica_descrizioni(dest)),
-            "size": os.path.getsize(dest), "format": FORMATO_DESCRIZIONI}
+            "size": os.path.getsize(dest), "format": FORMATO_DESCRIZIONI, "old": len(vecchie)}
     if m.get("descriptions") != info:
         m["descriptions"] = info
         salva_json(manifest_path, m)
@@ -725,13 +747,21 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
     in libreria. Ritorna quante ne ha scritte."""
     from PIL import Image
     items = carica_descrizioni(dest)
+    hf = DESCRITTORI[desc.nome]["hf"]
+    # descrizioni di un modello precedente: si rifanno tutte (intanto restano, così la ricerca sul telefono funziona)
+    fatto_da, vecchie = carica_meta_descrizioni(dest)
+    if items and fatto_da and fatto_da != hf:
+        vecchie = set(items)
+        motore.log(f"{nome_lib}: {len(vecchie)} descrizioni scritte da {fatto_da}: si rifanno con {hf}")
     presenti = {p["id"] for p in foto}
     tolte = [k for k in items if k not in presenti]
     for k in tolte:
         del items[k]
-    nuove = [p["id"] for p in foto if p["id"] not in items and os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))]
-    if tolte and not nuove:
-        scrivi_descrizioni(dest, items, DESCRITTORI[desc.nome]["hf"])
+        vecchie.discard(k)
+    nuove = [p["id"] for p in foto if (p["id"] not in items or p["id"] in vecchie)
+             and os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))]
+    if (tolte or fatto_da != hf) and not nuove and items:
+        scrivi_descrizioni(dest, items, hf, vecchie)
     if not nuove:
         return 0
     grande = len(nuove) > GRANDE
@@ -745,15 +775,16 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
         imgs = [Image.open(os.path.join(cart, f"{i}.jpg")).convert("RGB") for i in parte]
         for i, t in zip(parte, desc.descrivi(imgs)):
             items[i] = t
+            vecchie.discard(i)
         fatte += len(parte)
         motore.stato(phase="descriptions", library=nome_lib, done=fatte, total=len(nuove))
-        if (k // lotto + 1) % 30 == 0 or fatte == len(nuove):  # ~1.000 foto: il telefono vede quelle già fatte
-            scrivi_descrizioni(dest, items, DESCRITTORI[desc.nome]["hf"])
+        if (k // lotto + 1) % 30 == 0 or fatte == len(nuove):  # ~500 foto: il telefono vede quelle già fatte
+            scrivi_descrizioni(dest, items, hf, vecchie)
             annuncia_descrizioni(os.path.dirname(dest), dest, desc.nome)
         try:
             controllo(grande=grande, gpu_in_uso=True)
         except Stop:
-            scrivi_descrizioni(dest, items, DESCRITTORI[desc.nome]["hf"])
+            scrivi_descrizioni(dest, items, hf, vecchie)
             raise
     dt = time.time() - t0
     motore.log(f"{nome_lib}: {fatte} descrizioni in {dt:.0f}s ({dt / max(fatte, 1):.2f} s/foto)")
