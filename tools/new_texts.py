@@ -1340,6 +1340,8 @@ NEW.update({
                           "Hay un modelo de descripciones más nuevo para tu tarjeta gráfica: {name} ({gb} GB). Todas las descripciones se reescriben con él (mientras tanto quedan las antiguas).",
                           "Un modèle de descriptions plus récent existe pour ta carte graphique : {name} ({gb} Go). Toutes les descriptions sont réécrites avec lui (les anciennes restent en attendant).",
                           "Há um modelo de descrições mais recente para a tua placa gráfica: {name} ({gb} GB). Todas as descrições são reescritas com ele (entretanto ficam as antigas)."),
+    "donate": _t("☕ Offrimi un caffè", "☕ Buy me a coffee", "☕ Spendier mir einen Kaffee", "☕ Invítame a un café",
+                 "☕ Offre-moi un café", "☕ Paga-me um café"),
     "ai_desc_upgrade_btn": _t("Passa al nuovo modello", "Switch to the new model", "Zum neuen Modell wechseln",
                               "Cambiar al nuevo modelo", "Passer au nouveau modèle", "Mudar para o novo modelo"),
     "ai_desc_enable": _t("Scrivi le descrizioni delle foto (ricerca più precisa nei dettagli)",

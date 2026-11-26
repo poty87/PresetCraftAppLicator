@@ -1895,6 +1895,14 @@ TEXTS = {
         'fr': 'Raw en DNG',
         'pt': 'Raw em DNG',
     },
+    'donate': {
+        'it': '☕ Offrimi un caffè',
+        'en': '☕ Buy me a coffee',
+        'de': '☕ Spendier mir einen Kaffee',
+        'es': '☕ Invítame a un café',
+        'fr': '☕ Offre-moi un café',
+        'pt': '☕ Paga-me um café',
+    },
     'done_backup': {
         'it': 'Backup della libreria:',
         'en': 'Library backup:',

@@ -33,6 +33,8 @@ from ui_theme import (LEVELS, MUTED, TEXT, DateField, Dialog, TimeField, attach_
                       dpi_aware, reveal, set_icon, setup_theme)
 from version import APP_NAME, VERSION
 
+DONATE_URL = "https://buymeacoffee.com/poty87"
+
 SETTINGS = os.path.join(DATA_DIR, "settings.json")
 LOG = os.path.join(DATA_DIR, "presetcraft.log")
 
@@ -252,8 +254,13 @@ class SettingsDialog(tk.Toplevel):
             side="right")
         ttk.Label(frame, text=t("upd_hint"), style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
 
-        ttk.Label(frame, text=f"{APP_NAME} · " + t("about", version=VERSION), style="Muted.TLabel").pack(
-            anchor="w", pady=(18, 0))
+        about = ttk.Frame(frame)
+        about.pack(fill="x", pady=(18, 0))
+        ttk.Label(about, text=f"{APP_NAME} · " + t("about", version=VERSION), style="Muted.TLabel").pack(side="left")
+        # donazioni: la pagina Buy Me a Coffee del progetto, nel browser
+        coffee = ttk.Label(about, text=t("donate"), style="Link.TLabel", cursor="hand2")
+        coffee.pack(side="right")
+        coffee.bind("<Button-1>", lambda e: __import__("webbrowser").open(DONATE_URL))
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x", pady=(18, 0))
         ttk.Button(buttons, text=t("wz_open"), command=self.open_wizard).pack(side="left")
