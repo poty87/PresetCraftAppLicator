@@ -1278,7 +1278,7 @@ class SetupWizard(tk.Toplevel):
                                                                                                 pady=(6, 0))
 
     def section(self, text):
-        ttk.Label(self.body, text=text.upper(), style="Muted.TLabel").pack(anchor="w", pady=(16, 4))
+        ttk.Label(self.body, text=text, style="CardTitle.TLabel").pack(anchor="w", pady=(16, 4))
 
     def hint(self, text):
         ttk.Label(self.body, text=text, style="Muted.TLabel", wraplength=760, justify="left").pack(
@@ -1759,11 +1759,12 @@ class AiDialog(tk.Toplevel):
             buttons.pack(fill="x", pady=(18, 0))
             ttk.Button(buttons, text=t("ai_stop_install"), command=self.stop_install).pack(side="right")
         else:
+            # tre riquadri come le schede di ViewerCraftStar: cosa fa per il telefono, quando lavora, su quali librerie
+            box = card(f, t("ai_card_search"), pady=(14, 0))
             self.enabled = tk.BooleanVar(value=bool(self.cfg().get("enabled")))
-            ttk.Checkbutton(f, text=t("ai_enable"), variable=self.enabled,
-                            command=lambda: self.save_cfg(enabled=bool(self.enabled.get()))).pack(anchor="w",
-                                                                                                  pady=(14, 0))
-            row = ttk.Frame(f)
+            ttk.Checkbutton(box, text=t("ai_enable"), variable=self.enabled,
+                            command=lambda: self.save_cfg(enabled=bool(self.enabled.get()))).pack(anchor="w")
+            row = ttk.Frame(box)
             row.pack(fill="x", pady=(8, 0))
             ttk.Label(row, text=t("ai_bits"), style="Body.TLabel").pack(side="left")
             self.bits = ttk.Combobox(row, state="readonly", width=40, values=[t("ai_bits_8"), t("ai_bits_4")])
@@ -1775,14 +1776,14 @@ class AiDialog(tk.Toplevel):
             describer = self.cfg().get("describer") or ai.recommended_describer(ai.detect_gpu())
             if describer:
                 self.desc_on = tk.BooleanVar(value=bool(self.cfg().get("descriptions")))
-                ttk.Checkbutton(f, text=t("ai_desc_enable"), variable=self.desc_on,
+                ttk.Checkbutton(box, text=t("ai_desc_enable"), variable=self.desc_on,
                                 command=lambda d=describer: self.toggle_descriptions(d)).pack(anchor="w", pady=(10, 0))
-                ttk.Label(f, text=t("ai_desc_hint"), style="Muted.TLabel", wraplength=640, justify="left").pack(
+                ttk.Label(box, text=t("ai_desc_hint"), style="Muted.TLabel", wraplength=620, justify="left").pack(
                     anchor="w", padx=(24, 0))
                 # un modello delle descrizioni più nuovo per questa GPU: si propone di passarci (le foto si ridescrivono)
                 best = ai.recommended_describer(ai.detect_gpu())
                 if best and best != describer and self.cfg().get("descriptions"):
-                    up = ttk.Frame(f)
+                    up = ttk.Frame(box)
                     up.pack(anchor="w", padx=(24, 0), pady=(6, 0))
                     ttk.Label(up, text=t("ai_desc_upgrade", name=ai.DESCRIBERS[best]["hf"].split("/")[-1],
                                          gb=f"{ai.DESCRIBERS[best]['download']:.0f}"),
@@ -1792,12 +1793,12 @@ class AiDialog(tk.Toplevel):
                                                                    (ai.installed_info(self.folder()) or {}).get("model"), b)
                                ).pack(side="left", padx=(10, 0))
             # quando lavorare: GPU libera, fascia oraria per le analisi grandi
+            box = card(f, t("ai_card_when"))
             self.gpu_check = tk.BooleanVar(value=bool(self.cfg().get("gpu_check", True)))
-            ttk.Checkbutton(f, text=t("ai_gpu_check"), variable=self.gpu_check,
-                            command=lambda: self.save_cfg(gpu_check=bool(self.gpu_check.get()))).pack(anchor="w",
-                                                                                                    pady=(10, 0))
+            ttk.Checkbutton(box, text=t("ai_gpu_check"), variable=self.gpu_check,
+                            command=lambda: self.save_cfg(gpu_check=bool(self.gpu_check.get()))).pack(anchor="w")
             win = self.cfg().get("window") or {}
-            row = ttk.Frame(f)
+            row = ttk.Frame(box)
             row.pack(anchor="w", pady=(6, 0))
             self.win_on = tk.BooleanVar(value=bool(win.get("enabled")))
             ttk.Checkbutton(row, text=t("ai_window"), variable=self.win_on, command=self.save_window).pack(side="left")
@@ -1811,11 +1812,11 @@ class AiDialog(tk.Toplevel):
             self.win_to.pack(side="left")
             for c in (self.win_from, self.win_to):
                 c.bind("<<ComboboxSelected>>", lambda e: self.save_window())
-            ttk.Label(f, text=t("ai_window_hint"), style="Muted.TLabel", wraplength=640, justify="left").pack(
+            ttk.Label(box, text=t("ai_window_hint"), style="Muted.TLabel", wraplength=620, justify="left").pack(
                 anchor="w", pady=(2, 0))
             # librerie da analizzare, nell'ordine della coda
-            ttk.Label(f, text=t("ai_queue").upper(), style="Muted.TLabel").pack(anchor="w", pady=(16, 4))
-            self.queue_box = ttk.Frame(f)
+            box = card(f, t("ai_queue"))
+            self.queue_box = ttk.Frame(box)
             self.queue_box.pack(fill="x")
             self.fill_queue()
             self.bar.pack(fill="x", pady=(14, 0))
@@ -2351,9 +2352,16 @@ class App(tk.Tk):
 
         head = ttk.Frame(outer)
         head.pack(fill="x")
-        ttk.Button(head, text="⚙  " + t("settings"), command=self.open_settings).pack(side="right", anchor="n")
+        # in alto a destra, come nell'app del telefono: le finestre principali, e ☰ per il resto (registro, backup)
+        self.btn_more = ttk.Button(head, text="☰", width=3, command=self.more_menu)
+        self.btn_more.pack(side="right", anchor="n")
+        ttk.Button(head, text="⚙  " + t("settings"), command=self.open_settings).pack(side="right", anchor="n",
+                                                                                      padx=(0, 8))
         # il motore IA (installazione, modello, descrizioni, coda delle librerie, orari): accanto alle impostazioni
         ttk.Button(head, text="◈  " + t("ai_button"), command=self.open_ai).pack(side="right", anchor="n", padx=(0, 8))
+        auto_on = (self.settings.get("watch") or {}).get("enabled")
+        self.btn_auto = ttk.Button(head, text=("● " if auto_on else "") + t("auto_btn"), command=self.open_auto_import)
+        self.btn_auto.pack(side="right", anchor="n", padx=(0, 8))
         ttk.Label(head, text=APP_NAME, style="Title.TLabel").pack(anchor="w")
         ttk.Label(head, text=t("subtitle"), style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
         ttk.Label(head, text="ⓘ  " + t("supported_note"), style="Muted.TLabel").pack(anchor="w", pady=(2, 0))
@@ -2371,7 +2379,7 @@ class App(tk.Tk):
                                                                                      padx=(0, 8))
         info = ttk.Frame(top)
         info.pack(side="left", fill="x", expand=True)
-        ttk.Label(info, text=t("library"), style="Muted.TLabel").pack(anchor="w")
+        ttk.Label(info, text=t("library").capitalize(), style="CardTitle.TLabel").pack(anchor="w")
         self.lib_combo = ttk.Combobox(info, state="readonly", width=48, font=self.f_strong)
         self.lib_combo.pack(anchor="w", pady=(4, 2))
         self.lib_combo.bind("<<ComboboxSelected>>", self.on_library_selected)
@@ -2388,7 +2396,7 @@ class App(tk.Tk):
         # quali foto esaminare: una riga a parte, così i pulsanti della libreria hanno sempre spazio
         scope = ttk.Frame(card)
         scope.pack(fill="x", pady=(10, 0))
-        ttk.Label(scope, text=t("scope_label"), style="Muted.TLabel").pack(side="left", padx=(0, 14))
+        ttk.Label(scope, text=t("scope_label").capitalize(), style="Body.TLabel").pack(side="left", padx=(0, 14))
         # tutta la libreria, l'ultima importazione, o da un'importazione in poi (il menu si riempie a ogni lettura)
         self.scope = self.settings.get("scope", "last")
         if self.scope == "recent":  # versioni precedenti: "aggiunte di recente" (30 giorni, come LightCraft)
@@ -2418,7 +2426,7 @@ class App(tk.Tk):
             box = ttk.Frame(stats, style="Card.TFrame", padding=(16, 10))
             box.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 10, 0))
             stats.columnconfigure(i, weight=1)
-            ttk.Label(box, text=t("stat_" + key).upper(), style="Muted.TLabel").pack(anchor="w")
+            ttk.Label(box, text=t("stat_" + key), style="Muted.TLabel").pack(anchor="w")
             var = tk.StringVar(value="–")
             ttk.Label(box, textvariable=var, style="Stat.TLabel").pack(anchor="w")
             self.stat_vars[key] = var
@@ -2453,12 +2461,7 @@ class App(tk.Tk):
         foot = ttk.Frame(outer)
         foot.pack(side="bottom", fill="x", pady=(14, 0))
         self.after(800, self.update_status_zone)
-        ttk.Button(foot, text=t("open_log"), command=self.open_log).pack(side="left")
-        ttk.Button(foot, text=t("backups_btn"), command=self.open_backups).pack(side="left", padx=(8, 0))
-        auto_on = (self.settings.get("watch") or {}).get("enabled")
-        self.btn_auto = ttk.Button(foot, text=("● " if auto_on else "") + t("auto_btn"), command=self.open_auto_import)
-        self.btn_auto.pack(side="left", padx=(8, 0))
-        ttk.Label(foot, text=f"v{VERSION}", style="Muted.TLabel").pack(side="left", padx=(12, 0))
+        ttk.Label(foot, text=f"v{VERSION}", style="Muted.TLabel").pack(side="left")
         coffee = ttk.Label(foot, text=t("donate"), style="Link.TLabel", cursor="hand2")  # accanto alla versione
         coffee.pack(side="left", padx=(10, 0))
         coffee.bind("<Button-1>", donate_menu)
@@ -3260,6 +3263,17 @@ class App(tk.Tk):
         self.refresh()
 
     # ---- finestre
+
+    def more_menu(self):
+        """☰ in alto a destra: le finestre che servono di rado (registro, backup), come il menu ☰ del telefono."""
+        m = self.menu()
+        m.add_command(label=t("open_log"), command=self.open_log)
+        m.add_command(label=t("backups_btn"), command=self.open_backups)
+        b = self.btn_more
+        try:
+            m.tk_popup(b.winfo_rootx(), b.winfo_rooty() + b.winfo_height())
+        finally:
+            m.grab_release()
 
     def open_settings(self):
         d = SettingsDialog(self)

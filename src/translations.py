@@ -239,6 +239,14 @@ TEXTS = {
         'fr': 'Moteur IA…',
         'pt': 'Motor de IA…',
     },
+    'ai_card_search': {
+        'it': 'Ricerca sul telefono',
+        'en': 'Search on the phone',
+        'de': 'Suche auf dem Telefon',
+        'es': 'Búsqueda en el teléfono',
+        'fr': 'Recherche sur le téléphone',
+        'pt': 'Pesquisa no telefone',
+    },
     'ai_card_title': {
         'it': 'Ricerca per soggetti (IA)',
         'en': 'Search by subject (AI)',
@@ -246,6 +254,14 @@ TEXTS = {
         'es': 'Búsqueda por temas (IA)',
         'fr': 'Recherche par sujet (IA)',
         'pt': 'Pesquisa por assunto (IA)',
+    },
+    'ai_card_when': {
+        'it': 'Quando lavorare',
+        'en': 'When to work',
+        'de': 'Wann arbeiten',
+        'es': 'Cuándo trabajar',
+        'fr': 'Quand travailler',
+        'pt': 'Quando trabalhar',
     },
     'ai_change': {
         'it': 'Cambia modello o cartella…',
@@ -2326,6 +2342,14 @@ TEXTS = {
         'es': 'Cambiar el perfil de todas las fotos con este estilo…',
         'fr': 'Changer le profil de toutes les photos de ce style…',
         'pt': 'Alterar o perfil de todas as fotos com este estilo…',
+    },
+    'menu_more': {
+        'it': 'Altro',
+        'en': 'More',
+        'de': 'Mehr',
+        'es': 'Más',
+        'fr': 'Plus',
+        'pt': 'Mais',
     },
     'menu_photo_profile': {
         'it': 'Scegli il profilo per questa foto…',

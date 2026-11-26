@@ -406,7 +406,7 @@ class Wizard(tk.Tk):
             self.heading(t("w_newer_head"), t("w_newer_body", old=old, new=self.version))
 
         if self.mode != "newer":
-            ttk.Label(self.body, text=t("lang_label").upper(), style="Muted.TLabel").pack(anchor="w", pady=(28, 4))
+            ttk.Label(self.body, text=t("lang_label"), style="CardTitle.TLabel").pack(anchor="w", pady=(28, 4))
             codes = ["auto", *LANGUAGES]
             combo = ttk.Combobox(self.body, values=[t("lang_auto"), *LANGUAGES.values()], state="readonly", width=36)
             combo.current(codes.index(self.lang_code) if self.lang_code in codes else 0)
