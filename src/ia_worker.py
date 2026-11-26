@@ -790,9 +790,21 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
     for k in tolte:
         del items[k]
         vecchie.discard(k)
+    # descrizioni del giro prima non ancora nel file sul NAS (la GPU si è fermata prima del salvataggio): si recuperano
+    parziale = os.path.join(motore.dir, "descrizioni-parziali.json")
+    pz = carica_json(parziale, {})
+    recuperate = {}
+    if pz.get("library") == nome_lib and pz.get("model") == hf:
+        for k, v in (pz.get("items") or {}).items():
+            if int(k) in presenti:
+                items[int(k)] = v
+                vecchie.discard(int(k))
+                recuperate[int(k)] = v
+        if recuperate:
+            motore.log(f"{nome_lib}: {len(recuperate)} descrizioni recuperate dal giro interrotto")
     nuove = [p["id"] for p in foto if (p["id"] not in items or p["id"] in vecchie)
              and os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))]
-    if (tolte or fatto_da != hf) and not nuove and items:
+    if (tolte or fatto_da != hf or recuperate) and not nuove and items:
         scrivi_descrizioni(dest, items, hf, vecchie)
     # foto su cui la GPU si è fermata nel giro prima (il lotto era segnato in corso): una alla volta; alla seconda volta
     # si lasciano con la descrizione che hanno (altrimenti il motore ripartirebbe e si fermerebbe lì per sempre)
@@ -811,12 +823,12 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
         os.remove(in_corso)
     except OSError:
         pass
-    saltate = [i for i in nuove if sosp.get(i, 0) >= 2]
+    saltate = [i for i in nuove if sosp.get(i, 0) >= 3]
     if saltate:
         motore.log(f"{nome_lib}: {len(saltate)} foto fermano la GPU anche da sole ({saltate[:20]}): tengono la descrizione che hanno")
         for i in saltate:
             vecchie.discard(i)
-        nuove = [i for i in nuove if sosp.get(i, 0) < 2]
+        nuove = [i for i in nuove if sosp.get(i, 0) < 3]
         if not nuove:
             scrivi_descrizioni(dest, items, hf, vecchie)
     if not nuove:
@@ -844,18 +856,27 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
     motore.log(f"{nome_lib}: {len(nuove)} foto da descrivere con {desc.nome}")
     t0 = time.time()
     fatte = 0
+    recenti = dict(recuperate)  # scritte (o recuperate) dopo l'ultimo salvataggio sul NAS
     for n, parte in enumerate(lotti):
         imgs = [Image.open(os.path.join(cart, f"{i}.jpg")).convert("RGB") for i in parte]
         salva_json(in_corso, {"library": nome_lib, "ids": parte})
         for i, t in zip(parte, desc.descrivi(imgs)):
             items[i] = t
             vecchie.discard(i)
+            recenti[i] = t
         os.remove(in_corso)  # riuscito: una pausa (fascia oraria, spegnimento) non le fa passare per sospette
         fatte += len(parte)
         motore.stato(phase="descriptions", library=nome_lib, done=fatte, total=len(nuove))
         if (n + 1) % 30 == 0 or fatte == len(nuove):  # ~500 foto: il telefono vede quelle già fatte
             scrivi_descrizioni(dest, items, hf, vecchie)
             annuncia_descrizioni(os.path.dirname(dest), dest, desc.nome)
+            recenti = {}
+            try:
+                os.remove(parziale)
+            except OSError:
+                pass
+        elif (n + 1) % 5 == 0:  # ~80 foto, sul disco del PC: se la GPU si ferma prima del NAS, non si rifanno
+            salva_json(parziale, {"library": nome_lib, "model": hf, "items": {str(k): v for k, v in recenti.items()}})
         try:
             controllo(grande=grande, gpu_in_uso=True)
         except Stop:
