@@ -83,6 +83,16 @@ def reveal(window, max_ms=60):
     window.after(max_ms, show)
 
 
+def card(parent, title, pady=(12, 0)):
+    """Un riquadro con il titolo in blu, come le schede di ViewerCraftStar (sezioni delle impostazioni): torna il
+    riquadro in cui mettere i controlli. È il riquadro arrotondato del tema (Card.TFrame), con lo stesso sfondo della
+    finestra: caselle, campi e pulsanti ci stanno sopra senza aloni."""
+    f = ttk.Frame(parent, style="Card.TFrame", padding=(16, 12, 16, 14))
+    f.pack(fill="x", pady=pady)
+    ttk.Label(f, text=title, style="CardTitle.TLabel").pack(anchor="w", pady=(0, 6))
+    return f
+
+
 def set_icon(window):
     try:
         window.iconbitmap(resource("assets", "icon.ico"))
@@ -110,6 +120,8 @@ def setup_theme(root):
     # margine interno: senza, i titoli partono dal primo pixel della colonna
     st.configure("Treeview.Heading", font=root.f_small, padding=(10, 5, 8, 5))
     st.configure("Link.TLabel", foreground=ACCENT, font=root.f_link)
+    # il titolo dei riquadri (card): blu come le intestazioni delle schede di ViewerCraftStar
+    st.configure("CardTitle.TLabel", foreground=ACCENT, font=root.f_strong)
     # l'elenco che si apre dai menu a tendina è un Listbox Tk: va allineato a mano ai caratteri dell'app
     root.option_add("*TCombobox*Listbox.font", root.f_body)
 

@@ -30,7 +30,7 @@ from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, LOCAL, backup_root,
 from ai_panel import AiChoice
 from translations import DATE_FORMATS, LANGUAGES, TEXTS
 from ui_theme import (LEVELS, MUTED, TEXT, DateField, Dialog, TimeField, attach_scrollbars, center_on, dark_title_bar,
-                      dpi_aware, reveal, set_icon, setup_theme)
+                      dpi_aware, reveal, set_icon, setup_theme, card)
 from version import APP_NAME, VERSION
 
 DONATE = (("☕  Buy Me a Coffee", "https://buymeacoffee.com/poty87"), ("💳  PayPal", "https://paypal.me/poty87"))
@@ -228,36 +228,36 @@ class SettingsDialog(tk.Toplevel):
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text=t("settings"), style="Title.TLabel").pack(anchor="w")
 
-        ttk.Label(frame, text=t("lang_label").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
+        box = card(frame, t("lang_label"), pady=(14, 0))
         self.lang_codes = ["auto", *LANGUAGES]
-        self.lang = ttk.Combobox(frame, values=[t("lang_auto"), *LANGUAGES.values()], state="readonly", width=40)
+        self.lang = ttk.Combobox(box, values=[t("lang_auto"), *LANGUAGES.values()], state="readonly", width=40)
         current = app.settings.get("language") or "auto"
         self.lang.current(self.lang_codes.index(current) if current in self.lang_codes else 0)
         self.lang.pack(anchor="w")
 
-        ttk.Label(frame, text=t("cli_label").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
-        row = ttk.Frame(frame)
+        box = card(frame, t("cli_label"))
+        row = ttk.Frame(box)
         row.pack(fill="x")
         self.cli = tk.StringVar(value=app.settings.get("cli") or DEFAULT_CLI)
         ttk.Entry(row, textvariable=self.cli, width=58).pack(side="left", fill="x", expand=True)
         ttk.Button(row, text=t("btn_browse"), command=self.browse).pack(side="left", padx=(8, 0))
-        ttk.Label(frame, text=t("cli_hint"), style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
+        ttk.Label(box, text=t("cli_hint"), style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
 
-        ttk.Label(frame, text=t("profiles_label"), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
-        row = ttk.Frame(frame)
+        box = card(frame, t("profiles_title"))
+        row = ttk.Frame(box)
         row.pack(fill="x")
         self.profiles_dir = tk.StringVar(value=app.settings.get("profiles_dir") or "")
         ttk.Entry(row, textvariable=self.profiles_dir).pack(side="left", fill="x", expand=True)
         ttk.Button(row, text=t("btn_browse"), command=self.browse_profiles).pack(side="left", padx=(8, 0))
         ttk.Button(row, text=t("btn_clear"), command=lambda: self.profiles_dir.set("")).pack(side="left", padx=(8, 0))
-        ttk.Label(frame, text=t("profiles_hint"), style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
+        ttk.Label(box, text=t("profiles_hint"), style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
 
-        ttk.Label(frame, text=t("backup_label").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
+        box = card(frame, t("backup_label"))
         self.backup_mode = tk.StringVar(value="custom" if app.settings.get("backup_dir") else "library")
         self.backup_dir = tk.StringVar(value=app.settings.get("backup_dir") or "")
-        ttk.Radiobutton(frame, text=t("backup_next_to"), value="library", variable=self.backup_mode,
+        ttk.Radiobutton(box, text=t("backup_next_to"), value="library", variable=self.backup_mode,
                         command=self.backup_mode_changed).pack(anchor="w")
-        row = ttk.Frame(frame)
+        row = ttk.Frame(box)
         row.pack(fill="x", pady=(4, 0))
         ttk.Radiobutton(row, text=t("backup_custom"), value="custom", variable=self.backup_mode,
                         command=self.backup_mode_changed).pack(side="left")
@@ -265,27 +265,27 @@ class SettingsDialog(tk.Toplevel):
         self.backup_entry.pack(side="left", fill="x", expand=True, padx=(8, 0))
         self.backup_browse = ttk.Button(row, text=t("btn_browse"), command=self.browse_backup_dir)
         self.backup_browse.pack(side="left", padx=(8, 0))
-        row = ttk.Frame(frame)
+        row = ttk.Frame(box)
         row.pack(fill="x", pady=(8, 0))
         ttk.Label(row, text=t("backup_kept"), style="Body.TLabel").pack(side="left")
         self.kept = tk.IntVar(value=app.settings.get("backups_kept", BACKUPS_KEPT))
         ttk.Spinbox(row, from_=1, to=50, textvariable=self.kept, width=5, state="readonly").pack(side="left",
                                                                                                padx=(10, 0))
-        ttk.Label(frame, text=t("backup_hint"), style="Muted.TLabel", wraplength=560, justify="left").pack(
+        ttk.Label(box, text=t("backup_hint"), style="Muted.TLabel", wraplength=560, justify="left").pack(
             anchor="w", pady=(4, 0))
         self.backup_mode_changed()
 
-        ttk.Label(frame, text=t("updates_label").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
-        row = ttk.Frame(frame)
+        box = card(frame, t("updates_label"))
+        row = ttk.Frame(box)
         row.pack(fill="x")
         self.auto_update = tk.BooleanVar(value=app.settings.get("check_updates", True))
         ttk.Checkbutton(row, text=t("upd_auto"), variable=self.auto_update).pack(side="left")
         ttk.Button(row, text=t("upd_check_now"), command=lambda: app.check_updates(manual=True, parent=self)).pack(
             side="right")
-        ttk.Label(frame, text=t("upd_hint"), style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
+        ttk.Label(box, text=t("upd_hint"), style="Muted.TLabel").pack(anchor="w", pady=(4, 0))
 
         about = ttk.Frame(frame)
-        about.pack(fill="x", pady=(18, 0))
+        about.pack(fill="x", pady=(14, 0))
         ttk.Label(about, text=f"{APP_NAME} · " + t("about", version=VERSION), style="Muted.TLabel").pack(side="left")
         # donazioni: la pagina Buy Me a Coffee del progetto, nel browser
         coffee = ttk.Label(about, text=t("donate"), style="Link.TLabel", cursor="hand2")
@@ -796,30 +796,47 @@ class AutoImportDialog(tk.Toplevel):
         w = app.settings.get("watch") or {}
         self.rules = [dict(r) for r in w.get("rules") or []]
         self.added = []  # (regola, importa anche le foto già presenti): lo stato si crea al salvataggio
+        W = 700  # larghezza dei testi
         frame = ttk.Frame(self, padding=(24, 22, 24, 18))
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text=t("auto_title"), style="Title.TLabel").pack(anchor="w")
-        ttk.Label(frame, text=t("auto_intro"), style="Body.TLabel", wraplength=720, justify="left").pack(
-            anchor="w", pady=(6, 0))
+        ttk.Label(frame, text=t("auto_intro"), style="Muted.TLabel", wraplength=W + 40, justify="left").pack(
+            anchor="w", pady=(4, 0))
+        # in cima l'interruttore principale e lo stato (come le levette dell'app del telefono)
+        top = ttk.Frame(frame, style="Card.TFrame", padding=(16, 12, 16, 12))
+        top.pack(fill="x", pady=(14, 0))
+        self.enabled = tk.BooleanVar(value=bool(w.get("enabled")))
+        ttk.Checkbutton(top, text=t("auto_enable"), variable=self.enabled, style="Switch.TCheckbutton").pack(anchor="w")
+        self.status = ttk.Label(top, style="Muted.TLabel", wraplength=W, justify="left")
+        self.status.pack(anchor="w", pady=(6, 0))
 
-        ttk.Label(frame, text=t("auto_folders").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
-        box = ttk.Frame(frame)
-        box.pack(fill="x")
+        # tre sotto-schede: le cartelle da importare; il telefono; volti e raw in DNG
+        tabs = ttk.Notebook(frame)
+        tabs.pack(fill="both", expand=True, pady=(14, 0))
+        tab_import = ttk.Frame(tabs, padding=(2, 4, 2, 2))
+        tab_phone = ttk.Frame(tabs, padding=(2, 4, 2, 2))
+        tab_more = ttk.Frame(tabs, padding=(2, 4, 2, 2))
+        tabs.add(tab_import, text="  " + t("auto_tab_import") + "  ")
+        tabs.add(tab_phone, text="  " + t("auto_tab_phone") + "  ")
+        tabs.add(tab_more, text="  " + t("auto_tab_more") + "  ")
+
+        # --- Importazione: le cartelle osservate e la libreria in cui vanno
+        box = card(tab_import, t("auto_folders"), pady=(8, 0))
         self.tree = ttk.Treeview(box, columns=("folder", "subfolders", "library"), show="headings", height=4,
                                  selectmode="browse")
         self.tree.heading("folder", text=t("auto_col_folder"), anchor="w")
         self.tree.heading("subfolders", text=t("auto_col_subfolders"), anchor="w")
         self.tree.heading("library", text=t("auto_col_library"), anchor="w")
-        self.tree.column("folder", width=380, anchor="w")
+        self.tree.column("folder", width=360, anchor="w")
         self.tree.column("subfolders", width=110, minwidth=90, anchor="w", stretch=False)
-        self.tree.column("library", width=250, anchor="w")
+        self.tree.column("library", width=230, anchor="w")
         self.tree.pack(fill="x")
         self.tree.bind("<<TreeviewSelect>>", lambda e: self.update_buttons())
-        row = ttk.Frame(frame)
-        row.pack(fill="x", pady=(8, 0))
+        row = ttk.Frame(box)
+        row.pack(fill="x", pady=(10, 0))
         ttk.Label(row, text=t("auto_into"), style="Body.TLabel").pack(side="left")
         self.libs = list(app.settings.get("libraries", []))
-        self.lib_combo = ttk.Combobox(row, state="readonly", width=40, values=app.library_names())
+        self.lib_combo = ttk.Combobox(row, state="readonly", width=34, values=app.library_names())
         if app.settings.get("library") in self.libs:
             self.lib_combo.current(self.libs.index(app.settings["library"]))
         elif self.libs:
@@ -831,41 +848,64 @@ class AutoImportDialog(tk.Toplevel):
         # per le cartelle organizzate per anno/mese/giorno; vale per la cartella che si aggiunge (per cambiarla:
         # togli la cartella e aggiungila di nuovo, così le foto già presenti nelle sottocartelle non sembrano nuove)
         self.subfolders = tk.BooleanVar(value=True)
-        ttk.Checkbutton(frame, text=t("auto_subfolders"), variable=self.subfolders).pack(anchor="w", pady=(8, 0))
+        ttk.Checkbutton(box, text=t("auto_subfolders"), variable=self.subfolders).pack(anchor="w", pady=(8, 0))
+        ttk.Label(box, text=t("auto_hint"), style="Muted.TLabel", wraplength=W, justify="left").pack(
+            anchor="w", pady=(6, 0))
 
-        # librerie da consultare sul telefono (sezione Libreria di ViewerCraftStar): indice scritto in una cartella del NAS
-        ph = app.settings.get("phone") or {}
-        ttk.Label(frame, text=t("auto_phone").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
-        row = ttk.Frame(frame)
+        # --- Importazione: quando (ogni quanto si controlla, quando un trasferimento è finito)
+        box = card(tab_import, t("auto_when"))
+        row = ttk.Frame(box)
         row.pack(fill="x")
-        ttk.Label(row, text=t("auto_phone_folder"), style="Body.TLabel").pack(side="left")
+        ttk.Label(row, text=t("auto_interval"), style="Body.TLabel").pack(side="left")
+        self.interval = tk.IntVar(value=int(w.get("interval") or watcher.DEFAULT_INTERVAL))
+        ttk.Spinbox(row, from_=1, to=60, textvariable=self.interval, width=5, state="readonly").pack(
+            side="left", padx=(10, 0))
+        row = ttk.Frame(box)
+        row.pack(fill="x", pady=(8, 0))
+        ttk.Label(row, text=t("auto_quiet"), style="Body.TLabel").pack(side="left")
+        self.quiet = tk.IntVar(value=int(w.get("quiet") or watcher.DEFAULT_QUIET))
+        ttk.Spinbox(row, from_=10, to=900, increment=10, textvariable=self.quiet, width=5, state="readonly").pack(
+            side="left", padx=(10, 0))
+        ttk.Label(box, text=t("auto_quiet_hint"), style="Muted.TLabel", wraplength=W, justify="left").pack(
+            anchor="w", pady=(6, 0))
+
+        # --- Telefono: la cartella di servizio sul NAS (indice delle librerie per ViewerCraftStar)
+        ph = app.settings.get("phone") or {}
+        box = card(tab_phone, t("auto_service_title"), pady=(8, 0))
+        row = ttk.Frame(box)
+        row.pack(fill="x")
         self.phone_folder = tk.StringVar(value=ph.get("folder") or "")
-        ttk.Entry(row, textvariable=self.phone_folder, state="readonly", width=58).pack(side="left", padx=(10, 8))
+        ttk.Entry(row, textvariable=self.phone_folder, state="readonly").pack(side="left", fill="x", expand=True,
+                                                                                padx=(0, 8))
         ttk.Button(row, text=t("auto_phone_pick"), command=self.pick_phone_folder).pack(side="left")
-        ttk.Label(frame, text=t("auto_phone_hint"), style="Muted.TLabel", wraplength=720, justify="left").pack(
-            anchor="w", pady=(4, 0))
+        ttk.Label(box, text=t("auto_phone_hint"), style="Muted.TLabel", wraplength=W, justify="left").pack(
+            anchor="w", pady=(6, 0))
+
+        # --- Telefono: le librerie da consultare
         chosen = {watcher.key(x) for x in ph.get("libraries") or []}
         self.phone_vars = []
-        ttk.Label(frame, text=t("auto_phone_libs"), style="Body.TLabel").pack(anchor="w", pady=(8, 2))
-        libs_box = ttk.Frame(frame)
+        box = card(tab_phone, t("auto_phone_libs_title"))
+        libs_box = ttk.Frame(box)
         libs_box.pack(fill="x")
         for r, lib in enumerate(self.libs):
             var = tk.BooleanVar(value=watcher.key(lib) in chosen)
             ttk.Checkbutton(libs_box, text=self.lib_name(lib), variable=var).grid(row=r, column=0, sticky="w")
             ttk.Label(libs_box, text=lib, style="Muted.TLabel").grid(row=r, column=1, sticky="w", padx=(12, 0))
             self.phone_vars.append((lib, var))
-        # ricerca per soggetti sul telefono: il motore IA (facoltativo) lavora sulle librerie spuntate qui sopra
-        row = ttk.Frame(frame)
-        row.pack(fill="x", pady=(10, 0))
-        self.ai_label = ttk.Label(row, style="Body.TLabel", wraplength=560, justify="left")
+
+        # --- Telefono: ricerca per soggetti (il motore IA lavora sulle librerie spuntate qui sopra)
+        box = card(tab_phone, t("ai_card_title"))
+        row = ttk.Frame(box)
+        row.pack(fill="x")
+        self.ai_label = ttk.Label(row, style="Body.TLabel", wraplength=W - 160, justify="left")
         self.ai_label.pack(side="left")
         ttk.Button(row, text=t("ai_button"), command=self.open_ai).pack(side="right")
         self.show_ai()
 
-        # volti: nomi dati da soli quando la somiglianza è molto alta (riconoscimento dei volti di LightCraft)
-        ttk.Label(frame, text=t("faces_title").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
+        # --- Volti e DNG: nomi dati da soli quando la somiglianza è molto alta (riconoscimento dei volti di LightCraft)
         fcfg = app.settings.get("faces") or {}
-        row = ttk.Frame(frame)
+        box = card(tab_more, t("faces_title"), pady=(8, 0))
+        row = ttk.Frame(box)
         row.pack(fill="x")
         self.faces_auto = tk.BooleanVar(value=bool(fcfg.get("auto")))
         ttk.Checkbutton(row, text=t("faces_auto"), variable=self.faces_auto).pack(side="left")
@@ -874,48 +914,26 @@ class AutoImportDialog(tk.Toplevel):
             side="left", padx=(8, 4))
         ttk.Label(row, text="%", style="Body.TLabel").pack(side="left")
         ttk.Button(row, text=t("faces_undo"), command=self.faces_undo).pack(side="right")
-        ttk.Label(frame, text=t("faces_hint"), style="Muted.TLabel", wraplength=720, justify="left").pack(
-            anchor="w", pady=(4, 0))
+        ttk.Label(box, text=t("faces_hint"), style="Muted.TLabel", wraplength=W, justify="left").pack(
+            anchor="w", pady=(6, 0))
 
-        # raw proprietari in DNG (Adobe DNG Converter)
-        ttk.Label(frame, text=t("dng_title").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
+        # --- Volti e DNG: raw proprietari in DNG (Adobe DNG Converter)
         dcfg = app.settings.get("dng") or {}
         self.dng_convert = tk.BooleanVar(value=bool(dcfg.get("convert")))
         self.dng_existing = tk.BooleanVar(value=bool(dcfg.get("existing")))
-        row = ttk.Frame(frame)
+        box = card(tab_more, t("dng_title"))
+        row = ttk.Frame(box)
         row.pack(fill="x")
         ttk.Checkbutton(row, text=t("dng_convert"), variable=self.dng_convert,
                         command=self.dng_changed).pack(side="left")
         self.dng_state = ttk.Label(row, style="Muted.TLabel")
         self.dng_state.pack(side="left", padx=(12, 0))
         self.dng_install_btn = ttk.Button(row, text=t("dng_install"), command=self.dng_install)
-        ttk.Checkbutton(frame, text=t("dng_existing", count=self.raw_count()), variable=self.dng_existing).pack(
+        ttk.Checkbutton(box, text=t("dng_existing", count=self.raw_count()), variable=self.dng_existing).pack(
             anchor="w", pady=(4, 0))
-        ttk.Label(frame, text=t("dng_hint"), style="Muted.TLabel", wraplength=720, justify="left").pack(
-            anchor="w", pady=(4, 0))
+        ttk.Label(box, text=t("dng_hint"), style="Muted.TLabel", wraplength=W, justify="left").pack(
+            anchor="w", pady=(6, 0))
         self.dng_show()
-
-        ttk.Label(frame, text=t("auto_options").upper(), style="Muted.TLabel").pack(anchor="w", pady=(18, 4))
-        self.enabled = tk.BooleanVar(value=bool(w.get("enabled")))
-        ttk.Checkbutton(frame, text=t("auto_enable"), variable=self.enabled).pack(anchor="w")
-        row = ttk.Frame(frame)
-        row.pack(fill="x", pady=(8, 0))
-        ttk.Label(row, text=t("auto_interval"), style="Body.TLabel").pack(side="left")
-        self.interval = tk.IntVar(value=int(w.get("interval") or watcher.DEFAULT_INTERVAL))
-        ttk.Spinbox(row, from_=1, to=60, textvariable=self.interval, width=5, state="readonly").pack(
-            side="left", padx=(10, 0))
-        row = ttk.Frame(frame)
-        row.pack(fill="x", pady=(8, 0))
-        ttk.Label(row, text=t("auto_quiet"), style="Body.TLabel").pack(side="left")
-        self.quiet = tk.IntVar(value=int(w.get("quiet") or watcher.DEFAULT_QUIET))
-        ttk.Spinbox(row, from_=10, to=900, increment=10, textvariable=self.quiet, width=5, state="readonly").pack(
-            side="left", padx=(10, 0))
-        ttk.Label(frame, text=t("auto_quiet_hint"), style="Muted.TLabel", wraplength=720, justify="left").pack(
-            anchor="w", pady=(4, 0))
-        ttk.Label(frame, text=t("auto_hint"), style="Muted.TLabel", wraplength=720, justify="left").pack(
-            anchor="w", pady=(8, 0))
-        self.status = ttk.Label(frame, style="Strong.TLabel", wraplength=720, justify="left")
-        self.status.pack(anchor="w", pady=(14, 0))
 
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x", pady=(18, 0))
