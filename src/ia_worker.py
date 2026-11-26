@@ -31,6 +31,7 @@ import io
 import json
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -834,6 +835,33 @@ def tokenizzatore_ridotto(tok, tenuti):
 FORMATO_TELEFONO = 2
 
 
+def completo(cartella, info):
+    """Tutti i file del modello del telefono descritti da `info` ci sono, della dimensione giusta."""
+    files = info.get("files") or {}
+    return bool(files) and all(os.path.isfile(os.path.join(cartella, n)) and os.path.getsize(os.path.join(cartella, n)) == f.get("size")
+                               for n, f in files.items())
+
+
+def modello_condiviso(cond, cond_rel, nome_modello, bits, vecchio, tel):
+    """Il modello del telefono nella cartella condivisa (voce `phone` del manifest, con `shared` = dove sta), o None se
+    va preparato. Se c'è già (fatto per un'altra libreria) si usa quello; se c'è la copia valida di questa libreria
+    (versioni fino alla 1.30.1) la si sposta lì invece di rifarlo."""
+    def giusto(info):
+        return info.get("model") == nome_modello and info.get("bits") == bits and info.get("format") == FORMATO_TELEFONO
+    info = carica_json(os.path.join(cond, "model.json"), {})
+    if giusto(info) and completo(cond, info):
+        return dict(info, shared=cond_rel)
+    if giusto(vecchio) and completo(tel, vecchio):
+        os.makedirs(cond, exist_ok=True)
+        for n in vecchio["files"]:
+            os.replace(os.path.join(tel, n), os.path.join(cond, n))
+        info = {k: v for k, v in vecchio.items() if k != "shared"}
+        info["shared"] = cond_rel
+        salva_json(os.path.join(cond, "model.json"), info)
+        return info
+    return None
+
+
 def prepara_telefono(motore, nome_modello, bits, cartella):
     """La parte testo del modello per il telefono: vocabolario it+en, pesi a `bits` bit, tabella del vocabolario a
     8 bit, in ONNX; più tokenizer.json e i parametri per usarli. Ritorna il dizionario per manifest.json."""
@@ -1020,11 +1048,13 @@ def lavoro(cfg):
             if fatte:
                 nuove_per_lib[nome_lib] = fatte
         ids_fatti, v = carica_impronte(visivo)
+        # il modello del telefono è uno solo per tutte le librerie: <cartella di servizio>/models/<modello>-<bit>-f<formato>
+        # (fino alla 1.30.1 ce n'era una copia in ogni <libreria>/ia/telefono: 827 MB ciascuna)
         tel = os.path.join(ia, "telefono")
-        tel_info = manifest.get("phone") or {}
-        valido = (tel_info.get("model") == nome_modello and tel_info.get("bits") == bits and
-                  tel_info.get("format") == FORMATO_TELEFONO and all(
-            os.path.exists(os.path.join(tel, n)) for n in (tel_info.get("files") or {"x": 0})))
+        cond_rel = f"models/{nome_modello}-{bits}-f{FORMATO_TELEFONO}"
+        cond = os.path.join(os.path.dirname(os.path.normpath(phone_folder)), *cond_rel.split("/"))
+        tel_info = modello_condiviso(cond, cond_rel, nome_modello, bits, manifest.get("phone") or {}, tel)
+        valido = tel_info is not None
         if not valido and ids_fatti is not None:
             if modello is not None:  # libera la GPU e la memoria per la preparazione (sulla CPU)
                 del modello
@@ -1036,7 +1066,11 @@ def lavoro(cfg):
                 except Exception:  # noqa: BLE001
                     pass
             motore.passo("phone_model", nome_lib)
-            tel_info = prepara_telefono(motore, nome_modello, bits, tel)
+            tel_info = dict(prepara_telefono(motore, nome_modello, bits, cond), shared=cond_rel)
+            salva_json(os.path.join(cond, "model.json"), tel_info)
+        tel_info = tel_info or {}
+        if valido and os.path.isdir(tel):
+            shutil.rmtree(tel, ignore_errors=True)  # la copia della libreria non serve più: c'è quella condivisa
         if ids_fatti is None:
             continue
         nuovo_manifest = {

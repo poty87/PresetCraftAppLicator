@@ -632,6 +632,12 @@ def maybe_start(settings, log=None):
             if (m.get("descriptions") or {}).get("count", 0) < m.get("count", 0):
                 missing = True
                 break
+    if not missing:  # modello del telefono ancora dentro la libreria (fino alla 1.30.1): va nella cartella condivisa
+        for lib in libs:
+            m = load_json(os.path.join(watcher.library_dir(phone_folder, lib), "ia", "manifest.json"), {})
+            if m.get("phone") and not m["phone"].get("shared"):
+                missing = True
+                break
     phase = status.get("phase")
     unfinished = phase not in (None, "idle", "paused")
     if phase == "waiting_window" and window and not in_window(window):
