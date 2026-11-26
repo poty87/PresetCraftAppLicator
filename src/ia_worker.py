@@ -674,6 +674,27 @@ def carica_meta_descrizioni(path):
         return None, set()
 
 
+def carica_saltate(path):
+    """Le foto saltate perché fermano la GPU (ancora da rifare, si riprovano più tardi)."""
+    import gzip
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            return {int(x) for x in json.load(f).get("skipped") or []}
+    except (OSError, ValueError, EOFError):
+        return set()
+
+
+RIPROVA_SALTATE = 24 * 3600  # le foto saltate si riprovano (una alla volta, alla fine) al massimo una volta al giorno
+
+
+def saltate_ferme(motore_dir, nome_lib):
+    """Le foto saltate che in questo giro NON si riprovano (l'ultima prova è di meno di un giorno fa)."""
+    s = carica_json(os.path.join(motore_dir, "foto-sospette.json"), {})
+    salt = {int(k) for k, v in (s.get(nome_lib) or {}).items() if v >= 3}
+    quando = (s.get("_riprova") or {}).get(nome_lib, 0)
+    return salt if time.time() - quando < RIPROVA_SALTATE else set()
+
+
 def carica_descrizioni(path):
     """{id: testo} da descrizioni.json.gz, o {} se manca."""
     import gzip
@@ -685,13 +706,15 @@ def carica_descrizioni(path):
         return {}
 
 
-def scrivi_descrizioni(path, items, modello, vecchie=()):
-    """`vecchie`: foto la cui descrizione è ancora quella di un modello precedente (resta finché non è rifatta)."""
+def scrivi_descrizioni(path, items, modello, vecchie=(), saltate=()):
+    """`vecchie`: foto la cui descrizione è ancora quella di un modello precedente (resta finché non è rifatta);
+    `saltate`: quelle tra loro che fermano la GPU e si riprovano più tardi (restano da rifare)."""
     import gzip
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
     with gzip.open(tmp, "wt", encoding="utf-8") as f:
         json.dump({"version": FORMATO_DESCRIZIONI, "model": modello, "old": sorted(int(x) for x in vecchie if x in items),
+                   "skipped": sorted(int(x) for x in saltate if x in vecchie and x in items),
                    "items": {str(k): v for k, v in items.items()}}, f, ensure_ascii=False, separators=(",", ":"))
     os.replace(tmp, path)
 
@@ -768,7 +791,8 @@ def annuncia_descrizioni(ia, dest, nome_desc):
     # il modello che le ha scritte davvero (non quello scelto: finché non sono rifatte, sono del modello di prima)
     info = {"file": "descrizioni.json.gz", "model": modello or DESCRITTORI[nome_desc]["hf"], "by": modello or DESCRITTORI[nome_desc]["hf"],
             "count": len(carica_descrizioni(dest)),
-            "size": os.path.getsize(dest), "format": FORMATO_DESCRIZIONI, "old": len(vecchie)}
+            "size": os.path.getsize(dest), "format": FORMATO_DESCRIZIONI, "old": len(vecchie),
+            "skipped": len(carica_saltate(dest) & vecchie)}
     if m.get("descriptions") != info:
         m["descriptions"] = info
         salva_json(manifest_path, m)
@@ -780,6 +804,19 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
     from PIL import Image
     items = carica_descrizioni(dest)
     hf = DESCRITTORI[desc.nome]["hf"]
+    # foto su cui la GPU si è fermata (contate in foto-sospette.json, sul PC): una alla volta; alla terza volta si
+    # saltano (restano da rifare e si riprovano alla fine di un giro, al massimo una volta al giorno)
+    in_corso = os.path.join(motore.dir, "lotto-in-corso.json")
+    sosp_path = os.path.join(motore.dir, "foto-sospette.json")
+    sospette = carica_json(sosp_path, {})
+    sosp = {int(k): v for k, v in (sospette.get(nome_lib) or {}).items()}
+
+    def salva_sospette():
+        sospette[nome_lib] = {str(k): v for k, v in sosp.items()}
+        salva_json(sosp_path, sospette)
+
+    def salva():
+        scrivi_descrizioni(dest, items, hf, vecchie, {k for k, v in sosp.items() if v >= 3})
     # descrizioni di un modello precedente: si rifanno tutte (intanto restano, così la ricerca sul telefono funziona)
     fatto_da, vecchie = carica_meta_descrizioni(dest)
     if items and fatto_da and fatto_da != hf:
@@ -805,19 +842,15 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
     nuove = [p["id"] for p in foto if (p["id"] not in items or p["id"] in vecchie)
              and os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))]
     if (tolte or fatto_da != hf or recuperate) and not nuove and items:
-        scrivi_descrizioni(dest, items, hf, vecchie)
-    # foto su cui la GPU si è fermata nel giro prima (il lotto era segnato in corso): una alla volta; alla seconda volta
-    # si lasciano con la descrizione che hanno (altrimenti il motore ripartirebbe e si fermerebbe lì per sempre)
-    in_corso = os.path.join(motore.dir, "lotto-in-corso.json")
-    sosp_path = os.path.join(motore.dir, "foto-sospette.json")
-    sospette = carica_json(sosp_path, {})
-    sosp = {int(k): v for k, v in (sospette.get(nome_lib) or {}).items()}
+        salva()
+    # il lotto segnato in corso nel giro prima: la GPU si è fermata lì
     prima = carica_json(in_corso, {})
     if prima.get("library") == nome_lib:
         for i in prima.get("ids") or []:
             sosp[int(i)] = sosp.get(int(i), 0) + 1
-        sospette[nome_lib] = {str(k): v for k, v in sosp.items()}
-        salva_json(sosp_path, sospette)
+            if sosp[int(i)] == 3:  # appena saltata: si riprova solo tra un giorno
+                sospette.setdefault("_riprova", {})[nome_lib] = time.time()
+        salva_sospette()
         motore.log(f"{nome_lib}: la GPU si era fermata sulle foto {prima.get('ids')}: si rifanno una alla volta")
     try:
         os.remove(in_corso)
@@ -825,12 +858,19 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
         pass
     saltate = [i for i in nuove if sosp.get(i, 0) >= 3]
     if saltate:
-        motore.log(f"{nome_lib}: {len(saltate)} foto fermano la GPU anche da sole ({saltate[:20]}): tengono la descrizione che hanno")
-        for i in saltate:
-            vecchie.discard(i)
-        nuove = [i for i in nuove if sosp.get(i, 0) < 3]
-        if not nuove:
-            scrivi_descrizioni(dest, items, hf, vecchie)
+        quando = (sospette.get("_riprova") or {}).get(nome_lib, 0)
+        if time.time() - quando >= RIPROVA_SALTATE:
+            motore.log(f"{nome_lib}: {len(saltate)} foto saltate perché fermavano la GPU ({saltate[:20]}): si riprovano alla fine")
+            for i in saltate:
+                sosp[i] = 2  # una alla volta; se la fermano ancora, si risaltano (fino a domani)
+            sospette.setdefault("_riprova", {})[nome_lib] = time.time()
+            salva_sospette()
+        else:
+            motore.log(f"{nome_lib}: {len(saltate)} foto fermano la GPU anche da sole ({saltate[:20]}): restano da rifare, "
+                       f"si riprovano tra un giorno (intanto hanno la descrizione di prima)")
+            nuove = [i for i in nuove if sosp.get(i, 0) < 3]
+            if not nuove:
+                salva()
     if not nuove:
         return 0
     grande = len(nuove) > GRANDE
@@ -852,7 +892,7 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
     for g in sorted(gruppi.values(), key=len, reverse=True):
         normali = [i for i in g if i not in sosp]
         lotti += [normali[k:k + lotto] for k in range(0, len(normali), lotto)]
-        lotti += [[i] for i in g if i in sosp]
+    lotti += [[i] for i in nuove if i in sosp]  # le sospette alla fine, una alla volta
     motore.log(f"{nome_lib}: {len(nuove)} foto da descrivere con {desc.nome}")
     t0 = time.time()
     fatte = 0
@@ -865,10 +905,14 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
             vecchie.discard(i)
             recenti[i] = t
         os.remove(in_corso)  # riuscito: una pausa (fascia oraria, spegnimento) non le fa passare per sospette
+        if any(i in sosp for i in parte):  # descritta da sola: non è più sospetta
+            for i in parte:
+                sosp.pop(i, None)
+            salva_sospette()
         fatte += len(parte)
         motore.stato(phase="descriptions", library=nome_lib, done=fatte, total=len(nuove))
         if (n + 1) % 30 == 0 or fatte == len(nuove):  # ~500 foto: il telefono vede quelle già fatte
-            scrivi_descrizioni(dest, items, hf, vecchie)
+            salva()
             annuncia_descrizioni(os.path.dirname(dest), dest, desc.nome)
             recenti = {}
             try:
@@ -880,7 +924,7 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
         try:
             controllo(grande=grande, gpu_in_uso=True)
         except Stop:
-            scrivi_descrizioni(dest, items, hf, vecchie)
+            salva()
             raise
     try:
         os.remove(in_corso)
@@ -1243,7 +1287,8 @@ def lavoro(cfg):
             con_miniatura = {p["id"] for p in foto if os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))}
             # descrizioni scritte da un altro modello (o rifatte solo in parte): da riscrivere con quello scelto
             fatto_da, vecchie = carica_meta_descrizioni(dest)
-            da_rifare = bool(items) and (fatto_da != DESCRITTORI[nome_desc]["hf"] or bool(vecchie))
+            da_rifare = bool(items) and (fatto_da != DESCRITTORI[nome_desc]["hf"] or
+                                         bool(vecchie - saltate_ferme(motore.dir, nome_lib)))
             if (con_miniatura - set(items)) or (set(items) - presenti) or da_rifare:  # nuove, tolte o da rifare
                 if con_miniatura - set(items) or da_rifare:
                     motore.passo("descriptions", nome_lib)
@@ -1310,7 +1355,8 @@ def pianifica(cfg, motore, cataloghi):
             dpath = os.path.join(ia, "descrizioni.json.gz")
             scritte = set(int(k) for k in carica_descrizioni(dpath))
             fatto_da, vecchie = carica_meta_descrizioni(dpath)
-            da_rifare = bool(scritte) and (fatto_da != DESCRITTORI[cfg["descriptions"]]["hf"] or bool(vecchie))
+            da_rifare = bool(scritte) and (fatto_da != DESCRITTORI[cfg["descriptions"]]["hf"] or
+                                           bool(vecchie - saltate_ferme(motore.dir, os.path.basename(os.path.normpath(lib)))))
             if ids - scritte - set(int(k) for k in errori) or da_rifare:
                 desc.append(["descriptions", nome_lib])
     return passi + desc

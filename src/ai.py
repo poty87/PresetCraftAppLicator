@@ -647,7 +647,9 @@ def maybe_start(settings, log=None):
             made_by = d.get("by")
             if d and not made_by:  # manifest scritto prima della 1.32.1 (poteva nominare il modello scelto): si legge il file
                 made_by = descriptions_model(os.path.join(watcher.library_dir(phone_folder, lib), "ia", "descrizioni.json.gz")) or made_by
-            if d.get("count", 0) < m.get("count", 0) or d.get("old") or (d and made_by != DESCRIBERS[describer]["hf"]):
+            # (le foto saltate perché fermano la GPU non contano: il motore le riprova da sé, al massimo una volta al giorno)
+            if d.get("count", 0) < m.get("count", 0) or (d.get("old") or 0) > (d.get("skipped") or 0) or \
+                    (d and made_by != DESCRIBERS[describer]["hf"]):
                 missing = True  # (anche: descrizioni scritte da un altro modello, o rifatte solo in parte)
                 break
     if not missing:  # modello del telefono ancora dentro la libreria (fino alla 1.30.1): va nella cartella condivisa
