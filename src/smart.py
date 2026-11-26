@@ -34,6 +34,7 @@ FORMAT = 1  # cambia se cambia il modo di lavorare: tutte le librerie si ricontr
 BATCH = 50  # foto per giro di lightcraft-cli (~45 s): tra un giro e l'altro si può fermare
 MAX_TRIES = 3
 ORPHAN_MIN_AGE = 3600  # un file più giovane di così non si tocca (potrebbe essere di una foto appena importata)
+_young = {}  # libreria -> smart preview orfane ancora troppo giovani per toglierle (vedi remove_orphans)
 ORPHAN_MAX_SHARE = 0.5  # se risultassero orfane più di metà dei file, il calcolo dei nomi non torna: non si cancella
 STATE = os.path.join(DATA_DIR, "watch", "smart-state.json")
 STATUS = os.path.join(DATA_DIR, "watch", "smart-status.json")
@@ -237,7 +238,9 @@ def maybe_start(settings):
         except OSError:
             continue
         st = state.get(lib) or {}
-        if st.get("sig") == sig and same_dir(st.get("dir"), target_dir(folder, lib)) or library_open_reason(lib):
+        # orfane trovate ma ancora troppo giovani per toglierle: si ripassa quando lo sono abbastanza
+        recheck = st.get("recheck") and time.time() >= st["recheck"]
+        if (st.get("sig") == sig and same_dir(st.get("dir"), target_dir(folder, lib)) and not recheck) or library_open_reason(lib):
             continue
         todo.append((lib, sig))
     if not todo:
@@ -272,6 +275,11 @@ def _work(settings, folder, cli, todo):
                 st = state.setdefault(lib, {})
                 st.update(sig=signature(lib), dir=target_dir(folder, lib),
                           checked=datetime.datetime.now().isoformat(timespec="seconds"))
+                young = _young.pop(lib, 0)
+                if young:
+                    st["recheck"] = time.time() + ORPHAN_MIN_AGE + 60
+                else:
+                    st.pop("recheck", None)
                 save_json(STATE, state)
     finally:
         _status(running=False)
@@ -287,7 +295,7 @@ def _library(settings, folder, cli, lib, name):
     photos = [p for p in cat["photos"].values() if p.get("kind") in ("raw", "image")]
     files = listing(dest)
     if cleanup_enabled(settings):
-        remove_orphans(name, dest, photos, files)
+        remove_orphans(name, dest, photos, files, lib)
         files = listing(dest)
     return build_missing(cli, lib, name, dest, photos, files, started)
 
@@ -369,11 +377,15 @@ def _sharded(rel):
     return os.path.join(name[:2], name)
 
 
-def remove_orphans(name, dest, photos, files):
-    """Toglie le smart preview delle foto che non sono più nella libreria. Torna quante."""
+def remove_orphans(name, dest, photos, files, lib=None):
+    """Toglie le smart preview delle foto che non sono più nella libreria. Torna quante. Quelle ancora troppo giovani
+    si contano in _young[lib]: la libreria si ricontrolla più tardi (prima restavano lì: il giro risultava finito,
+    25/11/2026, 1.751 smart preview orfane rimaste dopo lo spostamento sul NAS)."""
     expected = {rel_path(p) for p in photos}
     now = time.time()
     orphans = [rel for rel, (_s, mtime) in files.items() if rel not in expected and now - mtime > ORPHAN_MIN_AGE]
+    if lib is not None:
+        _young[lib] = sum(1 for rel, (_s, mtime) in files.items() if rel not in expected and now - mtime <= ORPHAN_MIN_AGE)
     if not orphans:
         return 0
     matched = sum(1 for rel in files if rel in expected)
