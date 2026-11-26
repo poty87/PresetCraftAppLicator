@@ -396,6 +396,16 @@ def install_main(folder, model, describer=None):
     return 0 if Installer(folder, model, detect_gpu(), describer=describer).run() else 1
 
 
+def descriptions_model(path):
+    """Il modello che ha scritto il file delle descrizioni (None se non si legge)."""
+    import gzip
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            return json.load(f).get("model")
+    except (OSError, ValueError, EOFError):
+        return None
+
+
 def describer_ready(settings):
     """Il modello delle descrizioni scelto, se attivo e installato; altrimenti None."""
     cfg = config(settings)
@@ -633,8 +643,12 @@ def maybe_start(settings, log=None):
     if describer and not missing:  # descrizioni attivate ma non ancora fatte (o non complete) per qualche libreria
         for lib in libs:
             m = load_json(os.path.join(watcher.library_dir(phone_folder, lib), "ia", "manifest.json"), {})
-            if (m.get("descriptions") or {}).get("count", 0) < m.get("count", 0) or (m.get("descriptions") or {}).get("old"):
-                missing = True  # (anche: descrizioni scritte da un modello precedente, da rifare)
+            d = m.get("descriptions") or {}
+            made_by = d.get("by")
+            if d and not made_by:  # manifest scritto prima della 1.32.1 (poteva nominare il modello scelto): si legge il file
+                made_by = descriptions_model(os.path.join(watcher.library_dir(phone_folder, lib), "ia", "descrizioni.json.gz")) or made_by
+            if d.get("count", 0) < m.get("count", 0) or d.get("old") or (d and made_by != DESCRIBERS[describer]["hf"]):
+                missing = True  # (anche: descrizioni scritte da un altro modello, o rifatte solo in parte)
                 break
     if not missing:  # modello del telefono ancora dentro la libreria (fino alla 1.30.1): va nella cartella condivisa
         for lib in libs:

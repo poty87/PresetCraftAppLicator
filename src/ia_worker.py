@@ -734,8 +734,10 @@ def annuncia_descrizioni(ia, dest, nome_desc):
     m = carica_json(manifest_path, {})
     if not m or not os.path.exists(dest):
         return
-    _modello, vecchie = carica_meta_descrizioni(dest)
-    info = {"file": "descrizioni.json.gz", "model": DESCRITTORI[nome_desc]["hf"], "count": len(carica_descrizioni(dest)),
+    modello, vecchie = carica_meta_descrizioni(dest)
+    # il modello che le ha scritte davvero (non quello scelto: finché non sono rifatte, sono del modello di prima)
+    info = {"file": "descrizioni.json.gz", "model": modello or DESCRITTORI[nome_desc]["hf"], "by": modello or DESCRITTORI[nome_desc]["hf"],
+            "count": len(carica_descrizioni(dest)),
             "size": os.path.getsize(dest), "format": FORMATO_DESCRIZIONI, "old": len(vecchie)}
     if m.get("descriptions") != info:
         m["descriptions"] = info
@@ -1140,8 +1142,11 @@ def lavoro(cfg):
             items = carica_descrizioni(dest)
             presenti = {p["id"] for p in foto}
             con_miniatura = {p["id"] for p in foto if os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))}
-            if (con_miniatura - set(items)) or (set(items) - presenti):  # foto nuove da descrivere o foto tolte
-                if con_miniatura - set(items):
+            # descrizioni scritte da un altro modello (o rifatte solo in parte): da riscrivere con quello scelto
+            fatto_da, vecchie = carica_meta_descrizioni(dest)
+            da_rifare = bool(items) and (fatto_da != DESCRITTORI[nome_desc]["hf"] or bool(vecchie))
+            if (con_miniatura - set(items)) or (set(items) - presenti) or da_rifare:  # nuove, tolte o da rifare
+                if con_miniatura - set(items) or da_rifare:
                     motore.passo("descriptions", nome_lib)
                 if desc is None:
                     controllo.subito_gpu()
@@ -1203,8 +1208,11 @@ def pianifica(cfg, motore, cataloghi):
         if not (tel.get("model") == nome_modello and tel.get("bits") == bits and tel.get("format") == FORMATO_TELEFONO):
             passi.append(["phone_model", nome_lib])
         if cfg.get("descriptions") in DESCRITTORI:
-            scritte = set(int(k) for k in carica_descrizioni(os.path.join(ia, "descrizioni.json.gz")))
-            if ids - scritte - set(int(k) for k in errori):
+            dpath = os.path.join(ia, "descrizioni.json.gz")
+            scritte = set(int(k) for k in carica_descrizioni(dpath))
+            fatto_da, vecchie = carica_meta_descrizioni(dpath)
+            da_rifare = bool(scritte) and (fatto_da != DESCRITTORI[cfg["descriptions"]]["hf"] or bool(vecchie))
+            if ids - scritte - set(int(k) for k in errori) or da_rifare:
                 desc.append(["descriptions", nome_lib])
     return passi + desc
 
