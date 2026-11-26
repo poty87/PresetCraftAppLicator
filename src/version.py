@@ -1,7 +1,7 @@
 """Dati del prodotto condivisi da app, installazione guidata e build."""
 
 APP_NAME = "PresetCraftAppLicator"
-VERSION = "1.32.2"
+VERSION = "1.32.3"
 REPO = "poty87/PresetCraftAppLicator"
 EXE = APP_NAME + ".exe"
 # non cambiarlo mai: è ciò che permette a una nuova versione di sostituire quella installata

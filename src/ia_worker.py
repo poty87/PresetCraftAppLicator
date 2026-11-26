@@ -794,23 +794,66 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
              and os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))]
     if (tolte or fatto_da != hf) and not nuove and items:
         scrivi_descrizioni(dest, items, hf, vecchie)
+    # foto su cui la GPU si è fermata nel giro prima (il lotto era segnato in corso): una alla volta; alla seconda volta
+    # si lasciano con la descrizione che hanno (altrimenti il motore ripartirebbe e si fermerebbe lì per sempre)
+    in_corso = os.path.join(motore.dir, "lotto-in-corso.json")
+    sosp_path = os.path.join(motore.dir, "foto-sospette.json")
+    sospette = carica_json(sosp_path, {})
+    sosp = {int(k): v for k, v in (sospette.get(nome_lib) or {}).items()}
+    prima = carica_json(in_corso, {})
+    if prima.get("library") == nome_lib:
+        for i in prima.get("ids") or []:
+            sosp[int(i)] = sosp.get(int(i), 0) + 1
+        sospette[nome_lib] = {str(k): v for k, v in sosp.items()}
+        salva_json(sosp_path, sospette)
+        motore.log(f"{nome_lib}: la GPU si era fermata sulle foto {prima.get('ids')}: si rifanno una alla volta")
+    try:
+        os.remove(in_corso)
+    except OSError:
+        pass
+    saltate = [i for i in nuove if sosp.get(i, 0) >= 2]
+    if saltate:
+        motore.log(f"{nome_lib}: {len(saltate)} foto fermano la GPU anche da sole ({saltate[:20]}): tengono la descrizione che hanno")
+        for i in saltate:
+            vecchie.discard(i)
+        nuove = [i for i in nuove if sosp.get(i, 0) < 2]
+        if not nuove:
+            scrivi_descrizioni(dest, items, hf, vecchie)
     if not nuove:
         return 0
     grande = len(nuove) > GRANDE
     controllo(grande=grande)
     lotto = DESCRITTORI[desc.nome]["lotto"]
+    # ogni lotto ha foto della stessa misura (orizzontali con orizzontali, verticali con verticali): con misure diverse
+    # nello stesso lotto Qwen3.5 fermava la GPU (driver video riavviato); così non serve nemmeno riempire le più corte
+    misure = {}
+    for i in nuove:
+        try:
+            with Image.open(os.path.join(cart, f"{i}.jpg")) as im:
+                misure[i] = im.size
+        except OSError:
+            misure[i] = (0, 0)
+    gruppi = {}
+    for i in nuove:
+        gruppi.setdefault(misure[i], []).append(i)
+    lotti = []
+    for g in sorted(gruppi.values(), key=len, reverse=True):
+        normali = [i for i in g if i not in sosp]
+        lotti += [normali[k:k + lotto] for k in range(0, len(normali), lotto)]
+        lotti += [[i] for i in g if i in sosp]
     motore.log(f"{nome_lib}: {len(nuove)} foto da descrivere con {desc.nome}")
     t0 = time.time()
     fatte = 0
-    for k in range(0, len(nuove), lotto):
-        parte = nuove[k:k + lotto]
+    for n, parte in enumerate(lotti):
         imgs = [Image.open(os.path.join(cart, f"{i}.jpg")).convert("RGB") for i in parte]
+        salva_json(in_corso, {"library": nome_lib, "ids": parte})
         for i, t in zip(parte, desc.descrivi(imgs)):
             items[i] = t
             vecchie.discard(i)
+        os.remove(in_corso)  # riuscito: una pausa (fascia oraria, spegnimento) non le fa passare per sospette
         fatte += len(parte)
         motore.stato(phase="descriptions", library=nome_lib, done=fatte, total=len(nuove))
-        if (k // lotto + 1) % 30 == 0 or fatte == len(nuove):  # ~500 foto: il telefono vede quelle già fatte
+        if (n + 1) % 30 == 0 or fatte == len(nuove):  # ~500 foto: il telefono vede quelle già fatte
             scrivi_descrizioni(dest, items, hf, vecchie)
             annuncia_descrizioni(os.path.dirname(dest), dest, desc.nome)
         try:
@@ -818,6 +861,10 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
         except Stop:
             scrivi_descrizioni(dest, items, hf, vecchie)
             raise
+    try:
+        os.remove(in_corso)
+    except OSError:
+        pass
     dt = time.time() - t0
     motore.log(f"{nome_lib}: {fatte} descrizioni in {dt:.0f}s ({dt / max(fatte, 1):.2f} s/foto; memoria video al modello "
                f"{desc.tetto / 1024 ** 3:.1f} GB, lotti divisi {desc.divisi})")
