@@ -33,7 +33,7 @@ from ui_theme import (LEVELS, MUTED, TEXT, DateField, Dialog, TimeField, attach_
                       dpi_aware, reveal, set_icon, setup_theme)
 from version import APP_NAME, VERSION
 
-DONATE = (("☕  Buy Me a Coffee", "https://buymeacoffee.com/poty87"), ("PayPal", "https://paypal.me/poty87"))
+DONATE = (("☕  Buy Me a Coffee", "https://buymeacoffee.com/poty87"), ("💳  PayPal", "https://paypal.me/poty87"))
 
 
 def donate_menu(event):
