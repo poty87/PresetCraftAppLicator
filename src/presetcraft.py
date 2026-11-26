@@ -2411,6 +2411,9 @@ class App(tk.Tk):
         self.btn_auto = ttk.Button(foot, text=("● " if auto_on else "") + t("auto_btn"), command=self.open_auto_import)
         self.btn_auto.pack(side="left", padx=(8, 0))
         ttk.Label(foot, text=f"v{VERSION}", style="Muted.TLabel").pack(side="left", padx=(12, 0))
+        coffee = ttk.Label(foot, text=t("donate"), style="Link.TLabel", cursor="hand2")  # accanto alla versione
+        coffee.pack(side="left", padx=(10, 0))
+        coffee.bind("<Button-1>", lambda e: __import__("webbrowser").open(DONATE_URL))
         self.update_link = ttk.Label(foot, style="Link.TLabel", cursor="hand2")
         self.update_link.bind("<Button-1>", lambda e: self.offer_update())
         if self.release:
