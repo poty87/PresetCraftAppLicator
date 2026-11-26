@@ -4,7 +4,7 @@
 
 <p align="center">
 Give your <b>LightCraft</b> photos the camera profile that matches the style you shot them with.<br>
-<a href="#-italiano">🇮🇹 Italiano</a> · <a href="https://github.com/poty87/PresetCraftAppLicator/releases/latest">⬇ Download</a> · <a href="https://buymeacoffee.com/poty87">☕ Buy me a coffee</a>
+<a href="#-italiano">🇮🇹 Italiano</a> · <a href="https://github.com/poty87/PresetCraftAppLicator/releases/latest">⬇ Download</a> · <a href="https://buymeacoffee.com/poty87">☕ Buy me a coffee</a> · <a href="https://paypal.me/poty87">PayPal</a>
 </p>
 
 > PresetCraftAppLicator is an independent tool. It is not made by, affiliated with or endorsed by the authors of
@@ -316,7 +316,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 ## Support the project
 
 PresetCraftAppLicator is free and will stay free: no subscriptions, no ads, no accounts. If it is useful to you and you would like to
-help me spend more time on it, you can [buy me a coffee](https://buymeacoffee.com/poty87). Thank you! ☕
+help me spend more time on it, you can [buy me a coffee](https://buymeacoffee.com/poty87) or donate with [PayPal](https://paypal.me/poty87). Thank you! ☕
 
 ## License
 
@@ -503,4 +503,4 @@ vengono usati quelli già presenti sul PC, o una cartella scelta nelle Impostazi
 ### Sostieni il progetto
 
 PresetCraftAppLicator è gratuito e lo resterà: niente abbonamenti, pubblicità o account. Se ti è utile e vuoi aiutarmi a dedicarci
-più tempo, puoi [offrirmi un caffè](https://buymeacoffee.com/poty87). Grazie! ☕
+più tempo, puoi [offrirmi un caffè](https://buymeacoffee.com/poty87) o fare una donazione con [PayPal](https://paypal.me/poty87). Grazie! ☕
