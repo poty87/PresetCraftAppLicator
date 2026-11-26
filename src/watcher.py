@@ -1356,7 +1356,7 @@ def apply_phone_changes(lib, folder, settings):
         known |= set(remap.values())
     per_photo = {}
     for (pid, field), (_at, value) in latest.items():
-        if pid < 0:
+        if pid in copy_reqs:  # id provvisorio di una copia del telefono (negativo; qualunque valore non usato in libreria)
             if pid not in remap:
                 continue
             pid = remap[pid]
@@ -1364,6 +1364,8 @@ def apply_phone_changes(lib, folder, settings):
                 value = {**value, "base": None}  # la copia è nuova e sua: nessun conflitto con il PC
             if field == "stack":
                 continue
+        elif pid < 0:
+            continue
         if pid in known:
             per_photo.setdefault(pid, {"id": pid})[field] = value
     commands = [cmd for ch in per_photo.values() for cmd in phone_change_commands(
