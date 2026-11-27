@@ -813,29 +813,29 @@ NEW = {
         "it": "È una cartella di servizio, nuova e vuota, per esempio Y:\\ViewerCraftStar: non è la cartella delle foto né "
               "quella dei cataloghi. Per ogni libreria spuntata PresetCraftAppLicator ci scrive un piccolo indice (foto, "
               "stelle, bandierine, etichette, parole chiave, pile) che ViewerCraftStar legge, anche fuori casa; le foto e "
-              "i cataloghi restano dove sono. Nell'app imposta poi la stessa cartella in Impostazioni › Libreria di casa. "
+              "i cataloghi restano dove sono. Nell'app imposta poi la stessa cartella in Impostazioni › Cartella di servizio. "
               "L'indice si aggiorna quando la libreria cambia e LightCraft è chiuso.",
         "en": "It is a service folder, new and empty, for example Y:\\ViewerCraftStar: not the photos' folder nor the "
               "catalogs' one. For each ticked library PresetCraftAppLicator writes a small index there (photos, stars, "
               "flags, labels, keywords, stacks) that ViewerCraftStar reads, even away from home; photos and catalogs stay "
-              "where they are. Then set the same folder in the app under Settings › Home library. The index is updated "
+              "where they are. Then set the same folder in the app under Settings › Service folder. The index is updated "
               "when the library changes and LightCraft is closed.",
         "de": "Das ist ein neuer, leerer Dienstordner, zum Beispiel Y:\\ViewerCraftStar: weder der Foto- noch der "
               "Katalogordner. Für jede angehakte Bibliothek schreibt PresetCraftAppLicator dort einen kleinen Index (Fotos, "
               "Sterne, Markierungen, Farben, Stichwörter, Stapel), den ViewerCraftStar liest, auch unterwegs; Fotos und "
-              "Kataloge bleiben, wo sie sind. In der App denselben Ordner unter Einstellungen › Bibliothek zu Hause eintragen.",
+              "Kataloge bleiben, wo sie sind. In der App denselben Ordner unter Settings › Service folder eintragen.",
         "es": "Es una carpeta de servicio, nueva y vacía, por ejemplo Y:\\ViewerCraftStar: no es la de las fotos ni la de "
               "los catálogos. Para cada biblioteca marcada PresetCraftAppLicator escribe ahí un pequeño índice (fotos, "
               "estrellas, banderas, etiquetas, palabras clave, pilas) que ViewerCraftStar lee, también fuera de casa; fotos "
-              "y catálogos se quedan donde están. En la app pon la misma carpeta en Ajustes › Biblioteca de casa.",
+              "y catálogos se quedan donde están. En la app pon la misma carpeta en Settings › Service folder.",
         "fr": "C'est un dossier de service, nouveau et vide, par exemple Y:\\ViewerCraftStar : ni le dossier des photos ni "
               "celui des catalogues. Pour chaque bibliothèque cochée, PresetCraftAppLicator y écrit un petit index (photos, "
               "étoiles, drapeaux, libellés, mots-clés, piles) que ViewerCraftStar lit, même hors de chez vous ; photos et "
-              "catalogues restent où ils sont. Dans l'app, indiquez ce même dossier dans Réglages › Bibliothèque de la maison.",
+              "catalogues restent où ils sont. Dans l'app, indiquez ce même dossier dans Settings › Service folder.",
         "pt": "É uma pasta de serviço, nova e vazia, por exemplo Y:\\ViewerCraftStar: não é a pasta das fotos nem a dos "
               "catálogos. Para cada biblioteca marcada o PresetCraftAppLicator escreve ali um pequeno índice (fotos, "
               "estrelas, bandeiras, etiquetas, palavras-chave, pilhas) que o ViewerCraftStar lê, também fora de casa; fotos "
-              "e catálogos ficam onde estão. Na app indique a mesma pasta em Definições › Biblioteca de casa.",
+              "e catálogos ficam onde estão. Na app indique a mesma pasta em Settings › Service folder.",
     },
     "auto_phone_libs": {"it": "Librerie (quelle aggiunte con «Aggiungi libreria» nella finestra principale):",
                         "en": "Libraries (the ones added with “Add library” in the main window):",
@@ -1593,12 +1593,12 @@ NEW.update({
     "wz_service_folder": _t("Cartella di servizio", "Service folder", "Dienstordner", "Carpeta de servicio",
                             "Dossier de service", "Pasta de serviço"),
     "wz_service_hint": _t(
-        "Nell'app ViewerCraftStar imposta poi la stessa cartella in Impostazioni › Libreria di casa.",
-        "Then set the same folder in the ViewerCraftStar app under Settings › Home library.",
-        "Stelle danach denselben Ordner in der App ViewerCraftStar unter Einstellungen › Heimbibliothek ein.",
-        "Luego indica la misma carpeta en la app ViewerCraftStar, en Ajustes › Biblioteca de casa.",
-        "Indiquez ensuite le même dossier dans l'app ViewerCraftStar, sous Réglages › Bibliothèque de la maison.",
-        "Depois indique a mesma pasta na app ViewerCraftStar, em Definições › Biblioteca de casa."),
+        "Nell'app ViewerCraftStar imposta poi la stessa cartella in Impostazioni › Cartella di servizio.",
+        "Then set the same folder in the ViewerCraftStar app under Settings › Service folder.",
+        "Stelle danach denselben Ordner in der App ViewerCraftStar unter Settings › Service folder ein.",
+        "Luego indica la misma carpeta en la app ViewerCraftStar, en Settings › Service folder.",
+        "Indiquez ensuite le même dossier dans l'app ViewerCraftStar, sous Settings › Service folder.",
+        "Depois indique a mesma pasta na app ViewerCraftStar, em Settings › Service folder."),
     "wz_service_inside": _t("Cosa ci sarà dentro", "What it will contain", "Was darin liegen wird", "Qué contendrá",
                             "Ce qu'il contiendra", "O que vai conter"),
     "wz_dir_libraries": _t(
@@ -1736,12 +1736,12 @@ NEW.update({
         "LightCraft (cerca de 3 segundos por foto, ~600 KB na pasta de serviço) e refá-la quando muda a revelação."),
     "wz_phone_app": _t("Nell'app", "In the app", "In der App", "En la app", "Dans l'app", "Na app"),
     "wz_phone_hint": _t(
-        "In ViewerCraftStar, Impostazioni › Libreria di casa: la cartella di servizio e le credenziali del NAS.",
-        "In ViewerCraftStar, Settings › Home library: the service folder and the NAS credentials.",
-        "In ViewerCraftStar, Einstellungen › Heimbibliothek: der Dienstordner und die NAS-Zugangsdaten.",
-        "En ViewerCraftStar, Ajustes › Biblioteca de casa: la carpeta de servicio y las credenciales del NAS.",
-        "Dans ViewerCraftStar, Réglages › Bibliothèque de la maison : le dossier de service et les identifiants du NAS.",
-        "No ViewerCraftStar, Definições › Biblioteca de casa: a pasta de serviço e as credenciais do NAS."),
+        "In ViewerCraftStar, Impostazioni › Cartella di servizio: la cartella di servizio e le credenziali del NAS.",
+        "In ViewerCraftStar, Settings › Service folder: the service folder and the NAS credentials.",
+        "In ViewerCraftStar, Settings › Service folder: der Dienstordner und die NAS-Zugangsdaten.",
+        "En ViewerCraftStar, Settings › Service folder: la carpeta de servicio y las credenciales del NAS.",
+        "Dans ViewerCraftStar, Settings › Service folder : le dossier de service et les identifiants du NAS.",
+        "No ViewerCraftStar, Settings › Service folder: a pasta de serviço e as credenciais do NAS."),
     "wz_ai_title": _t("Ricerca per soggetti (facoltativa)", "Search by subject (optional)",
                       "Suche nach Motiven (optional)", "Búsqueda por temas (opcional)",
                       "Recherche par sujet (facultative)", "Pesquisa por assuntos (opcional)"),

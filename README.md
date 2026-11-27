@@ -28,6 +28,8 @@ Ricoh GR cameras, the camera profile that matches the style you shot with.<br>
 
 <sub>Screenshots taken on a demo library: free photos from [Unsplash](https://unsplash.com/license) (via Lorem Picsum) and Ricoh GR sample raws from [raw.pixls.us](https://raw.pixls.us/) (CC0).</sub>
 
+> 📖 **Documentation:** [user manual](docs/manual.md) · [suite setup guide](docs/suite-guide.md) — from the NAS to the phone, step by step.
+
 ## Part of a suite
 
 This app is one of three independent tools that, together, build a **workflow for [LightCraft](https://github.com/storytold/lightcraft)
@@ -178,7 +180,7 @@ LightCraft as soon as the home PC is on — useful when travelling with the PC o
 In **Automatic import…**, under *Libraries to browse on the phone*, choose (or create) a **new, empty service folder** on the
 NAS — for example `Y:\ViewerCraftStar`, not the photos' folder nor the catalogs' one — and tick the libraries you want to
 see in ViewerCraftStar's *Library* section (the list shows the libraries added with *Add library*). In the app, set the same
-folder under *Settings › Home library*. For each one PresetCraftAppLicator writes a small index there
+folder under *Settings › Service folder*. For each one PresetCraftAppLicator writes a small index there
 (`<library name>/index.json.gz`: photos, stars, flags, labels, title, keywords, camera data and stacks — about 0.3 MB for
 18,000 photos). It is rewritten only when the library changes and LightCraft is closed, so it stays valid while the PC is
 off. The background process runs for this even if no folder is watched for imports.
@@ -355,6 +357,8 @@ help me spend more time on it, you can [buy me a coffee](https://buymeacoffee.co
 
 ## 🇮🇹 Italiano
 
+> 📖 **Documentazione:** [manuale utente](docs/manuale.md) · [guida della suite](docs/guida-suite.md) — dal NAS al telefono, passo per passo.
+
 **PresetCraftAppLicator** importa da solo in **LightCraft** le foto che arrivano in una cartella del NAS, porta le tue
 librerie sul telefono con la ricerca per soggetto e — con le Ricoh GR — dà alle foto il profilo della fotocamera che
 riproduce lo stile con cui le hai scattate.
@@ -477,7 +481,7 @@ utile in viaggio con il PC spento.
 **Librerie sul telefono.** In **Importazione automatica…**, sotto *Librerie da consultare sul telefono*, scegli (o crea) una
 **cartella di servizio nuova e vuota** sul NAS — per esempio `Y:\ViewerCraftStar`, non quella delle foto né quella dei
 cataloghi — e spunta le librerie che vuoi vedere nella sezione *Libreria* di ViewerCraftStar (l'elenco mostra quelle
-aggiunte con *Aggiungi libreria*). Nell'app imposta la stessa cartella in *Impostazioni › Libreria di casa*. Per ognuna PresetCraftAppLicator
+aggiunte con *Aggiungi libreria*). Nell'app imposta la stessa cartella in *Impostazioni › Cartella di servizio*. Per ognuna PresetCraftAppLicator
 ci scrive un piccolo indice (`<nome libreria>/index.json.gz`: foto, stelle, bandierine, etichette, titolo, parole chiave,
 dati di scatto e pile — circa 0,3 MB per 18.000 foto), riscritto solo quando la libreria cambia e LightCraft è chiuso: con
 il PC spento resta valido l'ultimo. Il processo in background parte anche se non c'è nessuna cartella da importare.
