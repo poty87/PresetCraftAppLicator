@@ -3146,11 +3146,14 @@ class App(tk.Tk):
 
     def update_headings(self):
         col, reverse = self.sort
-        for c, key, width, _stretch in COLUMNS:
+        for c, key, width, stretch in COLUMNS:
             text = t(key) + ((" ▼" if reverse else " ▲") if c == col else "")
             need = self.f_small.measure(t(key) + " ▼") + 34
             self.tree.heading(c, text=text, anchor="w")
-            self.tree.column(c, minwidth=need, width=max(width, need, self.tree.column(c, "width")))
+            # la colonna elastica (Stato) prende lo spazio in più ma non scende sotto la sua larghezza: stringendo
+            # l'elenco (divisorio verso sinistra) compare la barra orizzontale invece di tagliare il testo
+            self.tree.column(c, minwidth=max(need, width) if stretch else need,
+                             width=max(width, need, self.tree.column(c, "width")))
 
     def sort_by(self, col):
         current, reverse = self.sort
