@@ -4112,12 +4112,12 @@ TEXTS = {
         'pt': 'Na app',
     },
     'wz_phone_hint': {
-        'it': 'In ViewerCraftStar, Impostazioni › Cartella di servizio: la cartella di servizio e le credenziali del NAS.',
-        'en': 'In ViewerCraftStar, Settings › Service folder: the service folder and the NAS credentials.',
-        'de': 'In ViewerCraftStar, Settings › Service folder: der Dienstordner und die NAS-Zugangsdaten.',
-        'es': 'En ViewerCraftStar, Settings › Service folder: la carpeta de servicio y las credenciales del NAS.',
-        'fr': 'Dans ViewerCraftStar, Settings › Service folder : le dossier de service et les identifiants du NAS.',
-        'pt': 'No ViewerCraftStar, Settings › Service folder: a pasta de serviço e as credenciais do NAS.',
+        'it': 'In ViewerCraftStar: Impostazioni › NAS per indirizzo, utente e password, e Impostazioni › Cartella di servizio per la cartella di servizio scelta prima.',
+        'en': 'In ViewerCraftStar: Settings › NAS for address, user and password, and Settings › Service folder for the service folder chosen earlier.',
+        'de': 'In ViewerCraftStar: Settings › NAS für Adresse, Benutzer und Passwort, und Settings › Service folder für den vorhin gewählten Dienstordner.',
+        'es': 'En ViewerCraftStar: Settings › NAS para la dirección, el usuario y la contraseña, y Settings › Service folder para la carpeta de servicio elegida antes.',
+        'fr': "Dans ViewerCraftStar : Settings › NAS pour l'adresse, l'utilisateur et le mot de passe, et Settings › Service folder pour le dossier de service choisi avant.",
+        'pt': 'No ViewerCraftStar: Settings › NAS para o endereço, o utilizador e a palavra-passe, e Settings › Service folder para a pasta de serviço escolhida antes.',
     },
     'wz_phone_libs': {
         'it': 'Librerie da consultare sul telefono',
