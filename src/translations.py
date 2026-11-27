@@ -1480,12 +1480,12 @@ TEXTS = {
         'pt': 'Cópias de segurança…',
     },
     'backups_delete_body': {
-        'it': 'Finiscono nel Cestino di Windows, o nel cestino di Synology se sono sul NAS. Le foto e la libreria non vengono toccate.',
-        'en': 'They go to the Windows Recycle Bin, or to the Synology recycle bin if they are on the NAS. Photos and library are not touched.',
-        'de': 'Sie landen im Windows-Papierkorb oder, wenn sie auf dem NAS liegen, im Synology-Papierkorb. Fotos und Bibliothek bleiben unverändert.',
-        'es': 'Van a la Papelera de reciclaje de Windows, o a la de Synology si están en el NAS. Las fotos y la biblioteca no se tocan.',
-        'fr': 'Elles vont dans la Corbeille de Windows, ou dans celle de Synology si elles sont sur le NAS. Les photos et la bibliothèque ne sont pas modifiées.',
-        'pt': 'Vão para a Reciclagem do Windows, ou para a do Synology se estiverem no NAS. As fotos e a biblioteca não são alteradas.',
+        'it': 'Finiscono nel Cestino di Windows, o nel cestino del NAS se sono sul NAS (se è attivo). Le foto e la libreria non vengono toccate.',
+        'en': "They go to the Windows Recycle Bin, or to the NAS's recycle bin if they are on the NAS (if it is enabled). Photos and library are not touched.",
+        'de': 'Sie landen im Windows-Papierkorb oder, wenn sie auf dem NAS liegen, im Papierkorb des NAS (sofern aktiviert). Fotos und Bibliothek bleiben unverändert.',
+        'es': 'Van a la Papelera de reciclaje de Windows, o a la del NAS si están en el NAS (si está activada). Las fotos y la biblioteca no se tocan.',
+        'fr': 'Elles vont dans la Corbeille de Windows, ou dans celle du NAS si elles sont sur le NAS (si elle est activée). Les photos et la bibliothèque ne sont pas modifiées.',
+        'pt': 'Vão para a Reciclagem do Windows, ou para a do NAS se estiverem no NAS (se estiver ativa). As fotos e a biblioteca não são alteradas.',
     },
     'backups_delete_failed': {
         'it': 'Non è stato possibile eliminare:',

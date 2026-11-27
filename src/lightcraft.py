@@ -370,7 +370,7 @@ class SHFILEOPSTRUCTW(ctypes.Structure):
 
 
 def recycle(path):
-    """Sposta un file o una cartella nel Cestino di Windows (o di Synology, sul NAS)."""
+    """Sposta un file o una cartella nel Cestino di Windows (o nel cestino del NAS, se attivo)."""
     op = SHFILEOPSTRUCTW(wFunc=3, pFrom=path + "\0\0", fFlags=0x4 | 0x10 | 0x40 | 0x400)
     rc = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
     if rc != 0 or op.fAnyOperationsAborted or os.path.exists(path):

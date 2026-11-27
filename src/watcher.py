@@ -50,8 +50,10 @@ PHOTO_EXTS = {
     ".srf", ".raf", ".orf", ".rw2", ".rwl", ".raw", ".pef", ".srw", ".psd", ".psb", ".jxl", ".gif", ".bmp",
     ".heic", ".heif", ".iiq", ".crw", ".mrw", ".x3f", ".kdc", ".mos", ".erf", ".3fr", ".fff", ".mef",
 }
-# cartelle di servizio di Synology e Windows: mai guardarci dentro
-SKIP_DIRS = {"#recycle", "@eadir", "#snapshot", ".synologyworkingdirectory", "$recycle.bin"}
+# cartelle di servizio dei NAS (Synology, QNAP) e di Windows: mai guardarci dentro (dal cestino del NAS si
+# reimporterebbero le foto cancellate)
+SKIP_DIRS = {"#recycle", "@eadir", "#snapshot", ".synologyworkingdirectory", "$recycle.bin",
+             "@recycle", ".@__thumb", "@recently-snapshot", ".streams"}
 
 
 # ---------------------------------------------------------------- file JSON
