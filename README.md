@@ -14,6 +14,17 @@ Give your <b>LightCraft</b> photos the camera profile that matches the style you
 > **At the moment it works only with Ricoh GR cameras** (GR III, GR IIIx, GR IV), DNG files. The measured profiles are
 > included for the GR IV only.
 
+## Screenshots
+
+<p align="center"><img src="docs/screenshots/main.png" width="860" alt="Main window"></p>
+
+<table>
+<tr><td align="center"><img src="docs/screenshots/auto-import.png" width="280" alt="Automatic import"><br><sub>Automatic import</sub></td><td align="center"><img src="docs/screenshots/auto-import-phone.png" width="280" alt="Libraries on the phone"><br><sub>Libraries on the phone</sub></td><td align="center"><img src="docs/screenshots/ai-engine.png" width="280" alt="AI engine for search on the phone"><br><sub>AI engine for search on the phone</sub></td></tr>
+<tr><td align="center"><img src="docs/screenshots/auto-import-more.png" width="280" alt="Faces and raw to DNG"><br><sub>Faces and raw to DNG</sub></td><td align="center"><img src="docs/screenshots/settings.png" width="280" alt="Settings"><br><sub>Settings</sub></td><td></td></tr>
+</table>
+
+<sub>Screenshots taken on a demo library: free photos from [Unsplash](https://unsplash.com/license) (via Lorem Picsum) and Ricoh GR sample raws from [raw.pixls.us](https://raw.pixls.us/) (CC0).</sub>
+
 ## Part of a suite
 
 This app is one of three independent tools that, together, build a **workflow for [LightCraft](https://github.com/storytold/lightcraft)
@@ -332,6 +343,8 @@ scattate.
 > [!IMPORTANT]
 > **Al momento funziona solo con le Ricoh GR** (GR III, GR IIIx, GR IV), file DNG. I profili misurati sono inclusi solo per
 > la GR IV.
+
+Le schermate sono [in cima alla pagina](#screenshots).
 
 ### Fa parte di una suite
 
