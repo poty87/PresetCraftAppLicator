@@ -1113,6 +1113,8 @@ def stack_move_commands(current, desired):
     cmds = []
     for i, want in enumerate(desired):
         j = cur.index(want)
+        if j > i:
+            cmds.append(("library.select", {"ids": [want]}))  # stack.moveUp vuole la foto anche selezionata
         while j > i:
             cmds.append(("stack.moveUp", {"id": want}))
             cur[j - 1], cur[j] = cur[j], cur[j - 1]
@@ -1312,12 +1314,15 @@ def phone_stack_commands(per_photo, known, covers=None):
                 removed.append(pid)
         elif top in known:
             groups.setdefault(top, set()).add(pid)
-    cmds = [("stack.remove", {"ids": sorted(removed)})] if removed else []
+    # stack.remove, stack.setTop e stack.moveUp vogliono le foto anche selezionate: con i soli id LightCraft risponde
+    # «no stacked photo selected»
+    cmds = [("library.select", {"ids": sorted(removed)}), ("stack.remove", {"ids": sorted(removed)})] if removed else []
     for top, members in sorted(groups.items()):
         members.discard(top)
         if members:
             cmds.append(("stack.group", {"ids": [top] + sorted(members), "top": top, "collapsed": True}))
         elif covers and top in covers and covers[top] != top:
+            cmds.append(("library.select", {"ids": [top]}))
             cmds.append(("stack.setTop", {"id": top}))
     return cmds
 
