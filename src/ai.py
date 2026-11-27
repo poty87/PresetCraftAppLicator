@@ -408,6 +408,48 @@ def descriptions_model(path):
         return None
 
 
+# lingue in cui il motore sa scrivere le descrizioni (e che ViewerCraftStar sa cercare)
+DESC_LANGS = ("it", "en")
+
+
+def descriptions_lang_of(phone_folder, libs):
+    """La lingua delle descrizioni già scritte per queste librerie (dal manifest; "it" per quelle di prima della 1.34,
+    che non la dicono), o None se non ce ne sono ancora."""
+    import watcher
+    for lib in libs:
+        m = load_json(os.path.join(watcher.library_dir(phone_folder, lib), "ia", "manifest.json"), {})
+        d = m.get("descriptions") or {}
+        if d.get("count"):
+            return d.get("lang") or "it"
+    return None
+
+
+def desc_lang(settings):
+    """La lingua delle descrizioni: quella scelta nel Motore IA; se non è mai stata scelta, quella delle descrizioni già
+    scritte (chi le ha già non se le vede riscrivere aggiornando l'app), altrimenti quella del programma."""
+    lang = config(settings).get("desc_lang")
+    if lang in DESC_LANGS:
+        return lang
+    import i18n
+    import watcher
+    phone_folder, phone_libs = watcher.phone_settings(settings)
+    existing = descriptions_lang_of(phone_folder, phone_libs) if phone_folder else None
+    if existing:
+        return existing if existing in DESC_LANGS else "it"
+    return "it" if i18n.LANG == "it" else "en"
+
+
+def described_count(settings):
+    """Quante foto hanno già una descrizione nelle librerie del telefono (per dire quante se ne riscriverebbero)."""
+    import watcher
+    phone_folder, phone_libs = watcher.phone_settings(settings)
+    n = 0
+    for lib in phone_libs if phone_folder else []:
+        m = load_json(os.path.join(watcher.library_dir(phone_folder, lib), "ia", "manifest.json"), {})
+        n += int((m.get("descriptions") or {}).get("count") or 0)
+    return n
+
+
 def describer_ready(settings):
     """Il modello delle descrizioni scelto, se attivo e installato; altrimenti None."""
     cfg = config(settings)
@@ -642,6 +684,7 @@ def maybe_start(settings, log=None):
     missing = any(not os.path.isfile(os.path.join(watcher.library_dir(phone_folder, lib), "ia", "manifest.json"))
                   for lib in libs)
     describer = describer_ready(settings)
+    lang = desc_lang(settings)
     if describer and not missing:  # descrizioni attivate ma non ancora fatte (o non complete) per qualche libreria
         for lib in libs:
             m = load_json(os.path.join(watcher.library_dir(phone_folder, lib), "ia", "manifest.json"), {})
@@ -651,7 +694,7 @@ def maybe_start(settings, log=None):
                 made_by = descriptions_model(os.path.join(watcher.library_dir(phone_folder, lib), "ia", "descrizioni.json.gz")) or made_by
             # (le foto saltate perché fermano la GPU non contano: il motore le riprova da sé, al massimo una volta al giorno)
             if d.get("count", 0) < m.get("count", 0) or (d.get("old") or 0) > (d.get("skipped") or 0) or \
-                    (d and made_by != DESCRIBERS[describer]["hf"]):
+                    (d and made_by != DESCRIBERS[describer]["hf"]) or (d and (d.get("lang") or "it") != lang):
                 missing = True  # (anche: descrizioni scritte da un altro modello, o rifatte solo in parte)
                 break
     if not missing:  # modello del telefono ancora dentro la libreria (fino alla 1.30.1): va nella cartella condivisa
@@ -668,7 +711,7 @@ def maybe_start(settings, log=None):
     since = (datetime.datetime.now() - datetime.datetime.fromisoformat(last["when"])).total_seconds() \
         if last.get("when") else 1e9
     if last.get("sig") == sig and last.get("model") == model and last.get("describer") == describer and not missing \
-            and not unfinished:
+            and (last.get("desc_lang") or "it") == lang and not unfinished:
         return False
     if since < retry_wait:
         return False
@@ -679,10 +722,10 @@ def maybe_start(settings, log=None):
     save_json(conf, {"engine_dir": folder, "phone_folder": watcher.libraries_root(phone_folder), "libraries": libs,
                      "model": model,
                      "phone_bits": int(cfg.get("phone_bits") or 8), "gpu_check": bool(cfg.get("gpu_check", True)),
-                     "window": window, "descriptions": describer})
+                     "window": window, "descriptions": describer, "desc_lang": lang})
     subprocess.Popen([venv_python(folder), dst, "--config", conf], cwd=folder, env=env(folder),
                      creationflags=NO_WINDOW | BELOW_NORMAL, close_fds=True)
-    save_json(state_path, {"sig": sig, "model": model, "describer": describer,
+    save_json(state_path, {"sig": sig, "model": model, "describer": describer, "desc_lang": lang,
                            "when": datetime.datetime.now().isoformat(timespec="seconds")})
     if log:
         log(f"ai: started ({model}, {len(libs)} libraries)")

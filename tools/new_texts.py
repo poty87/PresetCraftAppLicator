@@ -1309,7 +1309,7 @@ NEW.update({
                       "Escribir también descripciones de las fotos (Qwen3-VL, {gb} GB más)",
                       "Écrire aussi des descriptions des photos (Qwen3-VL, {gb} Go de plus)",
                       "Escrever também descrições das fotos (Qwen3-VL, mais {gb} GB)"),
-    "ai_desc_hint": _t("Una o due frasi e le parole chiave in italiano per ogni foto: la ricerca sul telefono diventa più "
+    "ai_desc_hint": _t("Una o due frasi e le parole chiave per ogni foto: la ricerca sul telefono diventa più "
                        "precisa nei dettagli (colori, oggetti, «auto» invece di «Vespa»). Più lente: circa mezzo secondo a "
                        "foto con una GPU da 24 GB, cioè 2-3 ore ogni 18.000 foto la prima volta.",
                        "One or two sentences and keywords for each photo: search on the phone gets more precise in the "
@@ -2019,4 +2019,32 @@ NEW.update({
                           "Moviendo las vistas inteligentes al NAS: {library} {done} de {total}",
                           "Déplacement des aperçus dynamiques vers le NAS : {library} {done} sur {total}",
                           "A mover as pré-visualizações inteligentes para o NAS: {library} {done} de {total}"),
+})
+
+# 1.34: lingua delle descrizioni del Motore IA
+NEW.update({
+    "ai_desc_lang": _t("Lingua delle descrizioni:", "Description language:", "Sprache der Beschreibungen:",
+                       "Idioma de las descripciones:", "Langue des descriptions :", "Idioma das descrições:"),
+    "ai_desc_lang_hint": _t("Quella in cui cerchi sul telefono: la ricerca riconosce meglio le parole scritte nella stessa lingua.",
+                            "The one you search in on the phone: search recognises words written in the same language better.",
+                            "Die, in der du auf dem Handy suchst: Die Suche erkennt Wörter in derselben Sprache besser.",
+                            "El que usas para buscar en el teléfono: la búsqueda reconoce mejor las palabras en el mismo idioma.",
+                            "Celle dans laquelle vous cherchez sur le téléphone : la recherche reconnaît mieux les mots de la même langue.",
+                            "Aquela em que pesquisa no telemóvel: a pesquisa reconhece melhor as palavras na mesma língua."),
+    "ai_desc_lang_q": _t("Riscrivere le descrizioni in {language}?", "Rewrite the descriptions in {language}?",
+                         "Beschreibungen auf {language} neu schreiben?", "¿Reescribir las descripciones en {language}?",
+                         "Réécrire les descriptions en {language} ?", "Reescrever as descrições em {language}?"),
+    "ai_desc_lang_body": _t("{count} foto hanno già una descrizione: il motore le riscrive tutte, poco alla volta in background "
+                            "({time}). Finché non sono rifatte, il telefono usa quelle di adesso.",
+                            "{count} photos already have a description: the engine rewrites them all, little by little in the "
+                            "background ({time}). Until then, the phone uses the current ones.",
+                            "{count} Fotos haben bereits eine Beschreibung: Die Engine schreibt sie nach und nach im Hintergrund "
+                            "neu ({time}). Bis dahin nutzt das Handy die jetzigen.",
+                            "{count} fotos ya tienen descripción: el motor las reescribe todas, poco a poco en segundo plano "
+                            "({time}). Hasta entonces, el teléfono usa las actuales.",
+                            "{count} photos ont déjà une description : le moteur les réécrit toutes, petit à petit en arrière-plan "
+                            "({time}). En attendant, le téléphone utilise les actuelles.",
+                            "{count} fotos já têm descrição: o motor reescreve-as todas, aos poucos em segundo plano "
+                            "({time}). Até lá, o telemóvel usa as atuais."),
+    "ai_desc_lang_yes": _t("Riscrivi", "Rewrite", "Neu schreiben", "Reescribir", "Réécrire", "Reescrever"),
 })

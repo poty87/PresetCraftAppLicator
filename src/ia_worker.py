@@ -65,7 +65,22 @@ DESCRITTORI = {
 DOMANDA_DESCRIZIONE = ("Descrivi la foto in italiano in 1 o 2 frasi concrete: cosa e chi si vede (persone, animali, "
                        "oggetti, veicoli con tipo e colore), dove, cosa succede. Niente nomi di persone, niente ipotesi.\n"
                        "Poi una riga 'Parole chiave:' con 8-12 parole chiave in italiano separate da virgole.")
+# la lingua delle descrizioni si sceglie nel Motore IA (impostazione "desc_lang"); i file scritti prima della 1.34
+# non la dicono: sono in italiano
+DOMANDE_DESCRIZIONE = {
+    "it": DOMANDA_DESCRIZIONE,
+    "en": ("Describe the photo in English in 1 or 2 concrete sentences: what and who is in it (people, animals, "
+           "objects, vehicles with type and colour), where, what is happening. No people's names, no guesses.\n"
+           "Then a line 'Keywords:' with 8-12 keywords in English separated by commas."),
+}
+LINGUA_PREDEFINITA = "it"
 FORMATO_DESCRIZIONI = 1
+
+
+def lingua_scelta(cfg):
+    """La lingua in cui scrivere le descrizioni (dalla configurazione; italiano se manca o non è prevista)."""
+    lingua = cfg.get("desc_lang") or LINGUA_PREDEFINITA
+    return lingua if lingua in DOMANDE_DESCRIZIONE else LINGUA_PREDEFINITA
 PAROLE_URL = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/{lang}/{lang}_50k.txt"
 # ricerche di controllo: il modello del telefono deve dare le stesse impronte dell'originale
 CONTROLLO = ["gatti", "cane che corre sulla spiaggia", "auto d'epoca", "tramonto al mare", "bambini che giocano",
@@ -516,7 +531,11 @@ def servono_miniature(cfg, ia, foto):
             fatti = set()
     servono = ids - fatti
     if cfg.get("descriptions") in DESCRITTORI:
-        servono |= ids - {int(k) for k in carica_descrizioni(os.path.join(ia, "descrizioni.json.gz"))}
+        dest = os.path.join(ia, "descrizioni.json.gz")
+        if os.path.exists(dest) and lingua_descrizioni(dest) != lingua_scelta(cfg):
+            servono |= ids  # lingua cambiata: si riscrivono tutte
+        else:
+            servono |= ids - {int(k) for k in carica_descrizioni(dest)}
     return servono
 
 
@@ -716,6 +735,16 @@ def carica_meta_descrizioni(path):
         return None, set()
 
 
+def lingua_descrizioni(path):
+    """La lingua del file delle descrizioni ("it" per quelli scritti prima che si potesse scegliere)."""
+    import gzip
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            return json.load(f).get("lang") or LINGUA_PREDEFINITA
+    except (OSError, ValueError, EOFError):
+        return LINGUA_PREDEFINITA
+
+
 def carica_saltate(path):
     """Le foto saltate perché fermano la GPU (ancora da rifare, si riprovano più tardi)."""
     import gzip
@@ -748,14 +777,15 @@ def carica_descrizioni(path):
         return {}
 
 
-def scrivi_descrizioni(path, items, modello, vecchie=(), saltate=()):
+def scrivi_descrizioni(path, items, modello, vecchie=(), saltate=(), lingua=LINGUA_PREDEFINITA):
     """`vecchie`: foto la cui descrizione è ancora quella di un modello precedente (resta finché non è rifatta);
     `saltate`: quelle tra loro che fermano la GPU e si riprovano più tardi (restano da rifare)."""
     import gzip
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
     with gzip.open(tmp, "wt", encoding="utf-8") as f:
-        json.dump({"version": FORMATO_DESCRIZIONI, "model": modello, "old": sorted(int(x) for x in vecchie if x in items),
+        json.dump({"version": FORMATO_DESCRIZIONI, "model": modello, "lang": lingua,
+                   "old": sorted(int(x) for x in vecchie if x in items),
                    "skipped": sorted(int(x) for x in saltate if x in vecchie and x in items),
                    "items": {str(k): v for k, v in items.items()}}, f, ensure_ascii=False, separators=(",", ":"))
     os.replace(tmp, path)
@@ -780,13 +810,15 @@ def limita_gpu(torch, dopo_il_modello):
 class Descrittore:
     """Il modello visivo-linguistico che scrive le descrizioni (sulla GPU, bfloat16)."""
 
-    def __init__(self, nome, motore_dir):
+    def __init__(self, nome, motore_dir, lingua=LINGUA_PREDEFINITA):
         import torch
         from transformers import AutoModelForImageTextToText, AutoProcessor
         d = os.path.join(motore_dir, "modelli", nome)
         src = d if os.path.isfile(os.path.join(d, "config.json")) else DESCRITTORI[nome]["hf"]
         self.torch = torch
         self.nome = nome
+        self.lingua = lingua
+        self.domanda = DOMANDE_DESCRIZIONE.get(lingua, DOMANDA_DESCRIZIONE)
         self.proc = AutoProcessor.from_pretrained(src)
         self.proc.tokenizer.padding_side = "left"
         self.m = AutoModelForImageTextToText.from_pretrained(src, dtype=torch.bfloat16).to("cuda").eval()
@@ -813,7 +845,7 @@ class Descrittore:
             return self.descrivi(imgs[:k]) + self.descrivi(imgs[k:])
 
     def _descrivi(self, imgs):
-        msgs = [[{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": DOMANDA_DESCRIZIONE}]}]
+        msgs = [[{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": self.domanda}]}]
                 for _ in imgs]
         testi = [self.chat(m) for m in msgs]
         x = self.proc(text=testi, images=imgs, return_tensors="pt", padding=True).to("cuda")
@@ -833,7 +865,8 @@ def annuncia_descrizioni(ia, dest, nome_desc):
     # il modello che le ha scritte davvero (non quello scelto: finché non sono rifatte, sono del modello di prima)
     info = {"file": "descrizioni.json.gz", "model": modello or DESCRITTORI[nome_desc]["hf"], "by": modello or DESCRITTORI[nome_desc]["hf"],
             "count": len(carica_descrizioni(dest)),
-            "size": os.path.getsize(dest), "format": FORMATO_DESCRIZIONI, "old": len(vecchie),
+            "size": os.path.getsize(dest), "format": FORMATO_DESCRIZIONI, "lang": lingua_descrizioni(dest),
+            "old": len(vecchie),
             "skipped": len(carica_saltate(dest) & vecchie)}
     if m.get("descriptions") != info:
         m["descriptions"] = info
@@ -857,13 +890,20 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
         sospette[nome_lib] = {str(k): v for k, v in sosp.items()}
         salva_json(sosp_path, sospette)
 
+    lingua = desc.lingua
+
     def salva():
-        scrivi_descrizioni(dest, items, hf, vecchie, {k for k, v in sosp.items() if v >= 3})
-    # descrizioni di un modello precedente: si rifanno tutte (intanto restano, così la ricerca sul telefono funziona)
+        scrivi_descrizioni(dest, items, hf, vecchie, {k for k, v in sosp.items() if v >= 3}, lingua)
+    # descrizioni di un modello precedente o in un'altra lingua: si rifanno tutte (intanto restano, così la ricerca sul
+    # telefono funziona)
     fatto_da, vecchie = carica_meta_descrizioni(dest)
+    lingua_file = lingua_descrizioni(dest)
     if items and fatto_da and fatto_da != hf:
         vecchie = set(items)
         motore.log(f"{nome_lib}: {len(vecchie)} descrizioni scritte da {fatto_da}: si rifanno con {hf}")
+    elif items and lingua_file != lingua:
+        vecchie = set(items)
+        motore.log(f"{nome_lib}: {len(vecchie)} descrizioni in «{lingua_file}»: si riscrivono in «{lingua}»")
     presenti = {p["id"] for p in foto}
     tolte = [k for k in items if k not in presenti]
     for k in tolte:
@@ -873,7 +913,7 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
     parziale = os.path.join(motore.dir, "descrizioni-parziali.json")
     pz = carica_json(parziale, {})
     recuperate = {}
-    if pz.get("library") == nome_lib and pz.get("model") == hf:
+    if pz.get("library") == nome_lib and pz.get("model") == hf and (pz.get("lang") or LINGUA_PREDEFINITA) == lingua:
         for k, v in (pz.get("items") or {}).items():
             if int(k) in presenti:
                 items[int(k)] = v
@@ -883,7 +923,7 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
             motore.log(f"{nome_lib}: {len(recuperate)} descrizioni recuperate dal giro interrotto")
     nuove = [p["id"] for p in foto if (p["id"] not in items or p["id"] in vecchie)
              and os.path.exists(os.path.join(cart, f"{p['id']}.jpg"))]
-    if (tolte or fatto_da != hf or recuperate) and not nuove and items:
+    if (tolte or fatto_da != hf or lingua_file != lingua or recuperate) and not nuove and items:
         salva()
     # il lotto segnato in corso nel giro prima: la GPU si è fermata lì
     prima = carica_json(in_corso, {})
@@ -962,7 +1002,8 @@ def aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo):
             except OSError:
                 pass
         elif (n + 1) % 5 == 0:  # ~80 foto, sul disco del PC: se la GPU si ferma prima del NAS, non si rifanno
-            salva_json(parziale, {"library": nome_lib, "model": hf, "items": {str(k): v for k, v in recenti.items()}})
+            salva_json(parziale, {"library": nome_lib, "model": hf, "lang": lingua,
+                                  "items": {str(k): v for k, v in recenti.items()}})
         try:
             controllo(grande=grande, gpu_in_uso=True)
         except Stop:
@@ -1330,6 +1371,7 @@ def lavoro(cfg):
             # descrizioni scritte da un altro modello (o rifatte solo in parte): da riscrivere con quello scelto
             fatto_da, vecchie = carica_meta_descrizioni(dest)
             da_rifare = bool(items) and (fatto_da != DESCRITTORI[nome_desc]["hf"] or
+                                         lingua_descrizioni(dest) != lingua_scelta(cfg) or
                                          bool(vecchie - saltate_ferme(motore.dir, nome_lib)))
             if (con_miniatura - set(items)) or (set(items) - presenti) or da_rifare:  # nuove, tolte o da rifare
                 if con_miniatura - set(items) or da_rifare:
@@ -1337,7 +1379,7 @@ def lavoro(cfg):
                 if desc is None:
                     controllo.subito_gpu()
                     motore.stato(phase="loading", library=nome_lib, done=0, total=0)
-                    desc = Descrittore(nome_desc, motore.dir)
+                    desc = Descrittore(nome_desc, motore.dir, lingua_scelta(cfg))
                 scritte = aggiorna_descrizioni(motore, desc, cart, foto, dest, nome_lib, controllo)
                 if scritte:
                     descritte_per_lib[nome_lib] = scritte

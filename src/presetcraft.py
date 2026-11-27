@@ -1779,6 +1779,8 @@ class AiDialog(tk.Toplevel):
             self.choice = AiChoice(f, folder=self.folder(), model=self.cfg().get("model") or info.get("model"),
                                    allow_none=False, wrap=640)
             self.choice.pack(fill="x", pady=(14, 0))
+            if self.mode == "install":
+                self.lang_row(f, install=True)
             self.detail.pack(anchor="w", pady=(8, 0))
             buttons.pack(fill="x", pady=(18, 0))
             ttk.Button(buttons, text=t("ai_install") if self.mode == "install" else t("ai_apply"),
@@ -1812,6 +1814,7 @@ class AiDialog(tk.Toplevel):
                                 command=lambda d=describer: self.toggle_descriptions(d)).pack(anchor="w", pady=(10, 0))
                 ttk.Label(box, text=t("ai_desc_hint"), style="Muted.TLabel", wraplength=620, justify="left").pack(
                     anchor="w", padx=(24, 0))
+                self.lang_row(box)
                 # un modello delle descrizioni più nuovo per questa GPU: si propone di passarci (le foto si ridescrivono)
                 best = ai.recommended_describer(ai.detect_gpu())
                 if best and best != describer and self.cfg().get("descriptions"):
@@ -1862,6 +1865,45 @@ class AiDialog(tk.Toplevel):
             ttk.Button(buttons, text=t("ai_log"), command=self.open_log).pack(side="left", padx=(8, 0))
         ttk.Button(buttons, text=t("w_close"), command=self.destroy).pack(side="right", padx=(0, 8))
         self.update_status()
+
+    def lang_row(self, parent, install=False):
+        """La lingua delle descrizioni: all'installazione si sceglie e basta; dopo, cambiarla le fa riscrivere (si chiede)."""
+        row = ttk.Frame(parent)
+        row.pack(anchor="w", padx=(0 if install else 24, 0), pady=(10 if install else 8, 0))
+        ttk.Label(row, text=t("ai_desc_lang"), style="Body.TLabel").pack(side="left")
+        self.lang_box = ttk.Combobox(row, state="readonly", width=14, values=[LANGUAGES[c] for c in ai.DESC_LANGS])
+        self.lang_box.current(ai.DESC_LANGS.index(ai.desc_lang(self.app.settings)))
+        self.lang_box.pack(side="left", padx=(10, 0))
+        if not install:
+            self.lang_box.bind("<<ComboboxSelected>>", self.change_lang)
+        ttk.Label(parent, text=t("ai_desc_lang_hint"), style="Muted.TLabel", wraplength=620, justify="left").pack(
+            anchor="w", padx=(0 if install else 24, 0))
+
+    def chosen_lang(self):
+        box = getattr(self, "lang_box", None)
+        try:
+            return ai.DESC_LANGS[box.current()] if box is not None and box.winfo_exists() else None
+        except (tk.TclError, IndexError):
+            return None
+
+    def change_lang(self, event=None):
+        new = self.chosen_lang()
+        cur = ai.desc_lang(self.app.settings)
+        if not new or new == cur:
+            return
+        n = ai.described_count(self.app.settings)
+        if n:
+            minutes = n * 0.5 / 60  # circa mezzo secondo a foto con una GPU da 24 GB (vedi ai_desc_hint)
+            time_text = t("ai_eta_h", h=f"{minutes / 60:.1f}".replace(".", ",")) if minutes >= 90 else \
+                t("ai_eta_m", m=max(1, round(minutes)))
+            if Dialog.ask(self, t("ai_title"), t("ai_desc_lang_q", language=LANGUAGES[new]),
+                          t("ai_desc_lang_body", count=f"{n:,}".replace(",", "."), time=time_text), level="info",
+                          buttons=[("no", t("btn_cancel"), False), ("yes", t("ai_desc_lang_yes"), True)]) != "yes":
+                self.lang_box.current(ai.DESC_LANGS.index(cur))
+                return
+        self.save_cfg(desc_lang=new)
+        log(f"ai: description language {cur} -> {new} ({n} descriptions to rewrite)")
+        ai.maybe_start(self.app.settings, log)
 
     def toggle_descriptions(self, describer):
         on = bool(self.desc_on.get())
@@ -2065,6 +2107,9 @@ class AiDialog(tk.Toplevel):
                 self.after(0, lambda: self.after_move(err, new_folder, model))
             threading.Thread(target=work, daemon=True).start()
             return
+        lang = self.chosen_lang()
+        if self.mode == "install" and lang:
+            self.save_cfg(desc_lang=lang)
         self.install(new_folder, model, c.describer())
 
     def after_move(self, err, new_folder, model):

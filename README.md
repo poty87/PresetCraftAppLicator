@@ -203,7 +203,8 @@ the phone only receives the result and searches offline.
   8 bits (about 830 MB, or 4 bits) with its tokenizer, which ViewerCraftStar downloads once. If Windows resets the graphics
   driver during a long job (TDR), the engine resumes where it stopped.
 - **Descriptions (optional)**: with an NVIDIA GPU of at least 12 GB the engine can also write, for every photo, one or
-  two sentences and keywords in Italian with [Qwen3-VL](https://github.com/QwenLM/Qwen3-VL) (8B with 20 GB or more, 4B
+  two sentences and keywords in Italian or English (chosen in the AI engine window; changing it rewrites them little
+  by little in the background) with [Qwen3-VL](https://github.com/QwenLM/Qwen3-VL) (8B with 20 GB or more, 4B
   with 12 GB; Apache 2.0) in `<library name>/ia/descrizioni.json.gz`. On the phone, photos whose description contains
   the words searched for move up, the others move down a little: search gets more precise in the details (colours,
   objects, a car rather than a scooter). They are slower — about half a second per photo on an RTX 3090, 2-3 hours per
@@ -474,7 +475,7 @@ anteprime incorporate nei file (foto e cataloghi non vengono mai modificati) e s
 "testo" del modello ridotta a italiano e inglese e compressa a 8 bit (circa 830 MB, o a 4 bit), che ViewerCraftStar
 scarica una volta. Se Windows riavvia il driver della scheda video durante un lavoro lungo (TDR), il motore riprende da
 dove era arrivato. Con una GPU NVIDIA da almeno 12 GB il motore può anche **scrivere le descrizioni** delle foto (una o due frasi e le
-parole chiave in italiano, con [Qwen3-VL](https://github.com/QwenLM/Qwen3-VL): 8B da 20 GB in su, 4B da 12 GB; Apache 2.0)
+parole chiave in italiano o in inglese, a scelta nella finestra del Motore IA — cambiandola si riscrivono poco alla volta in background —, con [Qwen3-VL](https://github.com/QwenLM/Qwen3-VL): 8B da 20 GB in su, 4B da 12 GB; Apache 2.0)
 in `<nome libreria>/ia/descrizioni.json.gz`: sul telefono salgono le foto la cui descrizione contiene le parole cercate e
 le altre scendono un po', così la ricerca è più precisa nei dettagli (colori, oggetti, un'auto e non una Vespa). Sono più
 lente — circa mezzo secondo a foto su una RTX 3090, 2-3 ore ogni 18.000 foto la prima volta — e partono dopo le impronte,
