@@ -46,7 +46,9 @@ ORF, RAF, JPEG…; PresetCraftAppLicator can also convert proprietary raws to DN
 only two things are specific to **Ricoh GR** cameras:
 - giving each photo the camera profile of its picture style (PresetCraftAppLicator);
 - downloading photos straight from the camera over Wi-Fi (ViewerCraftStar). The same import also works from an external
-  disk or card reader plugged into the phone, with DNGs and JPEGs from any camera.
+  disk or card reader plugged into the phone, with the raw files of any camera LightCraft opens (CR2, NEF, ARW, RAF,
+  ORF, RW2, PEF, DNG…) and JPEGs. Formats the phone itself doesn't recognise as photos (on Android 17, Canon CR3) go
+  through the PC.
 
 **Two ways to bring photos home**
 
@@ -384,7 +386,9 @@ tutto il percorso.
 Adobe DNG Converter). Per ora sono specifiche delle **Ricoh GR** solo due cose:
 - dare a ogni foto il profilo della fotocamera del suo stile (PresetCraftAppLicator);
 - scaricare le foto direttamente dalla fotocamera via Wi-Fi (ViewerCraftStar). La stessa importazione funziona anche da un
-  disco esterno o un lettore di schede collegato al telefono, con DNG e JPEG di qualsiasi fotocamera.
+  disco esterno o un lettore di schede collegato al telefono, con i raw di qualsiasi fotocamera che LightCraft apre (CR2,
+  NEF, ARW, RAF, ORF, RW2, PEF, DNG…) e i JPEG. I formati che il telefono non riconosce come foto (su Android 17 i
+  CR3 Canon) passano dal PC.
 
 **Due modi per portare le foto a casa**
 
