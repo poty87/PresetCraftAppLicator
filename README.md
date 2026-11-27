@@ -3,16 +3,19 @@
 <h1 align="center">PresetCraftAppLicator</h1>
 
 <p align="center">
-Give your <b>LightCraft</b> photos the camera profile that matches the style you shot them with.<br>
+Automatic import into <b>LightCraft</b> from a NAS folder, your libraries on the phone with search by subject — and, for
+Ricoh GR cameras, the camera profile that matches the style you shot with.<br>
 <a href="#-italiano">🇮🇹 Italiano</a> · <a href="https://github.com/poty87/PresetCraftAppLicator/releases/latest">⬇ Download</a> · <a href="https://buymeacoffee.com/poty87">☕ Buy me a coffee</a> · <a href="https://paypal.me/poty87">PayPal</a>
 </p>
 
 > PresetCraftAppLicator is an independent tool. It is not made by, affiliated with or endorsed by the authors of
 > [LightCraft](https://github.com/storytold/lightcraft), Ricoh, Pentax or Adobe.
 
-> [!IMPORTANT]
-> **At the moment it works only with Ricoh GR cameras** (GR III, GR IIIx, GR IV), DNG files. The measured profiles are
-> included for the GR IV only.
+> [!NOTE]
+> **Camera profiles** are for **Ricoh GR** cameras only for now (GR III, GR IIIx, GR IV, DNG files; the measured profiles
+> are included for the GR IV). Everything else — automatic import, libraries on the phone, search by subject, faces, raw to
+> DNG, changes made on the phone — works with the photos of any camera LightCraft opens, and with any NAS with an SMB
+> shared folder.
 
 ## Screenshots
 
@@ -28,27 +31,38 @@ Give your <b>LightCraft</b> photos the camera profile that matches the style you
 ## Part of a suite
 
 This app is one of three independent tools that, together, build a **workflow for [LightCraft](https://github.com/storytold/lightcraft)
-with your photos on a NAS**: shoot, review on the phone, send home, import with the right colours, and keep the NAS clean.
-Each one works on its own; together they cover the whole path.
+with your photos on a NAS** — any NAS or server with an SMB shared folder (Synology, QNAP, TrueNAS, Unraid, a Windows
+share…): bring the photos home, import them with the right colours, browse and edit your library from the phone, and keep
+the NAS clean. Each one works on its own; together they cover the whole path.
 
 | App | Runs on | What it does |
 |---|---|---|
-| [**PresetCraftAppLicator**](https://github.com/poty87/PresetCraftAppLicator) | Windows PC | Gives LightCraft photos the camera profile of the style they were shot with. Watches a NAS folder and imports new photos automatically; applies the ratings, flags, metadata and presets chosen on the phone and tells the phone which photos are safe at home. |
-| [**ViewerCraftStar**](https://github.com/poty87/ViewerCraftStar) | Android | Review the raw files on the phone (flags, stars, labels, metadata, LightCraft presets with preview), send them to the NAS through Synology Drive, follow them until they are safe on the NAS and in LightCraft, then free the phone. |
+| [**PresetCraftAppLicator**](https://github.com/poty87/PresetCraftAppLicator) | Windows PC | Watches a NAS folder and imports new photos into LightCraft automatically; applies the ratings, flags, metadata and presets chosen on the phone; puts your libraries on the phone, with optional search by subject (AI). For Ricoh GR cameras it also gives each photo the camera profile of the style it was shot with. |
+| [**ViewerCraftStar**](https://github.com/poty87/ViewerCraftStar) | Android | Browse, search and edit your whole LightCraft libraries on the phone. Optionally import new photos on the phone too (from a Ricoh GR camera or from an external disk), review them (flags, stars, labels, metadata, presets with preview) and send them to the NAS, following them until they are safe at home. |
 | [**CleanCraftNas**](https://github.com/poty87/CleanCraftNas) | Windows PC | Deletes from disk — even on the NAS — the photos you put in LightCraft's trash, so the NAS stays in step with the library. |
 
-**The workflow**
+**Which cameras.** The suite works with the photos of most cameras: whatever LightCraft opens (DNG, CR2/CR3, NEF, ARW,
+ORF, RAF, JPEG…; PresetCraftAppLicator can also convert proprietary raws to DNG with the free Adobe DNG Converter). For now
+only two things are specific to **Ricoh GR** cameras:
+- giving each photo the camera profile of its picture style (PresetCraftAppLicator);
+- downloading photos straight from the camera over Wi-Fi (ViewerCraftStar). The same import also works from an external
+  disk or card reader plugged into the phone, with DNGs and JPEGs from any camera.
 
-1. Shoot, and let the raw files reach the phone (for example with the camera's own app).
-2. **ViewerCraftStar**: review them, then *Send to the NAS* — Synology Drive uploads the photos and the app writes your
-   choices next to them (`.xmp`).
-3. **PresetCraftAppLicator** (home PC): imports them into LightCraft with the right camera profile and applies your choices.
-4. Edit in LightCraft; the photos you don't want go to LightCraft's trash.
-5. **CleanCraftNas**: deletes those photos from the NAS too.
+**Two ways to bring photos home**
 
-**Away from home** the phone reaches the NAS through a VPN to your home network: see the
-[remote access guide](https://github.com/poty87/ViewerCraftStar/blob/main/docs/remote-access.md) (Synology *VPN Server* with OpenVPN on the NAS, *OpenVPN Connect* on the phone, port
-forwarding through one or two routers).
+- **The classic way, from the PC.** Copy the photos to the NAS as you always do (card reader, the camera's software, any
+  sync tool): PresetCraftAppLicator imports them from the watched folder. You can still browse, search, rate and edit them
+  from the phone, because the phone shows the whole library, not only what it sent.
+- **From the phone — a plus, not a requirement.** Import from the camera or an external disk, review on the phone and
+  *Send to the NAS*: the app moves the photos to a phone folder that your NAS's sync or backup app uploads (for example
+  Synology Drive, QNAP Qfile, Nextcloud, Syncthing) and writes your choices next to them (`.xmp`).
+
+Then edit in LightCraft; the photos you don't want go to LightCraft's trash, and **CleanCraftNas** deletes them from the
+NAS too.
+
+**Away from home** the phone reaches the NAS through a VPN to your home network (OpenVPN, built into ViewerCraftStar): see
+the [remote access guide](https://github.com/poty87/ViewerCraftStar/blob/main/docs/remote-access.md). The guide uses Synology's *VPN Server* as an example, but any
+OpenVPN server works (a router, another NAS brand, a PC).
 
 ## Why it exists
 
@@ -263,11 +277,12 @@ to use for each style, or to leave those photos alone. Your choices are remember
 
 ## Supported cameras
 
-**At the moment only Ricoh GR cameras are supported:** GR III, GR IIIx and GR IV, DNG files. It has been tested with the
+**Camera profiles — Ricoh GR only for now:** GR III, GR IIIx and GR IV, DNG files. It has been tested with the
 GR IV, and the measured profiles exist for the GR IV only. The code can also read the style of Pentax files (DNG and PEF),
 but that has not been tested.
 
-JPEG photos are not changed, because the style is already part of the image.
+JPEG photos are not changed, because the style is already part of the image. Photos of other cameras are imported and
+handled like the others (phone, AI search, faces, metadata): they just keep LightCraft's default profile.
 
 ### Look profiles (Cinema Yellow, Cinema Green…)
 
@@ -338,39 +353,55 @@ help me spend more time on it, you can [buy me a coffee](https://buymeacoffee.co
 
 ## 🇮🇹 Italiano
 
-**PresetCraftAppLicator** dà alle foto di LightCraft il profilo della fotocamera che riproduce lo stile con cui le hai
-scattate.
+**PresetCraftAppLicator** importa da solo in **LightCraft** le foto che arrivano in una cartella del NAS, porta le tue
+librerie sul telefono con la ricerca per soggetto e — con le Ricoh GR — dà alle foto il profilo della fotocamera che
+riproduce lo stile con cui le hai scattate.
 
-> [!IMPORTANT]
-> **Al momento funziona solo con le Ricoh GR** (GR III, GR IIIx, GR IV), file DNG. I profili misurati sono inclusi solo per
-> la GR IV.
+> [!NOTE]
+> I **profili della fotocamera** per ora sono solo per le **Ricoh GR** (GR III, GR IIIx, GR IV, file DNG; i profili
+> misurati sono inclusi per la GR IV). Tutto il resto — importazione automatica, librerie sul telefono, ricerca per
+> soggetto, volti, conversione dei raw in DNG, modifiche fatte dal telefono — funziona con le foto di qualsiasi fotocamera
+> che LightCraft apre, e con qualsiasi NAS con una cartella condivisa SMB.
 
 Le schermate sono [in cima alla pagina](#screenshots).
 
 ### Fa parte di una suite
 
 Questa app è uno di tre programmi indipendenti che, insieme, creano un **flusso di lavoro per
-[LightCraft](https://github.com/storytold/lightcraft) con le foto su un NAS**: scatti, rivedi sul telefono, spedisci a casa,
-importi con i colori giusti e tieni pulito il NAS. Ognuno funziona anche da solo; insieme coprono tutto il percorso.
+[LightCraft](https://github.com/storytold/lightcraft) con le foto su un NAS** — qualsiasi NAS o server con una cartella
+condivisa SMB (Synology, QNAP, TrueNAS, Unraid, una condivisione di Windows…): porti a casa le foto, le importi con i colori
+giusti, sfogli e modifichi la libreria dal telefono e tieni pulito il NAS. Ognuno funziona anche da solo; insieme coprono
+tutto il percorso.
 
 | App | Dove gira | A cosa serve |
 |---|---|---|
-| [**PresetCraftAppLicator**](https://github.com/poty87/PresetCraftAppLicator) | PC Windows | Dà alle foto di LightCraft il profilo della fotocamera dello stile con cui le hai scattate. Osserva una cartella del NAS e importa da solo le foto nuove; applica stelle, bandierine, metadati e preset scelti sul telefono e dice al telefono quali foto sono al sicuro a casa. |
-| [**ViewerCraftStar**](https://github.com/poty87/ViewerCraftStar) | Android | Rivedi i raw sul telefono (bandierine, stelle, etichette, metadati, preset di LightCraft con anteprima), spediscili sul NAS tramite Synology Drive, seguili finché sono al sicuro sul NAS e in LightCraft, poi libera il telefono. |
+| [**PresetCraftAppLicator**](https://github.com/poty87/PresetCraftAppLicator) | PC Windows | Osserva una cartella del NAS e importa da solo in LightCraft le foto nuove; applica stelle, bandierine, metadati e preset scelti sul telefono; porta le tue librerie sul telefono, con la ricerca per soggetto (IA) facoltativa. Con le Ricoh GR dà anche a ogni foto il profilo della fotocamera dello stile con cui l'hai scattata. |
+| [**ViewerCraftStar**](https://github.com/poty87/ViewerCraftStar) | Android | Sfogli, cerchi e modifichi sul telefono le tue librerie LightCraft complete. Se vuoi, importi anche le foto nuove dal telefono (da una Ricoh GR o da un disco esterno), le rivedi (bandierine, stelle, etichette, metadati, preset con anteprima) e le spedisci sul NAS, seguendole finché sono al sicuro a casa. |
 | [**CleanCraftNas**](https://github.com/poty87/CleanCraftNas) | PC Windows | Cancella dal disco — anche dal NAS — le foto che hai messo nel cestino di LightCraft, così il NAS resta allineato alla libreria. |
 
-**Il flusso di lavoro**
+**Quali fotocamere.** La suite funziona con le foto della maggior parte delle fotocamere: tutto quello che LightCraft apre
+(DNG, CR2/CR3, NEF, ARW, ORF, RAF, JPEG…; PresetCraftAppLicator sa anche convertire i raw proprietari in DNG con il gratuito
+Adobe DNG Converter). Per ora sono specifiche delle **Ricoh GR** solo due cose:
+- dare a ogni foto il profilo della fotocamera del suo stile (PresetCraftAppLicator);
+- scaricare le foto direttamente dalla fotocamera via Wi-Fi (ViewerCraftStar). La stessa importazione funziona anche da un
+  disco esterno o un lettore di schede collegato al telefono, con DNG e JPEG di qualsiasi fotocamera.
 
-1. Scatti e fai arrivare i raw sul telefono (per esempio con l'app della fotocamera).
-2. **ViewerCraftStar**: li rivedi e premi *Spedisci al NAS* — Synology Drive carica le foto e l'app scrive accanto a ognuna
-   le tue scelte (`.xmp`).
-3. **PresetCraftAppLicator** (PC di casa): le importa in LightCraft con il profilo giusto e applica le tue scelte.
-4. Lavori in LightCraft; le foto che non vuoi finiscono nel cestino di LightCraft.
-5. **CleanCraftNas**: cancella quelle foto anche dal NAS.
+**Due modi per portare le foto a casa**
 
-**Fuori casa** il telefono raggiunge il NAS con una VPN verso la rete di casa: vedi la
-[guida all'accesso da fuori casa](https://github.com/poty87/ViewerCraftStar/blob/main/docs/remote-access.md#-italiano) (*VPN Server* di Synology con OpenVPN sul NAS, *OpenVPN Connect* sul
-telefono, inoltro della porta attraverso uno o due router).
+- **Quello classico, dal PC.** Copi le foto sul NAS come hai sempre fatto (lettore di schede, programma della fotocamera,
+  qualsiasi strumento di sincronizzazione): PresetCraftAppLicator le importa dalla cartella osservata. Dal telefono puoi
+  comunque sfogliarle, cercarle, dare stelle e modificarle, perché il telefono mostra tutta la libreria, non solo quello
+  che ha spedito lui.
+- **Dal telefono — un plus, non un obbligo.** Importi dalla fotocamera o da un disco esterno, rivedi sul telefono e premi
+  *Spedisci al NAS*: l'app sposta le foto in una cartella del telefono che l'app di sincronizzazione o backup del tuo NAS
+  carica (per esempio Synology Drive, QNAP Qfile, Nextcloud, Syncthing) e scrive accanto a ognuna le tue scelte (`.xmp`).
+
+Poi lavori in LightCraft; le foto che non vuoi finiscono nel cestino di LightCraft e **CleanCraftNas** le cancella anche
+dal NAS.
+
+**Fuori casa** il telefono raggiunge il NAS con una VPN verso la rete di casa (OpenVPN, dentro ViewerCraftStar): vedi la
+[guida all'accesso da fuori casa](https://github.com/poty87/ViewerCraftStar/blob/main/docs/remote-access.md#-italiano). La guida usa come esempio il *VPN Server* di
+Synology, ma va bene qualsiasi server OpenVPN (un router, un NAS di altra marca, un PC).
 
 Le fotocamere applicano lo stile scelto (sulle Ricoh GR: *Image Control*, per esempio Positive Film) alla JPEG e
 all'anteprima salvata nel raw, ma non ai dati raw. Per questo in LightCraft, appena apri una foto, i colori sono giusti (è
@@ -510,7 +541,9 @@ risultato è vicino a quello della fotocamera ma non identico, perché LightCraf
 Per gli stili senza un profilo (per esempio quelli di cui non si conosce ancora il codice, mostrati come *Stile
 sconosciuto*) usa **Stili e profili…** e scegli tu il profilo da usare.
 
-**Fotocamere supportate:** al momento solo le Ricoh GR (GR III, GR IIIx, GR IV) in DNG, provata con la GR IV. Il codice
+**Fotocamere supportate dai profili:** per ora solo le Ricoh GR (GR III, GR IIIx, GR IV) in DNG, provata con la GR IV.
+Le foto delle altre fotocamere si importano e si gestiscono come le altre (telefono, ricerca IA, volti, metadati): tengono
+solo il profilo predefinito di LightCraft. Il codice
 legge anche lo stile dei file Pentax (DNG e PEF), ma non è stato provato. I profili Adobe non sono inclusi:
 vengono usati quelli già presenti sul PC, o una cartella scelta nelle Impostazioni.
 
