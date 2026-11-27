@@ -30,7 +30,7 @@ from lightcraft import (BACKUPS_KEPT, DATA_DIR, DEFAULT_CLI, LOCAL, backup_root,
 from ai_panel import AiChoice
 from translations import DATE_FORMATS, LANGUAGES, TEXTS
 from ui_theme import (LEVELS, MUTED, TEXT, DateField, Dialog, TimeField, attach_scrollbars, center_on, dark_title_bar,
-                      dpi_aware, reveal, set_icon, setup_theme, card)
+                      dpi_aware, reveal, set_icon, setup_theme, card, popup_menu)
 from version import APP_NAME, VERSION
 
 DONATE = (("☕  Buy Me a Coffee", "https://buymeacoffee.com/poty87"), ("💳  PayPal", "https://paypal.me/poty87"))
@@ -39,15 +39,7 @@ DONATE = (("☕  Buy Me a Coffee", "https://buymeacoffee.com/poty87"), ("💳  P
 def donate_menu(event):
     """«Offrimi un caffè»: un piccolo menu con i due modi per donare; la scelta si apre nel browser."""
     import webbrowser
-    root = event.widget._root()
-    m = tk.Menu(root, tearoff=0, bg="#2b2b2b", fg=TEXT, activebackground="#3d4a5c", activeforeground=TEXT,
-                bd=0, relief="flat", font=getattr(root, "f_body", None))
-    for name, url in DONATE:
-        m.add_command(label=name, command=lambda u=url: webbrowser.open(u))
-    try:
-        m.tk_popup(event.x_root, event.y_root)
-    finally:
-        m.grab_release()
+    popup_menu(event.widget, [(name, lambda u=url: webbrowser.open(u)) for name, url in DONATE], align="left")
 
 SETTINGS = os.path.join(DATA_DIR, "settings.json")
 LOG = os.path.join(DATA_DIR, "presetcraft.log")
@@ -929,11 +921,14 @@ class AutoImportDialog(tk.Toplevel):
         self.dng_state = ttk.Label(row, style="Muted.TLabel")
         self.dng_state.pack(side="left", padx=(12, 0))
         self.dng_install_btn = ttk.Button(row, text=t("dng_install"), command=self.dng_install)
-        ttk.Checkbutton(box, text=t("dng_existing", count=self.raw_count()), variable=self.dng_existing).pack(
+        # quanti raw ci sono già nelle librerie: si leggono i cataloghi (~2 s), quindi in sottofondo
+        self.dng_existing_cb = ttk.Checkbutton(box, text=t("dng_existing", count="…"), variable=self.dng_existing)
+        self.dng_existing_cb.pack(
             anchor="w", pady=(4, 0))
         ttk.Label(box, text=t("dng_hint"), style="Muted.TLabel", wraplength=W, justify="left").pack(
             anchor="w", pady=(6, 0))
         self.dng_show()
+        tabs.bind("<<NotebookTabChanged>>", lambda e: tabs.index("current") == 2 and self.count_raws_later())
 
         buttons = ttk.Frame(frame)
         buttons.pack(fill="x", pady=(18, 0))
@@ -983,6 +978,38 @@ class AutoImportDialog(tk.Toplevel):
             Dialog.ask(self, t("faces_title"), t("faces_undo_failed"), str(error), level="error")
         else:
             Dialog.ask(self, t("faces_title"), t("faces_undo_done", count=total), None, level="info")
+
+    def count_raws_later(self):
+        """Quanti raw ci sono già nelle librerie (scritta della casella): si leggono i cataloghi (~2 s), quindi solo
+        quando si apre la scheda Volti e DNG, in sottofondo, e si ricorda finché i cataloghi non cambiano."""
+        if getattr(self, "_raws_asked", False):
+            return
+        self._raws_asked = True
+
+        def sig():
+            out = []
+            for lib in self.libs:
+                try:
+                    st = os.stat(os.path.join(lib, "catalog.snap"))
+                    out.append((lib, st.st_size, st.st_mtime))
+                except OSError:
+                    out.append((lib, None, None))
+            return tuple(out)
+
+        def show(n):
+            if self.winfo_exists():
+                self.dng_existing_cb.configure(text=t("dng_existing", count=n))
+
+        key = sig()
+        if key in _RAW_COUNT:
+            show(_RAW_COUNT[key])
+            return
+
+        def work():
+            n = self.raw_count()
+            _RAW_COUNT[key] = n
+            self.after(0, lambda: show(n))
+        threading.Thread(target=work, daemon=True).start()
 
     def raw_count(self):
         """Quante foto raw proprietarie ci sono nelle librerie (per la casella dei raw già importati)."""
@@ -1072,7 +1099,8 @@ class AutoImportDialog(tk.Toplevel):
             lines.append(t("auto_status_on", time=when_text(checked)))
         else:  # il processo scrive status.json a ogni giro e lo toglie quando si chiude
             lines.append(t("auto_status_stopped"))
-        last = [watcher.load_rule_state(r).get("last") for r in self.rules]
+        # l'ultima importazione: dal file piccolo che l'importazione automatica scrive accanto allo stato di ogni cartella
+        last = [watcher.load_rule_last(r) for r in self.rules]
         last = max((x for x in last if x and (x.get("imported") or x.get("profiles"))), default=None,
                    key=lambda x: x["when"])
         if last:
@@ -1682,6 +1710,10 @@ class SetupWizard(tk.Toplevel):
         self.destroy()
 
 
+_AI_SIZE = {}  # cartella del motore IA -> GB occupati (calcolati una volta per sessione, in sottofondo)
+_RAW_COUNT = {}  # (cataloghi con dimensione e data) -> quanti raw proprietari contengono
+
+
 class AiDialog(tk.Toplevel):
     """Motore IA per la ricerca per soggetti sul telefono: installazione (in un processo a sé), stato del lavoro,
     attivazione, modello e cartella, rimozione."""
@@ -1956,11 +1988,26 @@ class AiDialog(tk.Toplevel):
             self.bar.pack(fill="x", pady=(14, 0), before=self.detail)
         elif not working and self.bar.winfo_ismapped():
             self.bar.pack_forget()
-        if not hasattr(self, "size_gb") or self.busy:
-            self.size_gb = ai.folder_size_gb(folder) if not self.busy else 0  # una volta: con molte miniature è lento
+        # quanto occupa la cartella del motore: con decine di migliaia di miniature ci vogliono ~10 secondi, quindi si
+        # calcola in sottofondo (la finestra si apre subito con «…») e si ricorda per le aperture successive
+        if self.busy:
+            self.size_gb = None
+        elif not hasattr(self, "size_gb") or self.size_gb is None:
+            self.size_gb = _AI_SIZE.get(folder)
+            if self.size_gb is None and not getattr(self, "_sizing", False):
+                self._sizing = True
+
+                def work(f=folder):
+                    try:
+                        _AI_SIZE[f] = ai.folder_size_gb(f)
+                    finally:
+                        self._sizing = False
+                    if self.winfo_exists():
+                        self.after(0, self.update_status)
+                threading.Thread(target=work, daemon=True).start()
         self.update_queue()
         # le righe per libreria stanno nell'elenco della coda
-        self.detail.configure(text="\n".join(lines[1:] + [t("ai_where", folder=folder, gb=f"{self.size_gb:.0f}")]))
+        self.detail.configure(text="\n".join(lines[1:] + [t("ai_where", folder=folder, gb="…" if self.size_gb is None else f"{self.size_gb:.0f}")]))
 
     def model_name(self, m):
         name = {"metaclip2-giant": t("ai_m_giant"), "metaclip2-huge": t("ai_m_huge"),
@@ -3266,14 +3313,7 @@ class App(tk.Tk):
 
     def more_menu(self):
         """☰ in alto a destra: le finestre che servono di rado (registro, backup), come il menu ☰ del telefono."""
-        m = self.menu()
-        m.add_command(label=t("open_log"), command=self.open_log)
-        m.add_command(label=t("backups_btn"), command=self.open_backups)
-        b = self.btn_more
-        try:
-            m.tk_popup(b.winfo_rootx(), b.winfo_rooty() + b.winfo_height())
-        finally:
-            m.grab_release()
+        popup_menu(self.btn_more, [(t("open_log"), self.open_log), (t("backups_btn"), self.open_backups)])
 
     def open_settings(self):
         d = SettingsDialog(self)

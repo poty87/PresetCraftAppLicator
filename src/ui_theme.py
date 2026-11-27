@@ -93,6 +93,77 @@ def card(parent, title, pady=(12, 0)):
     return f
 
 
+MENU_BG, MENU_HOVER, MENU_BORDER = "#2b2b2b", "#3d4a5c", "#454545"
+
+
+def popup_menu(anchor, items, align="right"):
+    """Menu a tendina disegnato come il resto (sfondo scuro, angoli arrotondati, voce evidenziata al passaggio del
+    mouse), al posto dei menu di Windows (cornice bianca, angoli vivi). Si apre sotto `anchor`, allineato al suo bordo
+    destro (o sinistro) e dentro lo schermo; sopra, se sotto non c'è posto. `items`: [(testo, comando)].
+    Si chiude con una scelta, con Esc o con un clic altrove."""
+    root = anchor.winfo_toplevel()
+    prev = root.grab_current()  # una finestra modale aperta (per esempio le Impostazioni): il blocco torna a lei
+    top = tk.Toplevel(root)
+    top.withdraw()
+    top.overrideredirect(True)
+    top.configure(bg=MENU_BG)
+    body = tk.Frame(top, bg=MENU_BG, padx=4, pady=4)
+    body.pack(fill="both", expand=True)
+    font = getattr(anchor.nametowidget("."), "f_body", None)
+
+    def close(_e=None):
+        try:
+            top.grab_release()
+            top.destroy()
+            if prev is not None and prev.winfo_exists():
+                prev.grab_set()
+        except tk.TclError:
+            pass
+
+    def choose(command):
+        close()
+        anchor.after(10, command)
+
+    for text, command in items:
+        lab = tk.Label(body, text=text, bg=MENU_BG, fg=TEXT, font=font, anchor="w", padx=14, pady=7, cursor="hand2")
+        lab.pack(fill="x")
+        lab.bind("<Enter>", lambda e, w=lab: w.configure(bg=MENU_HOVER))
+        lab.bind("<Leave>", lambda e, w=lab: w.configure(bg=MENU_BG))
+        lab.bind("<ButtonRelease-1>", lambda e, c=command: choose(c))
+    top.update_idletasks()
+    w, h = max(top.winfo_reqwidth(), 180), top.winfo_reqheight()
+    ax, ay, aw, ah = anchor.winfo_rootx(), anchor.winfo_rooty(), anchor.winfo_width(), anchor.winfo_height()
+    x = ax + aw - w if align == "right" else ax
+    y = ay + ah + 4
+    if y + h > root.winfo_rooty() + root.winfo_height() and ay - h - 4 >= 0:
+        y = ay - h - 4  # sotto non c'è posto (per esempio un link in fondo alla finestra): sopra
+    x = max(0, min(x, top.winfo_screenwidth() - w))
+    top.geometry(f"{w}x{h}+{x}+{y}")
+    # Windows 11: angoli arrotondati e bordo scuro, come i suoi menu (prima non fa niente)
+    try:
+        hwnd = ctypes.windll.user32.GetParent(top.winfo_id()) or top.winfo_id()
+        corner = ctypes.c_int(2)  # DWMWCP_ROUND
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 33, ctypes.byref(corner), ctypes.sizeof(corner))
+        r, g, b = (int(MENU_BORDER[i:i + 2], 16) for i in (1, 3, 5))
+        border = ctypes.c_uint(r | (g << 8) | (b << 16))  # COLORREF
+        ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, 34, ctypes.byref(border), ctypes.sizeof(border))
+    except (AttributeError, OSError):
+        pass
+    top.deiconify()
+    top.lift()
+    top.focus_force()
+    top.grab_set()
+    top.bind("<Escape>", close)
+    top.bind("<FocusOut>", lambda e: close() if e.widget is top else None)
+
+    def outside(e):
+        if not (0 <= e.x_root - top.winfo_rootx() < w and 0 <= e.y_root - top.winfo_rooty() < h):
+            close()
+    top.bind("<ButtonPress-1>", outside, add="+")
+    top.bind("<ButtonPress-3>", outside, add="+")
+    return top
+
+
 def set_icon(window):
     try:
         window.iconbitmap(resource("assets", "icon.ico"))

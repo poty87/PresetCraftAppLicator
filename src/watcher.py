@@ -139,6 +139,24 @@ def load_rule_state(rule):
 
 def save_rule_state(rule, state):
     save_json(rule_state_path(rule), state)
+    # l'ultima importazione anche in un file piccolo: la finestra Importazione automatica la mostra senza leggere lo
+    # stato intero (che tiene l'elenco di tutti i file già visti: più di un secondo da leggere)
+    if state.get("last"):
+        save_json(rule_state_path(rule)[:-5] + ".last.json", state["last"])
+
+
+def load_rule_last(rule):
+    """L'ultima importazione di una cartella osservata (dal file piccolo; senza, dallo stato intero, e lo si crea)."""
+    small = rule_state_path(rule)[:-5] + ".last.json"
+    last = load_json(small)  # {} se manca
+    if not last:
+        last = (load_rule_state(rule) or {}).get("last")
+        if last:
+            try:
+                save_json(small, last)
+            except OSError:
+                pass
+    return last
 
 
 def forget_rule(rule):
